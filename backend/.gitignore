@@ -1,0 +1,32 @@
+# 依赖
+node_modules/
+
+# 环境变量（含数据库密码、API密钥，禁止提交）
+.env
+.env.local
+.env.production
+
+# 编译产物
+dist/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 操作系统文件
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 日志
+*.log
+npm-debug.log*
+
+# Prisma
+prisma/dev.db
+prisma/dev.db-journal
+
+# 测试覆盖率
+coverage/

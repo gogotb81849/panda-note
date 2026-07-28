@@ -1,0 +1,103 @@
+# ============================================================
+# 熊猫笔记 · Git 忽略文件
+# 安全红线：所有包含敏感凭据的文件都必须在这里
+# ============================================================
+
+# ---------- 环境变量（安全红线）----------
+.env
+.env.local
+.env.production
+.env.*.local
+# 注意：.env.example 是模板文件，不含真实密码，可以提交
+
+# ---------- Node.js ----------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+yarn.lock
+package-lock.json
+dist/
+.nuxt/
+.output/
+.nitro/
+.cache/
+
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+env/
+ENV/
+
+# ---------- SSH 密钥（安全红线）----------
+# 任何 SSH 私钥都不允许提交
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_dsa
+id_ed25519
+.ssh/
+
+# ---------- TLS / 证书 ----------
+*.crt
+*.cer
+*.pem
+*.csr
+*.key
+ssl/
+cert/
+certs/
+
+# ---------- 日志 ----------
+*.log
+*.log.*
+logs/
+log/
+server.log
+access.log
+error.log
+*.out
+
+# ---------- 数据库 ----------
+*.db
+*.sqlite
+*.sqlite3
+.pg_dump/
+dumps/
+backup/
+
+# ---------- IDE / 编辑器 ----------
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ---------- 临时文件 ----------
+*.tmp
+*.temp
+*.bak
+tmp/
+temp/
+
+# ---------- 部署产物 ----------
+*.zip
+*.tar.gz
+*.tgz
+build/
+deploy/
+dist-packages/
+
+# ---------- 运维面板缓存 ----------
+ops-monitor/ops-monitor.db
+ops-monitor/audit_log.jsonl

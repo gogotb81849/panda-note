@@ -1,0 +1,301 @@
+/* =====================================================
+ * 平板竖屏 800px 固定宽度 - 船舶卡片布局
+ * cardSize 0-4 对应 2-6 列，5 为列表
+ * ===================================================== */
+
+.device-tablet.orientation-portrait .card-grid-0 {
+  grid-template-columns: repeat(2, 1fr) !important;
+  gap: 10px !important;
+}
+
+.device-tablet.orientation-portrait .card-grid-1 {
+  grid-template-columns: repeat(3, 1fr) !important;
+  gap: 8px !important;
+}
+
+.device-tablet.orientation-portrait .card-grid-2 {
+  grid-template-columns: repeat(4, 1fr) !important;
+  gap: 6px !important;
+}
+
+.device-tablet.orientation-portrait .card-grid-3 {
+  grid-template-columns: repeat(5, 1fr) !important;
+  gap: 4px !important;
+}
+
+.device-tablet.orientation-portrait .card-grid-4 {
+  grid-template-columns: repeat(6, 1fr) !important;
+  gap: 4px !important;
+}
+
+.device-tablet.orientation-portrait .ship-card {
+  padding: 8px !important;
+}
+
+.device-tablet.orientation-portrait .card-grid-0 .ship-card {
+  padding: 12px !important;
+}
+
+.device-tablet.orientation-portrait .card-header {
+  margin-bottom: 4px !important;
+}
+
+.device-tablet.orientation-portrait .card-ship-name {
+  font-size: 12px !important;
+}
+
+.device-tablet.orientation-portrait .card-grid-0 .card-ship-name {
+  font-size: 16px !important;
+}
+
+.device-tablet.orientation-portrait .card-status {
+  font-size: 9px !important;
+  padding: 1px 4px !important;
+}
+
+.device-tablet.orientation-portrait .card-grid-0 .card-status {
+  font-size: 11px !important;
+  padding: 3px 8px !important;
+}
+
+.device-tablet.orientation-portrait .card-info {
+  margin-bottom: 4px !important;
+}
+
+.device-tablet.orientation-portrait .info-item {
+  font-size: 10px !important;
+  gap: 3px !important;
+}
+
+.device-tablet.orientation-portrait .card-grid-0 .info-item {
+  font-size: 12px !important;
+  gap: 6px !important;
+}
+
+.device-tablet.orientation-portrait .card-progress {
+  margin-bottom: 4px !important;
+}
+
+.device-tablet.orientation-portrait .progress-bar-bg {
+  height: 3px !important;
+}
+
+.device-tablet.orientation-portrait .card-grid-0 .progress-bar-bg {
+  height: 6px !important;
+}
+
+.device-tablet.orientation-portrait .card-supervisors {
+  padding-top: 4px !important;
+}
+
+.device-tablet.orientation-portrait .supervisors-row {
+  font-size: 9px !important;
+}
+
+.device-tablet.orientation-portrait .card-grid-0 .supervisors-row {
+  font-size: 11px !important;
+}
+
+.device-tablet.orientation-portrait .card-mini-supervisors {
+  font-size: 8px !important;
+  padding-top: 3px !important;
+}
+
+.device-tablet.orientation-portrait .tiny-sv {
+  font-size: 8px !important;
+}
+
+.device-tablet.orientation-portrait .flip-board-view {
+  padding: 0 !important;
+}
+
+.device-tablet.orientation-portrait .flip-board-container {
+  padding: 6px !important;
+}
+
+.device-tablet.orientation-portrait .group-section {
+  margin-bottom: 12px !important;
+}
+
+.device-tablet.orientation-portrait .group-header {
+  margin-bottom: 6px !important;
+}
+
+.device-tablet.orientation-portrait .toolbar {
+  flex-wrap: nowrap !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  gap: 4px !important;
+  padding: 4px 0 !important;
+  margin-bottom: 6px !important;
+  background: transparent !important;
+}
+
+.device-tablet.orientation-portrait .toolbar-left,
+.device-tablet.orientation-portrait .toolbar-right {
+  width: auto !important;
+  justify-content: flex-start !important;
+  align-items: center !important;
+}
+
+.device-tablet.orientation-portrait .toolbar-right {
+  justify-content: flex-end !important;
+  margin-right: -2px !important;
+}
+
+.device-tablet.orientation-portrait .refresh-btn {
+  padding-right: 2px !important;
+  padding-top: 4px !important;
+  padding-bottom: 4px !important;
+}
+
+.device-tablet.orientation-portrait .status-filter :deep(.el-select__wrapper),
+.device-tablet.orientation-portrait .group-filter :deep(.el-select__wrapper) {
+  padding: 4px 8px !important;
+}
+
+.device-tablet.orientation-portrait .status-filter :deep(.el-select__placeholder),
+.device-tablet.orientation-portrait .status-filter :deep(.el-select__label),
+.device-tablet.orientation-portrait .group-filter :deep(.el-select__placeholder),
+.device-tablet.orientation-portrait .group-filter :deep(.el-select__label) {
+  font-size: 12px !important;
+}
+
+.device-tablet.orientation-portrait .card-size-control {
+  align-items: center !important;
+}
+
+.device-tablet.orientation-portrait .status-filter,
+.device-tablet.orientation-portrait .group-filter {
+  width: 110px !important;
+}
+
+.device-tablet.orientation-portrait .card-size-slider {
+  width: 80px !important;
+}
+
+.device-tablet.orientation-portrait .timeline-switcher {
+  gap: 2px !important;
+}
+
+.device-tablet.orientation-portrait .timeline-btn {
+  padding: 2px 6px !important;
+  font-size: 10px !important;
+}
+
+/* 快捷操作 - 平板竖屏4列 */
+.device-tablet.orientation-portrait .dashboard-page .grid.grid-cols-2 {
+  grid-template-columns: repeat(4, 1fr) !important;
+  gap: 8px !important;
+}
+
+.device-tablet.orientation-portrait .dashboard-page .grid.grid-cols-2 > * {
+  padding: 10px 6px !important;
+}
+
+.device-tablet.orientation-portrait .dashboard-page .grid.grid-cols-2 .text-2xl {
+  font-size: 20px !important;
+  margin-bottom: 4px !important;
+}
+
+.device-tablet.orientation-portrait .dashboard-page .grid.grid-cols-2 .text-sm {
+  font-size: 11px !important;
+}
+
+/* 任务发布页 - 平板竖屏4列 + 缩小图标 */
+.device-tablet.orientation-portrait .task-center-page {
+  padding: 12px !important;
+}
+
+.device-tablet.orientation-portrait .task-center-page .top-bar {
+  padding: 10px 12px !important;
+  margin-bottom: 16px !important;
+  gap: 8px !important;
+  flex-wrap: wrap !important;
+}
+
+.device-tablet.orientation-portrait .task-center-page .search-input {
+  max-width: 100% !important;
+}
+
+.device-tablet.orientation-portrait .task-center-page .section-header {
+  margin-bottom: 10px !important;
+}
+
+.device-tablet.orientation-portrait .task-center-page .section-title {
+  font-size: 15px !important;
+}
+
+.device-tablet.orientation-portrait .task-center-page .task-type-grid {
+  grid-template-columns: repeat(4, 1fr) !important;
+  gap: 8px !important;
+  margin-bottom: 18px !important;
+}
+
+.device-tablet.orientation-portrait .task-center-page .task-type-card {
+  flex-direction: column !important;
+  align-items: center !important;
+  text-align: center !important;
+  padding: 10px 6px !important;
+  gap: 6px !important;
+}
+
+.device-tablet.orientation-portrait .task-center-page .task-type-card::before {
+  width: 100% !important;
+  height: 3px !important;
+  border-radius: 12px 12px 0 0 !important;
+}
+
+.device-tablet.orientation-portrait .task-center-page .card-icon {
+  width: 36px !important;
+  height: 36px !important;
+  border-radius: 8px !important;
+}
+
+.device-tablet.orientation-portrait .task-center-page .card-icon .el-icon {
+  font-size: 20px !important;
+}
+
+.device-tablet.orientation-portrait .task-center-page .card-info {
+  width: 100% !important;
+}
+
+.device-tablet.orientation-portrait .task-center-page .card-name {
+  font-size: 12px !important;
+  margin-bottom: 2px !important;
+}
+
+.device-tablet.orientation-portrait .task-center-page .card-desc {
+  font-size: 10px !important;
+  line-height: 1.3 !important;
+  -webkit-line-clamp: 2 !important;
+}
+
+.device-tablet.orientation-portrait .task-center-page .card-arrow {
+  display: none !important;
+}
+
+.device-tablet.orientation-portrait .task-center-page .template-card {
+  flex: 0 0 220px !important;
+  padding: 12px !important;
+}
+
+.device-tablet.orientation-landscape .card-grid-0 {
+  grid-template-columns: repeat(2, 1fr) !important;
+}
+
+.device-tablet.orientation-landscape .card-grid-1 {
+  grid-template-columns: repeat(3, 1fr) !important;
+}
+
+.device-tablet.orientation-landscape .card-grid-2 {
+  grid-template-columns: repeat(4, 1fr) !important;
+}
+
+.device-tablet.orientation-landscape .card-grid-3 {
+  grid-template-columns: repeat(5, 1fr) !important;
+}
+
+.device-tablet.orientation-landscape .card-grid-4 {
+  grid-template-columns: repeat(6, 1fr) !important;
+}

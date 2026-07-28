@@ -1,0 +1,2234 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 团队枚举
+enum TeamCode {
+  team1
+  team2
+  team3
+}
+
+// 用户角色枚举（4级架构）
+enum UserRole {
+  admin                     // 0级：超级管理员（拥有所有权限，可切换任意角色）
+  ship_political_instructor  // 4级：船舶政委
+  shore_crew_supervisor     // 3级：岸基船工主管（MVP重点）
+  shore_marine_supervisor   // 3级：岸基海务主管（预留）
+  shore_engineer_supervisor // 3级：岸基机务主管（预留）
+  shore_electric_supervisor // 3级：岸基电气主管（预留）
+  general_manager           // 2级：总管团队（预留）
+  company_admin             // 1级：油轮船管部（预留）
+}
+
+// 日程/任务状态枚举
+enum ScheduleStatus {
+  pending
+  in_progress
+  completed
+  cancelled
+}
+
+// 优先级枚举
+enum Priority {
+  urgent_important // 重要紧急
+  important        // 重要不紧急
+  urgent           // 紧急不重要
+  normal           // 不紧急不重要
+  low              // 低（向后兼容）
+}
+
+// 用户表
+model User {
+  id          Int      @id @default(autoincrement())
+  username    String   @unique
+  password    String
+  realName    String
+  teamCode    TeamCode
+  role        UserRole // 当前活跃角色（用于切换）
+  roles       UserRole[] @default([shore_crew_supervisor]) // 可访问的所有角色列表
+  lastLoginAt DateTime?
+  loginFailCount Int     @default(0)
+  lockedUntil DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  createdSchedules Schedule[] @relation("CreatedBy")
+  assignedSchedules Schedule[] @relation("AssignedTo")
+  operationLogs OperationLog[]
+  updatedSopFlows SopFlow[]
+  uploadedFiles SharedFile[]
+  fileComments FileComment[]
+  createdTasks Task[] @relation("TaskCreatedBy")
+  assignedTasks Task[] @relation("TaskAssignedTo")
+  authoredExperiences Experience[] @relation("ExperienceAuthor")
+  experienceComments ExperienceComment[] @relation("ExperienceCommentUser")
+  experienceRatings ExperienceRating[]
+  experiencePermissions ExperiencePermission[] @relation("ExperiencePermissionUser")
+  partyActivitiesCreated PartyActivity[] @relation("PartyActivityCreatedBy")
+  partyActivityComments PartyActivityComment[] @relation("PartyActivityCommentUser")
+  studyRecords StudyRecord[] @relation("StudyRecordUser")
+  thoughtReports ThoughtReport[] @relation("ThoughtReportUser")
+  integrityRecords IntegrityRecord[] @relation("IntegrityRecordUser")
+  officerProfiles OfficerProfile[] @relation("OfficerProfileUser")
+  evaluationsGiven OfficerEvaluation[] @relation("EvaluationEvaluator")
+  evaluationsReceived OfficerEvaluation[] @relation("EvaluationOfficerUser")
+  mentorshipRecords MentorshipRecord[] @relation("MentorshipMentor")
+  mentorshipRecordsMentee MentorshipRecord[] @relation("MentorshipMenteeUser")
+  appealRecords AppealRecord[] @relation("AppealRecordUser")
+  staffAssignments StaffAssignment[]
+  createdFileCollections FileCollection[]
+  fileSubmissions FileSubmission[]
+  createdStandardTaskTemplates StandardTaskTemplate[] @relation("StandardTaskTemplateCreatedBy")
+  recurringScheduleTemplatesAssigned RecurringScheduleTemplate[] @relation("RecurringScheduleAssignedTo")
+  recurringScheduleTemplatesCreated RecurringScheduleTemplate[] @relation("RecurringScheduleCreatedBy")
+
+  @@index([username])
+}
+
+// 船舶静态档案表
+model Ship {
+  id                    Int       @id @default(autoincrement())
+  teamCode             TeamCode
+  cnShipName           String
+  enShipName           String?
+  flagCountry          String?
+  portRegistry         String?
+  shipType             String?
+  deadweightTonnage    String?
+  factoryDate          String?
+  teamDisplayName      String?
+  tradeType            String?   // 内外贸：外贸/内外贸兼营
+  marineSupervisor     String?
+  engineerSupervisor   String?
+  electricSupervisor   String?
+  crewSupervisor       String?
+  politicalInstructor String?
+  instructorIdNumber String?   // 政委身份证号（用于生日提醒等功能）
+  onBoardDate          String?
+  daysOnBoard          String?
+  sendCompany          String?
+  sendRuleNote         String?
+  buildYear            Int?
+  
+  // 船舶动态信息
+  currentVoyage        String?   // 当前航次
+  currentLocation      String?   // 当前位置
+  currentStatus        String    @default("voyage") // voyage/anchored/berthed
+  eta                  DateTime? // 预计抵港时间
+  etaPort              String?   // 目的港
+  etd                  DateTime? // 预计离港时间
+
+  // 船舶报告扩展字段（来源：船工主管粘贴微信报告）
+  cargoStatus          String?   // 载货状态（满载/空载/压载等）
+  departurePort        String?   // 出发港
+  visibility           String?   // 能见度
+  temperature          String?   // 气温
+  windDirection        String?   // 风向
+  windForce            String?   // 风力
+  waveLevel            String?   // 浪级
+  timezone             String?   // 当前时区（如 GMT+8）
+  focusPoints          String?   @db.Text // 关注重点
+  otherNotes           String?   @db.Text // 其它说明
+  dynamicSource        String?   // 动态数据来源：supervisor(船工主管粘贴)
+  dynamicUpdatedAt     DateTime? // 动态数据最后更新时间
+  
+  // 政委报告独立字段（来源：政委日记同步，与船舶报告独立保存）
+  politicalVoyage      String?   // 航次
+  politicalLocation    String?   // 当前位置
+  politicalStatus      String?   // 当前状态
+  politicalETA         DateTime? // 预计抵港时间
+  politicalETAPort     String?   // 目的港
+  politicalETD         DateTime? // 预计离港时间
+  politicalWeather     String?   // 天气
+  politicalSeaCondition String?  // 海况
+  politicalStaffChange String?   // 人员变更
+  politicalFocusPoints String?   @db.Text // 关注重点
+  politicalOtherNotes  String?   @db.Text // 其它说明
+  politicalUpdatedAt   DateTime? // 政委报告最后更新时间
+  
+  // 区域标记（用于卡片显示特殊标记）
+  etaPortRegion        String?   // 目的港区域：fiveEyes(五眼联盟)/europe(欧洲)/piracy(海盗区)/other
+  piracyZone           Boolean?  @default(false) // 是否去海盗区
+  
+  // 当前政委信息
+  politicalOfficerId   Int?      // 政委用户ID
+  politicalOfficerName String?   // 政委姓名
+  politicalOfficerPhoto String?  // 政委照片URL
+  captainName          String?   // 船长姓名
+  shipPhoto            String?   // 船舶照片URL
+  
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@unique([teamCode, cnShipName])
+  @@index([teamCode])
+  @@index([cnShipName])
+  @@index([currentStatus])
+  @@index([eta])
+
+  staffHistory StaffHistory[]
+  staffAssignments StaffAssignment[]
+  schedules    Schedule[]
+  partyActivities PartyActivity[]
+  submissions  FileSubmission[]
+  healthReports HealthReportUpload[]
+  partyConfig  ShipPartyConfig?
+  recurringScheduleTemplates RecurringScheduleTemplate[]
+}
+
+// 船舶党建差异化配置表（一船一策）
+model ShipPartyConfig {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  shipId        Int       @unique // 每船一条配置
+  config        Json      @default("{}") // 差异化配置JSON
+  updatedBy     Int?      // 最后更新人
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  ship          Ship      @relation(fields: [shipId], references: [id])
+
+  @@index([teamCode])
+  @@index([teamCode, shipId])
+}
+
+// 人员任职履历时序表
+model StaffHistory {
+  id          Int       @id @default(autoincrement())
+  teamCode    TeamCode
+  shipId      Int
+  postName    String
+  staffName   String
+  startDate   DateTime
+  endDate     DateTime? // 为空表示在岗
+  handoverNote String?
+  createdAt   DateTime  @default(now())
+
+  ship Ship @relation(fields: [shipId], references: [id])
+
+  @@index([teamCode, shipId])
+}
+
+// 日程/工作台账表（主管统计唯一数据源）
+model Schedule {
+  id           Int            @id @default(autoincrement())
+  teamCode     TeamCode
+  recordDate   DateTime
+  shipId       Int?
+  firstType    String         // 一级分类（统计主数据源）
+  secondType   String         // 二级分类（统计主数据源）
+  standardFlowId Int?
+  eventDetail  String?
+  title        String?
+  description  String?
+  startTime    DateTime?
+  endTime      DateTime?
+  finishStatus ScheduleStatus @default(pending) // 完成状态（统计主数据源）
+  priority     Priority       @default(normal)
+  createdById  Int
+  assignedToId Int?
+  taskId       Int? // 关联任务ID
+
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  ship         Ship?         @relation(fields: [shipId], references: [id])
+  createdBy    User          @relation("CreatedBy", fields: [createdById], references: [id])
+  assignedTo   User?         @relation("AssignedTo", fields: [assignedToId], references: [id])
+  sopFlow      SopFlow?      @relation(fields: [standardFlowId], references: [id])
+  publicCases  PublicCase[]
+  task         Task?         @relation(fields: [taskId], references: [id])
+
+  // 反向关联：一条日程可被多条日记引用
+  relatedDiaries DiaryScheduleRelation[]
+
+  @@index([teamCode, recordDate])
+  @@index([teamCode, shipId])
+  @@index([teamCode, finishStatus])
+  @@index([updatedAt])
+  @@index([taskId])
+  // P0优化新增：为统计优化的组合索引
+  @@index([teamCode, firstType, secondType])
+  @@index([teamCode, finishStatus, recordDate])
+}
+
+// 操作日志表
+model OperationLog {
+  id               Int      @id @default(autoincrement())
+  userId           Int
+  teamCode         TeamCode
+  operationType    String
+  operationContent String?
+  ipAddress        String?
+  userAgent        String?
+  requestParams    Json?
+  createdAt        DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([teamCode, userId])
+  @@index([createdAt])
+}
+
+// 分类字典表
+model DictCategory {
+  id          Int       @id @default(autoincrement())
+  teamCode    TeamCode?
+  role        UserRole? // 关联用户类别（角色），为空表示全局共享
+  categoryType String // first_type/second_type
+  categoryName String
+  parentId    Int?
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+
+  @@index([teamCode, categoryType])
+  @@index([role])
+}
+
+// 标准任务库模板表（预设的标准任务，可快速创建日程）
+model StandardTaskTemplate {
+  id           Int       @id @default(autoincrement())
+  teamCode     TeamCode? // 团队代码，空为全局共享
+  firstType    String    // 一级分类
+  secondType   String    // 二级分类
+  title        String?   // 任务标题（可选）
+  eventDetail  String?   // 任务详情（可选）
+  priority     String    @default("normal") // normal/high/urgent
+  sortOrder    Int       @default(0)
+  createdById  Int?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  createdBy    User?     @relation("StandardTaskTemplateCreatedBy", fields: [createdById], references: [id])
+
+  @@index([teamCode, firstType, secondType])
+  @@index([teamCode, sortOrder])
+}
+
+// 定期任务模板表（自动生成日程任务）
+model RecurringScheduleTemplate {
+  id           Int       @id @default(autoincrement())
+  teamCode     TeamCode
+  templateName String    // 模板名称（如"周一安全例会"）
+  firstType    String    // 一级分类
+  secondType   String    // 二级分类
+  eventDetail  String?   // 任务详情
+  priority     String    @default("normal") // normal/high/urgent
+  
+  // 执行频率配置
+  frequency    String    // daily/weekly/monthly
+  dayOfWeek    Int?      // 周几执行（0-6，0=周日），weekly时使用
+  dayOfMonth   Int?      // 每月几号执行（1-31），monthly时使用
+  executeTime  String    @default("09:00") // 执行时间（HH:mm格式）
+  
+  // 分配配置
+  shipId       Int?      // 指定船舶，空表示所有船舶
+  assignedToId Int?      // 指定负责人，空表示不指定
+  
+  // 状态控制
+  isActive     Boolean   @default(true) // 是否启用
+  lastExecutedAt DateTime? // 上次执行时间
+  nextExecuteAt DateTime? // 下次执行时间
+  
+  createdById  Int?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  ship         Ship?     @relation(fields: [shipId], references: [id])
+  assignedTo   User?     @relation("RecurringScheduleAssignedTo", fields: [assignedToId], references: [id])
+  createdBy    User?     @relation("RecurringScheduleCreatedBy", fields: [createdById], references: [id])
+
+  @@index([teamCode, isActive])
+  @@index([nextExecuteAt])
+  @@index([frequency])
+}
+
+// SOP标准流程字典表（全团队共享）
+model SopFlow {
+  id          Int       @id @default(autoincrement())
+  flowName    String
+  flowContent String
+  firstType   String?
+  secondType  String?
+  updatedById Int?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  updatedBy User?      @relation(fields: [updatedById], references: [id])
+  schedules Schedule[]
+
+  @@index([flowName])
+  @@index([firstType, secondType])
+}
+
+// 公共脱敏案例知识库（全团队共享）
+model PublicCase {
+  id            Int       @id @default(autoincrement())
+  fromRecordId  Int? // 源工单ID（后台溯源）
+  caseType      String
+  caseContent   String
+  createdAt     DateTime  @default(now())
+
+  fromRecord Schedule? @relation(fields: [fromRecordId], references: [id])
+
+  @@index([caseType])
+}
+
+// AI配置表
+model AiConfig {
+  id          Int       @id @default(autoincrement())
+  teamCode    TeamCode
+  apiKey      String // 加密存储
+  apiEndpoint String
+  modelName   String    @default("doubao-pro")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([teamCode])
+}
+
+// 航海日记表
+model Diary {
+  id            Int       @id @default(autoincrement())
+  userId        Int
+  teamCode      TeamCode
+  shipId        Int?
+  date          DateTime
+  content       String    @db.Text
+  weather       String?
+  seaCondition  String?
+  dynamicStatus String?
+  departurePort String?
+  arrivalPort   String?
+  voyageNumber  String?
+  departureDate DateTime?
+  arrivalDate   DateTime?
+  departureTime DateTime?
+  pirateStatus  String?
+  pirateTime    String?
+  shipName      String?
+  timezone      String?   @default("UTC+8")
+  shipPosition  String?
+  isFreePortZone      Boolean? @default(false)
+  isWarZone           Boolean? @default(false)
+  leadSealOperation   Boolean? @default(false)
+  categoryFirst String?   // 一级分类（保留以兼容历史数据，新数据优先从关联日程继承）
+  categorySecond String?  // 二级分类（保留以兼容历史数据，新数据优先从关联日程继承）
+  categorySource String?  @default("manual") // manual=手动填写（历史数据） / auto=自动从关联日程继承
+
+  // 政委信息
+  politicalInstructorName String? // 政委姓名
+  politicalInstructorOnBoardDate DateTime? // 政委上船时间
+
+  // 多对多关联：一条日记可关联多条已完成日程
+  relatedSchedules DiaryScheduleRelation[]
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([teamCode, userId, date])
+  @@index([teamCode, userId, date])
+  @@index([categoryFirst])
+  @@index([categorySecond])
+  @@index([categorySource])
+}
+
+// 日记-日程关联表（多对多）
+model DiaryScheduleRelation {
+  id          Int      @id @default(autoincrement())
+  teamCode    TeamCode
+  diaryId     Int
+  scheduleId  Int
+  createdAt   DateTime @default(now())
+
+  diary    Diary    @relation(fields: [diaryId], references: [id], onDelete: Cascade)
+  schedule Schedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  @@unique([diaryId, scheduleId])
+  @@index([teamCode, diaryId])
+  @@index([teamCode, scheduleId])
+}
+
+// 港口信息表
+model Port {
+  id        Int       @id @default(autoincrement())
+  name      String
+  english   String?
+  country   String
+  pinyin    String?
+  code      String?
+  createdAt DateTime  @default(now())
+
+  @@unique([name, country])
+  @@index([name])
+  @@index([country])
+  @@index([pinyin])
+}
+
+// 发布模板表（统一：船舶动态 + 抵港前检查）
+model PublishTemplate {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  
+  // 任务类型：checklist(勾选清单) | file_collect(文件收集) | ai_survey(AI分析) | photo_checkin(拍照打卡) | form_collect(收集表) | ship_dynamic(船舶动态-兼容旧) | port_call_check(到港检查-兼容旧)
+  templateType  String    @default("form_collect")
+  title         String    
+  items         Json      // 字段定义数组：[{name,label,type,required,options,defaultValue,helpText,maxCount,showInSummary,aiAnalyze}]
+  targetShips   Json?     // 目标船舶ID数组
+  triggerDays   Int?      // 触发天数
+  
+  // 新增：模板元数据
+  templateDesc  String?   // 模板描述
+  coverImage    String?   // 封面图URL
+  categoryId    Int?      // 分类ID
+  category      TaskCategory? @relation(fields: [categoryId], references: [id])
+  
+  // 新增：发布规则
+  frequencyType String?   @default("once") // once | daily | weekly | monthly | custom
+  frequencyCron String?   // cron表达式
+  reminderEnabled Boolean @default(false)
+  reminderDaysBefore Json? // 提醒日期，如 [3,1,0]
+  
+  // 截止时间（百宝箱可视化配置中心新增）
+  deadline       DateTime? // 任务截止时间
+  
+  // 新增：AI配置
+  aiEnabled     Boolean   @default(false)
+  aiPromptTemplate String? // AI分析提示词
+  aiOutputFormat String?  @default("summary") // summary | bullet_points | metric_extraction | full_report
+  
+  // 新增：看板指标
+  dashboardMetrics Json?  // [{code,label,field,type}]
+  
+  // 新增：模板类型标记
+  isSystem      Boolean   @default(false)  // 是否系统预设模板
+  sourceTaskId  Int?      // 来源任务ID（从历史任务创建模板时记录）
+  creatorRole   String?   // 创建者角色（海务/机务/船工/电工/政委）
+  
+  // 新增：文件收集配置
+  fileNamingRule String?  // 规范命名规则（船名_日期_类型_序号）
+  allowedTypes  Json?     // 允许的文件类型
+  
+  // 新增：进度跟踪配置（checklist专用）
+  progressTracking Boolean @default(false)
+  
+  isDraft       Boolean   @default(true)
+  isPublished   Boolean   @default(false)
+  publishedBy   Int?      
+  publishedAt   DateTime? 
+  
+  version       Int       @default(1)
+  usageCount    Int       @default(0)
+  
+  sortOrder     Int       @default(0)
+  isActive      Boolean   @default(true)
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // 关联
+  shipTasks     ShipTaskStatus[]
+  
+  @@index([teamCode])
+  @@index([templateType])
+  @@index([isDraft])
+  @@index([isPublished])
+  @@index([categoryId])
+  @@index([isSystem])
+  @@index([sourceTaskId])
+}
+
+// 模板分类表
+model TaskCategory {
+  id          Int      @id @default(autoincrement())
+  teamCode    TeamCode
+  name        String   // 分类名称：船员管理 / 航行安全 / 设备维护 / 港口业务 / 质量管理
+  icon        String?  // emoji图标
+  color       String?  // 主题色
+  sortOrder   Int      @default(0)
+  parentId    Int?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  templates   PublishTemplate[]
+
+  @@index([teamCode])
+  @@index([parentId])
+}
+
+// 船舶任务状态表
+model ShipTaskStatus {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  shipId        Int       
+  templateId    Int       
+  templateType  String    
+  template      PublishTemplate? @relation(fields: [templateId], references: [id])
+  responseData  Json?     // 填写数据
+  totalItems    Int       @default(0)
+  completedItems Int      @default(0)
+  progress      Float     @default(0)
+  status        String    @default("pending") // pending | in_progress | completed | expired
+  respondedBy   Int?      
+  respondedAt   DateTime? 
+  triggerDate   DateTime? 
+
+  // 新增：GPS/设备/签名
+  geoLat        Decimal?  @db.Decimal(10,7)
+  geoLng        Decimal?  @db.Decimal(10,7)
+  geoAddress    String?   // 地理位置描述
+  deviceInfo    Json?     // {device, appVersion}
+  submittedAt   DateTime? // 提交时间
+  
+  // 新增：checklist进度跟踪
+  checklistProgress Json?  // [{itemName, completed, completedAt}] 每个勾选项的完成状态
+  
+  // 新增：文件收集相关
+  fileList      Json?     // [{fileName, filePath, fileSize, uploadedAt}] 上传的文件列表
+  fileNamePrefix String?  // 文件命名前缀（船名_日期_）
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  @@unique([shipId, templateId])
+  @@index([teamCode, shipId])
+  @@index([teamCode, templateType])
+  @@index([status])
+  @@index([progress])
+  @@index([triggerDate])
+}
+
+// 共享文件表
+model SharedFile {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  fileName      String    
+  originalName  String    
+  filePath      String    
+  fileSize      Int       
+  fileType      String    
+  description   String?   
+  category      String?   
+  uploadedBy    Int       
+  isPublic      Boolean   @default(true)
+  downloadCount Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  uploader User @relation(fields: [uploadedBy], references: [id])
+  comments   FileComment[]
+  submissions FileSubmission[]
+
+  @@index([teamCode])
+  @@index([uploadedBy])
+  @@index([category])
+  @@index([isPublic])
+}
+
+// 文件评论表
+model FileComment {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  fileId        Int
+  userId        Int
+  content       String
+  createdAt     DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+  file SharedFile @relation(fields: [fileId], references: [id])
+
+  @@index([teamCode, fileId])
+  @@index([userId])
+}
+
+// 工作任务树表（XBLogbook迁移：任务模块）
+model Task {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  title         String    
+  description   String?   @db.Text
+  parentId      Int?      
+  category      String?   
+  category2     String?   
+  status        String    @default("pending")
+  priority      Priority  @default(normal)
+  dueDate       DateTime? 
+  sortOrder     Int       @default(0)
+  createdById   Int       
+  assignedToId  Int?      
+
+  createdBy     User      @relation("TaskCreatedBy", fields: [createdById], references: [id])
+  assignedTo    User?     @relation("TaskAssignedTo", fields: [assignedToId], references: [id])
+  parent        Task?     @relation("TaskChildren", fields: [parentId], references: [id])
+  children      Task[]    @relation("TaskChildren")
+  schedules     Schedule[]
+  partyActivities PartyActivity[]
+
+  ganttStartDate  DateTime? // 甘特图任务开始时间
+  ganttEndDate    DateTime? // 甘特图任务结束时间
+  targetCount     Int?      // 目标数量（多目标模式：如35艘船）
+  ganttMode       String?   // 甘特图展示模式：multi-target/traditional/simple
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([teamCode])
+  @@index([parentId])
+  @@index([status])
+  @@index([category])
+  @@index([category2])
+  @@index([dueDate])
+  @@index([ganttStartDate])
+  @@index([ganttEndDate])
+}
+
+// 经验分享表（XBLogbook迁移：经验分享模块）
+model Experience {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  title         String    
+  category      String    
+  content       String    @db.Text
+  authorId      Int       
+  authorName    String    
+  shipName      String?   
+  rating        Float     @default(0)
+  ratingCount   Int       @default(0)
+  likeCount     Int       @default(0)
+  viewCount     Int       @default(0)
+  commentCount  Int       @default(0)
+  attachmentUrl String?   
+
+  author        User      @relation("ExperienceAuthor", fields: [authorId], references: [id])
+  ratings       ExperienceRating[]
+  comments      ExperienceComment[]
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([teamCode])
+  @@index([category])
+  @@index([authorId])
+  @@index([rating])
+}
+
+// 经验评分表
+model ExperienceRating {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  experienceId  Int
+  userId        Int
+  rating        Int       
+
+  experience Experience @relation(fields: [experienceId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+  createdAt     DateTime  @default(now())
+
+  @@unique([experienceId, userId])
+  @@index([teamCode, experienceId])
+}
+
+// 经验评论表
+model ExperienceComment {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  experienceId  Int
+  userId        Int
+  content       String    @db.Text
+  parentId      Int?      // 父评论ID，支持二级嵌套
+  replyToUserId Int?      // 回复目标用户ID
+
+  experience Experience @relation(fields: [experienceId], references: [id])
+  user User @relation("ExperienceCommentUser", fields: [userId], references: [id])
+  parent     ExperienceComment? @relation("CommentReplies", fields: [parentId], references: [id])
+  replies   ExperienceComment[] @relation("CommentReplies")
+  createdAt     DateTime  @default(now())
+
+  @@index([teamCode, experienceId])
+  @@index([userId])
+  @@index([parentId])
+}
+
+// 经验点赞表
+model ExperienceLike {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  experienceId  Int
+  userId        Int
+  createdAt     DateTime  @default(now())
+
+  @@unique([experienceId, userId])
+  @@index([teamCode, experienceId])
+}
+
+// 经验分类表
+model ExperienceCategory {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  name          String
+  icon          String?
+  color         String?
+  parentId      Int?
+  sortOrder     Int       @default(0)
+  isActive      Boolean   @default(true)
+  isExpanded    Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  parent        ExperienceCategory? @relation("CategoryChildren", fields: [parentId], references: [id])
+  children      ExperienceCategory[] @relation("CategoryChildren")
+
+  @@index([teamCode])
+  @@index([parentId])
+  @@index([sortOrder])
+}
+
+// 经验权限表
+model ExperiencePermission {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  userId        Int
+  permissionType String
+  reason        String?
+  expiresAt     DateTime?
+  grantedBy     Int
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  user          User      @relation("ExperiencePermissionUser", fields: [userId], references: [id])
+
+  @@index([teamCode])
+  @@index([userId])
+  @@index([permissionType])
+  @@index([isActive])
+}
+
+// ============================================
+// 党建专项模块（第二阶段新增）
+// ============================================
+
+// 党建活动类型枚举
+enum PartyActivityType {
+  branch_meeting        // 支部党员大会
+  committee_meeting     // 支委会
+  party_group_meeting   // 党小组会
+  party_lecture         // 党课
+  theme_party_day       // 主题党日
+  study_session         // 专题学习
+  organizational_life   // 组织生活会
+  democratic_review     // 民主评议
+}
+
+// 党建活动记录表（三会一课+主题党日+学习台账）
+model PartyActivity {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  shipId        Int?      // 关联船舶（可选，岸基活动可为空）
+  
+  activityType  PartyActivityType  // 活动类型
+  title         String    // 活动主题
+  activityDate  DateTime  // 活动日期
+  location      String?   // 活动地点
+  hostName      String?   // 主持人
+  recorderName  String?   // 记录人
+  
+  // 参会人员（JSON数组存储参会人员ID和姓名）
+  attendees     Json      // [{userId: 1, name: "张三", role: "党员"}, ...]
+  attendeeCount Int       @default(0)  // 参会人数
+  
+  // 活动内容
+  agenda        String    @db.Text  // 议题/议程
+  discussion    String?   @db.Text  // 讨论内容
+  resolution    String?   @db.Text  // 决议/结论
+  summary       String?   @db.Text  // 活动总结
+  
+  // 附件
+  attachments   Json?     // [{fileName: "xxx.jpg", filePath: "/uploads/xxx.jpg"}, ...]
+  
+  // 关联信息
+  relatedTaskId Int?      // 关联任务ID
+  remarks       String?   @db.Text  // 备注
+  
+  // 统计字段
+  likeCount     Int       @default(0)
+  commentCount  Int       @default(0)
+  
+  // 审计字段
+  createdById   Int
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // 关联关系
+  ship          Ship?     @relation(fields: [shipId], references: [id])
+  task          Task?     @relation(fields: [relatedTaskId], references: [id])
+  createdBy     User      @relation("PartyActivityCreatedBy", fields: [createdById], references: [id])
+  comments      PartyActivityComment[]
+  studyRecords  StudyRecord[]
+  
+  @@index([teamCode])
+  @@index([teamCode, activityType])
+  @@index([teamCode, activityDate])
+  @@index([teamCode, shipId])
+  @@index([createdById])
+}
+
+// 党建活动评论表
+model PartyActivityComment {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  activityId    Int
+  userId        Int
+  content       String    @db.Text
+  createdAt     DateTime  @default(now())
+  
+  activity      PartyActivity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  user          User      @relation("PartyActivityCommentUser", fields: [userId], references: [id])
+  
+  @@index([teamCode, activityId])
+  @@index([userId])
+}
+
+// 学习记录表（个人学习台账）
+model StudyRecord {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  userId        Int       // 学习人员
+  userName      String    // 学习人员姓名
+  
+  studyType     String    // 学习类型：政治理论/业务学习/安全培训/廉洁教育等
+  title         String    // 学习主题
+  studyDate     DateTime  // 学习日期
+  studyMethod   String?   // 学习方式：集中/自学/线上/线下
+  duration      Int?      // 学时（分钟）
+  
+  content       String    @db.Text  // 学习内容摘要
+  notes         String?   @db.Text  // 学习笔记
+  reflection    String?   @db.Text  // 心得体会
+  
+  // 关联信息
+  relatedActivityId Int?  // 关联党建活动ID
+  attachmentUrl   String? // 附件URL
+  
+  // 审核信息
+  reviewedBy      Int?    // 审核人
+  reviewedAt      DateTime? // 审核时间
+  reviewStatus    String  @default("pending") // pending/approved/rejected
+  reviewComment   String? // 审核意见
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  user            User     @relation("StudyRecordUser", fields: [userId], references: [id])
+  activity        PartyActivity? @relation(fields: [relatedActivityId], references: [id])
+  
+  @@index([teamCode])
+  @@index([teamCode, userId])
+  @@index([teamCode, studyDate])
+  @@index([teamCode, studyType])
+}
+
+// ============================================
+// 思想动态台账模块
+// ============================================
+
+// 情绪状态枚举
+enum EmotionalState {
+  stable        // 稳定
+  fluctuating   // 波动
+  anxious       // 焦虑
+  depressed     // 低落
+  angry         // 愤怒
+  enthusiastic  // 积极
+}
+
+// 关注等级枚举
+enum ConcernLevel {
+  normal      // 正常
+  attention   // 关注
+  warning     // 预警
+  critical    // 重点关注
+}
+
+// 思想动态报告表
+model ThoughtReport {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  shipId        Int?      // 关联船舶
+  userId        Int       // 报告人（政委）
+  crewName      String    // 涉及船员姓名
+  crewPosition  String?   // 船员岗位
+  
+  reportDate    DateTime  // 报告日期
+  emotionalState EmotionalState  // 情绪状态
+  concernLevel  ConcernLevel    // 关注等级
+  
+  // 动态内容
+  situation     String    @db.Text  // 思想动态情况描述
+  trigger       String?   @db.Text  // 触发原因
+  measures      String?   @db.Text  // 已采取措施
+  followUp      String?   @db.Text  // 后续跟进计划
+  
+  // 处理状态
+  status        String    @default("open") // open/processing/closed
+  closedAt      DateTime?
+  closedBy      Int?
+  
+  // 关联信息
+  relatedDiaryId Int?     // 关联日记ID
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  user          User      @relation("ThoughtReportUser", fields: [userId], references: [id])
+  
+  @@index([teamCode])
+  @@index([teamCode, reportDate])
+  @@index([teamCode, emotionalState])
+  @@index([teamCode, concernLevel])
+  @@index([teamCode, status])
+}
+
+// ============================================
+// 船员诉求管理模块
+// ============================================
+
+// 诉求类型枚举
+enum AppealType {
+  work_condition    // 工作条件
+  life_welfare      // 生活福利
+  career_development // 职业发展
+  family_difficulty  // 家庭困难
+  interpersonal      // 人际关系
+  suggestion         // 意见建议
+  complaint          // 投诉举报
+  other              // 其他
+}
+
+// 诉求处理状态
+enum AppealStatus {
+  submitted     // 已提交
+  acknowledged  // 已受理
+  processing    // 处理中
+  resolved      // 已解决
+  rejected      // 已驳回
+}
+
+// 诉求记录表
+model AppealRecord {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  shipId        Int?
+  userId        Int       // 提交人
+  
+  appealType    AppealType
+  title         String    // 诉求标题
+  content       String    @db.Text  // 诉求内容
+  urgency       String    @default("normal") // low/normal/urgent
+  
+  // 处理信息
+  assignedTo    Int?      // 处理人
+  status        AppealStatus @default(submitted)
+  submittedAt   DateTime  @default(now())
+  acceptedAt    DateTime?
+  resolvedAt    DateTime?
+  
+  response      String?   @db.Text  // 处理回复
+  satisfaction  Int?      // 满意度 1-5
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  user          User      @relation("AppealRecordUser", fields: [userId], references: [id])
+  
+  @@index([teamCode])
+  @@index([teamCode, status])
+  @@index([teamCode, appealType])
+  @@index([teamCode, submittedAt])
+}
+
+// ============================================
+// 廉洁监督台账模块
+// ============================================
+
+// 廉洁监督类别
+enum IntegrityCategory {
+  meal_fund       // 伙食费管理
+  union_fund      // 工会经费
+  material        // 备件物料
+  fuel_oil        // 燃油加装
+  waste_oil       // 油污水处理
+  gift_redpacket  // 礼品红包
+  procurement     // 采购招标
+  other           // 其他
+}
+
+// 风险等级
+enum RiskLevel {
+  low         // 低风险
+  medium      // 中风险
+  high        // 高风险
+  critical    // 极高风险
+}
+
+// 检查类型
+enum InspectionType {
+  routine       // 例行检查
+  special       // 专项检查
+  surprise      // 突击检查
+  follow_up     // 复查
+}
+
+// 廉洁监督记录表
+model IntegrityRecord {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  shipId        Int?
+  userId        Int       // 记录人
+  
+  category      IntegrityCategory  // 监督类别
+  riskLevel     RiskLevel          // 风险等级
+  inspectionType InspectionType    // 检查类型
+  
+  inspectionDate DateTime   // 检查日期
+  title         String     // 检查标题
+  findings      String     @db.Text  // 发现的问题
+  evidence      Json?      // 证据材料 [{type, url, description}]
+  
+  // 处理信息
+  measures      String?    @db.Text  // 整改措施
+  deadline      DateTime?  // 整改期限
+  responsible   String?    // 责任人
+  status        String     @default("open") // open/in_progress/resolved/closed
+  resolvedAt    DateTime?
+  resolvedBy    Int?
+  
+  // 预警信息
+  alertSent     Boolean    @default(false)
+  alertLevel    String?    // 预警等级
+  
+  remarks       String?    @db.Text
+  
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  
+  user          User       @relation("IntegrityRecordUser", fields: [userId], references: [id])
+  
+  @@index([teamCode])
+  @@index([teamCode, category])
+  @@index([teamCode, riskLevel])
+  @@index([teamCode, status])
+  @@index([teamCode, inspectionDate])
+}
+
+// ============================================
+// 政委履职档案模块
+// ============================================
+
+// 政委能力评级
+enum OfficerGrade {
+  excellent     // 优秀
+  good          // 良好
+  qualified     // 合格
+  needs_improve // 需改进
+  unqualified   // 不合格
+}
+
+// 政委履职档案表
+model OfficerProfile {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  userId        Int       // 政委用户ID
+  
+  // 基本信息
+  shipId        Int?      // 当前任职船舶
+  appointmentDate DateTime // 上船日期
+  expectedEndDate DateTime? // 预期下船日期
+  
+  // 派前信息
+  preTalk       String?    @db.Text  // 派前谈话记录
+  preTalkDate   DateTime?
+  preTalkBy     Int?       // 谈话人
+  
+  // 传帮带计划
+  mentorPlan    String?    @db.Text  // 传帮带计划
+  mentorName    String?    // 导师姓名
+  mentorId      Int?
+  
+  // 能力评估
+  overallGrade  OfficerGrade? // 总体评级
+  strengths     String?    @db.Text  // 优势
+  weaknesses    String?    @db.Text  // 不足
+  improvePlan   String?    @db.Text  // 改进计划
+  
+  // 统计信息（自动计算）
+  diaryCount    Int        @default(0)  // 日记数量
+  activityCount Int        @default(0)  // 党建活动数量
+  studyCount    Int        @default(0)  // 学习记录数量
+  activeDays    Int        @default(0)  // 活跃天数
+  lastActiveAt  DateTime?  // 最后活跃时间
+  
+  // 特殊标记
+  isThin        Boolean    @default(false)  // 能力薄弱标记
+  isNewbie      Boolean    @default(false)  // 新政委标记
+  focusAreas    Json?      // 重点关注领域
+  
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  
+  user          User       @relation("OfficerProfileUser", fields: [userId], references: [id])
+  evaluations   OfficerEvaluation[] @relation("EvaluationOfficer")
+  mentorships   MentorshipRecord[] @relation("MentorshipMentee")
+  
+  @@unique([teamCode, userId])
+  @@index([teamCode])
+  @@index([teamCode, overallGrade])
+}
+
+// 考核评价表
+model OfficerEvaluation {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  officerProfileId Int   // 履职档案ID
+  officerId     Int       // 被评价政委
+  evaluatorId   Int       // 评价人（主管）
+  
+  evalDate      DateTime  // 评价日期
+  evalType      String    // 月度/季度/年度/专项
+  
+  // 评分项
+  partyWork     Int?      // 党建工作 1-5
+  teamManage    Int?      // 队伍管理 1-5
+  safetyAware   Int?      // 安全意识 1-5
+  communication Int?      // 沟通协调 1-5
+  learning      Int?      // 学习态度 1-5
+  
+  // 综合评价
+  overallScore  Float     // 综合评分
+  overallGrade  OfficerGrade  // 综合评级
+  
+  comments      String?   @db.Text  // 评价意见
+  suggestions   String?   @db.Text  // 改进建议
+  
+  createdAt     DateTime  @default(now())
+  
+  officerProfile OfficerProfile @relation("EvaluationOfficer", fields: [officerProfileId], references: [id])
+  officer       User      @relation("EvaluationOfficerUser", fields: [officerId], references: [id])
+  evaluator     User      @relation("EvaluationEvaluator", fields: [evaluatorId], references: [id])
+  
+  @@index([teamCode])
+  @@index([teamCode, officerProfileId])
+  @@index([teamCode, evalDate])
+}
+
+// 传帮带记录表
+model MentorshipRecord {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  officerProfileId Int   // 履职档案ID
+  menteeId      Int       // 被帮扶政委
+  mentorId      Int       // 帮扶导师
+  
+  recordDate    DateTime  // 记录日期
+  topic         String    // 帮扶主题
+  content       String    @db.Text  // 帮扶内容
+  advice        String?   @db.Text  // 指导建议
+  
+  // 反馈
+  menteeFeedback String?  @db.Text  // 被帮扶人反馈
+  effectiveness String    @default("good") // excellent/good/fair/poor
+  
+  createdAt     DateTime  @default(now())
+  
+  officerProfile OfficerProfile @relation("MentorshipMentee", fields: [officerProfileId], references: [id])
+  mentee        User      @relation("MentorshipMenteeUser", fields: [menteeId], references: [id])
+  mentor        User      @relation("MentorshipMentor", fields: [mentorId], references: [id])
+  
+  @@index([teamCode])
+  @@index([teamCode, officerProfileId])
+  @@index([teamCode, recordDate])
+}
+
+// ============================================
+// 用户自定义标题体系（第三阶段新增）
+// ============================================
+
+// 用户自定义标题表（每个角色可自定义一二级标题）
+model UserTitle {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  userId        Int       // 创建用户
+  role          UserRole  // 所属角色
+  categoryFirst String    // 一级分类（如"航行安全"）
+  categorySecond String   // 二级标题（如"狭水道航行"）
+  sortOrder     Int       @default(0)  // 排序
+  isSystem      Boolean   @default(false)  // 是否系统预设（后期统一用）
+  isUserCustom  Boolean   @default(true)   // 是否用户自定义
+  isActive      Boolean   @default(true)   // 是否启用
+  description   String?   @db.Text  // 标题说明（AI归类参考）
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([teamCode])
+  @@index([teamCode, role])
+  @@index([teamCode, categoryFirst])
+  @@index([teamCode, categoryFirst, categorySecond])
+  @@index([isActive])
+}
+
+// 日记标题关联表（记录每次日记使用的标题）
+model DiaryTitleUsage {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  diaryId       Int       // 关联日记
+  userId        Int       // 用户
+  categoryFirst String    // 使用的一级分类
+  categorySecond String   // 使用的二级标题
+  usageDate     DateTime  // 使用日期
+  isAISuggested Boolean   @default(false)  // 是否AI建议
+  userAccepted  Boolean   @default(false)  // 用户是否接受AI建议
+  createdAt     DateTime  @default(now())
+
+  @@index([teamCode])
+  @@index([teamCode, diaryId])
+  @@index([teamCode, categoryFirst, categorySecond])
+  @@index([teamCode, usageDate])
+  @@index([isAISuggested])
+}
+
+// AI引导状态表（记录用户引导进度）
+model UserGuideState {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  userId        Int       // 用户
+  guideStep     String    // 当前引导步骤
+  completedSteps Json?    // 已完成的步骤 ["welcome", "diary", "title", "settings", "ai"]
+  skipped       Boolean   @default(false)  // 是否跳过
+  completedAt   DateTime? // 完成时间
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([teamCode, userId])
+  @@index([teamCode, userId])
+  @@index([completedSteps])
+}
+
+// ============================================
+// 会议录音 + AI会议纪要模块（对标Notion/飞书）
+// ============================================
+
+// 会议纪要模板表
+model MeetingTemplate {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  userId        Int       // 创建者
+  name          String    // 模板名称（如"标准会议纪要"、"党支部会议"）
+  description   String?   @db.Text  // 模板说明
+  content       String    @db.Text  // 模板内容（JSON格式，定义各段落结构）
+  isDefault     Boolean   @default(false)  // 是否为默认模板
+  isSystem      Boolean   @default(false)  // 是否系统预设
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([teamCode])
+  @@index([teamCode, userId])
+  @@index([isDefault])
+}
+
+// 专业词库表（用于AI识别行业术语）
+model MeetingTerm {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  userId        Int       // 创建者
+  term          String    // 专业术语
+  explanation   String?   @db.Text  // 解释说明
+  category      String?   // 分类（船舶/党建/安全/业务）
+  createdAt     DateTime  @default(now())
+
+  @@index([teamCode])
+  @@index([teamCode, category])
+  @@unique([teamCode, term])
+}
+
+// 会议纪要记录表
+model MeetingRecord {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  userId        Int       // 创建者
+  diaryId       Int?      // 关联日记（可选）
+  
+  title         String    // 会议主题
+  meetingDate   DateTime  // 会议日期
+  location      String?   // 会议地点
+  participants  Json?     // 参会人员列表 [{name, role}]
+  
+  // 录音文件
+  recordingUrl  String?   // 录音文件URL/路径
+  duration      Int?      // 录音时长（秒）
+  fileSize      Int?      // 文件大小（字节）
+  
+  // AI处理结果
+  transcript    String?   @db.Text  // 语音转写文本
+  summary       String?   @db.Text  // AI生成的会议纪要
+  actionItems   Json?     // 行动项 [{content, assignee, deadline, status}]
+  templateId    Int?      // 使用的模板ID
+  
+  // 状态流转
+  status        String    @default("draft") // draft/recording/transcribing/summarizing/completed
+  
+  // 用户编辑
+  isEdited      Boolean   @default(false)  // 用户是否手动编辑过
+  customNotes   String?   @db.Text  // 用户补充备注
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([teamCode])
+  @@index([teamCode, userId])
+  @@index([teamCode, status])
+  @@index([teamCode, meetingDate])
+  @@index([teamCode, diaryId])
+}
+
+// ============================================
+// 政委派任管理模块（第四阶段新增）
+// ============================================
+
+// 政委派任记录表
+model StaffAssignment {
+  id            Int      @id @default(autoincrement())
+  userId        Int      // 政委ID
+  user          User     @relation(fields: [userId], references: [id])
+  shipId        Int      // 船舶ID
+  ship          Ship     @relation(fields: [shipId], references: [id])
+  teamCode      TeamCode // 所属团队
+  
+  startDate     DateTime // 上船日期
+  endDate       DateTime? // 下船日期（null表示当前在船）
+  status        String   @default("active") // active/leave/ended
+  
+  sourceCompany String?  // 船员公司名称（上海/大连/广州）
+  assignmentNo  String?  // 派任编号
+  remark        String?  @db.Text  // 备注（休假原因等）
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([userId])
+  @@index([shipId])
+  @@index([userId, startDate])
+  @@index([teamCode])
+  @@index([status])
+}
+
+// 分片上传缓存表（断点续传支持）
+model ChunkUploadCache {
+  id            Int       @id @default(autoincrement())
+  fileHash      String    // 文件 MD5
+  fileName      String    // 原始文件名
+  fileSize      Int       // 文件总大小
+  totalChunks   Int       // 总分片数
+  uploadedChunks Json     // 已上传分片索引数组 [0, 1, 2, ...]
+  tempPath      String    // 临时存储路径
+  userId        Int       // 上传者
+  teamCode      TeamCode
+  status        String    @default("uploading") // uploading/merging/completed/expired
+  expiresAt     DateTime  // 过期时间（7天）
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([fileHash])
+  @@index([teamCode])
+  @@index([status])
+  @@index([expiresAt])
+}
+
+// ============================================
+// 角色菜单权限配置表（管理员可配置各角色可见菜单）
+// ============================================
+model RoleMenuConfig {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  role          UserRole  // 目标角色
+  menuKey       String    // 菜单唯一标识（如 /publish-v2, /dashboard, /diary）
+  label         String    // 菜单显示名称
+  icon          String?   // 图标名称
+  enabled       Boolean   @default(true) // 是否启用
+  sortOrder     Int       @default(0)   // 排序
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([teamCode, role, menuKey])
+  @@index([teamCode, role])
+}
+
+// 版本历史表（通用，支持多实体版本追踪）
+// ============================================
+
+// ============================================
+// 文件收集系统（类似微信小程序接龙体验的专业文件收集工具）
+// ============================================
+
+// 文件收集任务表
+model FileCollection {
+  id            Int      @id @default(autoincrement())
+  title         String   // 收集任务名称
+  description   String?  // 任务描述
+  
+  creatorId     Int      // 创建人ID（船工主管）
+  creator       User     @relation(fields: [creatorId], references: [id])
+  
+  teamCode      TeamCode // 所属团队
+  
+  // 目标船舶
+  targetShips   Json     // [{shipId: 1, shipName: "新金洋"}, ...]
+  
+  // 文件要求
+  fileType      String?  // 要求文件类型（pdf/word/excel等）
+  namingRule    String?  // 命名规则模板
+  maxSize       Int?     // 最大文件大小（MB）
+  
+  // 时间
+  deadline      DateTime // 截止时间
+  status        String   @default("active") // active/closed
+  
+  // 统计
+  submittedCount Int     @default(0)
+  totalCount    Int      // 目标总数
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  submissions   FileSubmission[]
+  
+  @@index([teamCode])
+  @@index([teamCode, status])
+  @@index([teamCode, deadline])
+  @@index([creatorId])
+}
+
+// 文件提交记录表
+model FileSubmission {
+  id            Int      @id @default(autoincrement())
+  collectionId  Int
+  collection    FileCollection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  
+  shipId        Int
+  ship          Ship     @relation(fields: [shipId], references: [id])
+  
+  submitterId   Int      // 提交人（政委）
+  submitter     User     @relation(fields: [submitterId], references: [id])
+  
+  fileId        Int      // 关联共享文件ID
+  file          SharedFile @relation(fields: [fileId], references: [id])
+  
+  fileName      String   // 原始文件名
+  renamedName   String   // 重命名后的文件名
+  
+  status        String   @default("submitted") // submitted/rejected
+  rejectReason  String?
+  
+  submittedAt   DateTime @default(now())
+  
+  @@unique([collectionId, shipId])
+  @@index([collectionId])
+  @@index([shipId])
+  @@index([submitterId])
+  @@index([status])
+}
+
+// ============================================
+// 船员管理模块（第五阶段新增）
+// ============================================
+
+// 船员信息表
+model CrewMember {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  
+  // 基本信息
+  name          String    // 姓名
+  gender        String    // 性别：male/female
+  idNumber      String    @unique // 身份证号（18位）
+  position      String    // 岗位/职务
+  department    String?   // 部门
+  
+  // 日期信息（从身份证号自动提取）
+  birthdaySolar String    // 公历生日 YYYY-MM-DD
+  birthdayLunar String    // 农历生日 YYYY-MM-DD（月-日）
+  birthPlace    String?   // 籍贯
+  
+  // 联系信息
+  phone         String?   // 联系电话
+  emergencyContact String? // 紧急联系人
+  emergencyPhone   String? // 紧急联系电话
+  
+  // 船舶信息
+  shipId        Int?      // 当前所属船舶
+  shipName      String?   // 船舶名称（冗余字段）
+  onBoardDate   DateTime? // 上船日期
+  expectedOffDate DateTime? // 预计下船日期
+  
+  // 生日提醒设置
+  solarReminderDays Int   @default(7)  // 公历生日提前提醒天数
+  lunarReminderDays Int   @default(3)  // 农历生日提前提醒天数（通常政委慰问）
+  solarGiftAmount Int   @default(300) // 公历生日礼金（元）
+  
+  // 状态
+  status        String    @default("active") // active/leave/retired
+  remarks       String?   @db.Text
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  @@index([teamCode])
+  @@index([teamCode, status])
+  @@index([teamCode, shipId])
+  @@index([birthdaySolar])
+  @@index([birthdayLunar])
+}
+
+// 生日提醒记录表
+model BirthdayReminder {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  
+  crewMemberId  Int       // 船员ID
+  crewName      String    // 船员姓名
+  reminderDate  DateTime  // 提醒日期
+  birthdayType  String    // solar/lunar
+  
+  reminderSent  Boolean   @default(false) // 是否已发送提醒
+  giftGiven     Boolean   @default(false) // 是否已发放礼金
+  comfortVisit Boolean   @default(false) // 是否已慰问（政委）
+  
+  notes         String?   @db.Text
+  
+  createdAt     DateTime  @default(now())
+  
+  @@index([teamCode])
+  @@index([teamCode, reminderDate])
+  @@index([teamCode, birthdayType])
+}
+
+// ============================================
+// 船舶笔记模块（AI分析数据源）
+// ============================================
+
+// 船舶笔记表（记录所有与船舶相关的文本信息）
+model ShipNote {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  shipId        Int       // 关联船舶ID
+  userId        Int       // 创建者ID
+  content       String    @db.Text // 笔记内容（支持粘贴微信聊天记录等）
+  source        String?   // 来源：manual/wechat/meeting/other
+  tags          Json?     // 标签数组 ["微信记录", "会议纪要", "安全检查"]
+  starLevel     Int       @default(0) // 星级：0-5
+  isPinned      Boolean   @default(false) // 是否置顶
+  sortOrder     Int       @default(0) // 排序值，越大越靠前
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  @@index([teamCode])
+  @@index([teamCode, shipId])
+  @@index([teamCode, userId])
+  @@index([teamCode, createdAt])
+  @@index([teamCode, shipId, isPinned, sortOrder])
+}
+
+// 版本历史表（通用，支持多实体版本追踪）
+model VersionHistory {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  
+  entityType    String    // 实体类型：diary/schedule/task/experience/partyActivity/ship
+  entityId      Int       // 实体ID
+  
+  version       Int       // 版本号（递增）
+  snapshot      Json      // 完整数据快照
+  changes       Json?     // 变更差异（diff）
+  changeSummary String?   @db.Text  // 变更摘要说明
+  
+  userId        Int       // 操作用户
+  userName      String    // 操作人姓名
+  
+  createdAt     DateTime  @default(now())
+
+  @@index([teamCode, entityType, entityId])
+  @@index([teamCode, entityType, entityId, version])
+  @@index([teamCode, createdAt])
+  @@index([userId])
+}
+
+// ============================================
+// 健康排查系统（阶段一新增）
+// ============================================
+
+// 健康排查表上传记录
+model HealthReportUpload {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  shipId        Int
+  uploadDate    DateTime  @default(now())
+  month         String    // "2026-06"
+  
+  // 文件信息
+  fileName      String
+  filePath      String
+  fileSize      Int
+  
+  // 校验结果
+  validationResult String  // pass/fail/ai_fixed
+  validationErrors Json?   // 具体错误 [{field, message}]
+  aiFixNotes    String?   // AI容错修复备注
+  
+  // 统计数据
+  crewCount     Int       @default(0)
+  healthAbnormalCount Int @default(0)
+  psychAbnormalCount Int  @default(0)
+  abnormalDetails Json?   // 异常船员明细
+  
+  // 状态
+  status        String    @default("pending") // pending/reviewed/archived
+  uploadedBy    Int
+  reviewedBy    Int?
+  reviewedAt    DateTime?
+  supervisorNote String?  @db.Text  // 主管批注
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  ship Ship @relation(fields: [shipId], references: [id])
+
+  @@index([teamCode, shipId, month])
+  @@index([teamCode, status])
+}
+
+// 月度健康汇总
+model MonthlyHealthSummary {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  month         String    // "2026-06"
+  
+  // AI报告
+  reportContent String    @db.Text @default("")  // AI生成的报告草稿
+  isDraft       Boolean   @default(true)
+  isEdited      Boolean   @default(false)
+  finalizedBy   Int?
+  finalizedAt   DateTime?
+  
+  // 统计数据
+  totalShips    Int       @default(0)
+  normalShips   Int       @default(0)
+  abnormalShips Int       @default(0)
+  unsubmittedShips Int    @default(0)
+  totalCrew     Int       @default(0)
+  healthAbnormalTotal Int @default(0)
+  psychAbnormalTotal Int  @default(0)
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  @@unique([teamCode, month])
+}
+
+// ============================================
+// 诉求闭环管理模块（P3-2）
+// ============================================
+
+// 诉求状态枚举（完整闭环流程）
+enum AppealStatusV2 {
+  pending      // 待受理：船舶提交后等待主管受理
+  accepted     // 已受理：主管已接收并开始处理
+  processing   // 处理中：正在处理中
+  escalated    // 已升级：已升级到上级处理
+  resolved     // 已解决：主管已解决问题，等待船舶确认
+  confirmed    // 已确认：船舶确认问题已解决，流程闭环
+  closed       // 已关闭：流程结束（可由主管直接关闭）
+  rejected     // 已驳回：不符合受理条件
+}
+
+// 诉求记录表
+model CrewAppeal {
+  id          Int       @id @default(autoincrement())
+  teamCode    TeamCode
+  crewId      Int
+  crewName    String
+  shipId      Int
+  shipName    String
+  title       String
+  content     String
+  category    String    // health | work | family | suggestion | complaint | other
+  priority    String    @default("normal") // low | normal | high | urgent
+  
+  // 完整闭环状态机
+  status      AppealStatusV2 @default(pending)
+  
+  // 诉求来源跟踪
+  sourceTaskId Int?      // 来源任务ID（主管发布的任务收集）
+  sourceTemplateId Int?  // 来源模板ID
+  
+  // 响应信息
+  response    String?
+  respondedBy Int?       // 处理人ID
+  respondedAt DateTime?
+  
+  // 升级信息
+  escalatedAt DateTime?
+  escalatedTo String?
+  
+  // 解决与确认
+  resolvedAt  DateTime?
+  confirmedAt DateTime?  // 船舶确认时间
+  confirmedBy Int?       // 确认人ID
+  
+  // 满意度评价（船舶确认时可评分）
+  satisfaction Int?      // 满意度 1-5
+  feedback    String?     // 船舶反馈意见
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // 状态流转记录
+  statusTransitions AppealStatusTransition[]
+
+  @@index([teamCode])
+  @@index([crewId])
+  @@index([shipId])
+  @@index([status])
+  @@index([priority])
+  @@index([sourceTaskId])
+  @@index([sourceTemplateId])
+}
+
+// 诉求状态流转记录表
+model AppealStatusTransition {
+  id          Int       @id @default(autoincrement())
+  appealId    Int
+  appeal      CrewAppeal @relation(fields: [appealId], references: [id], onDelete: Cascade)
+  
+  fromStatus  String?   // 流转前状态
+  toStatus    String    // 流转后状态
+  action      String    // 触发动作：submit/accept/process/resolve/confirm/close/reject/escalate
+  operatorId  Int?      // 操作人ID
+  operatorName String?  // 操作人姓名
+  operatorRole String?  // 操作人角色：supervisor/ship
+  
+  // 流转详情
+  comment     String?   // 操作备注/说明
+  attachment  Json?    // 附件 [{name, url}]
+  
+  createdAt   DateTime  @default(now())
+
+  @@index([appealId])
+  @@index([createdAt])
+}
+
+// ============================================
+// 客户端日志收集与AI分析系统
+// ============================================
+
+// 日志收集配置表（管理员控制）
+model LogCollectionConfig {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  
+  // 全局开关
+  enabled       Boolean   @default(false)  // 是否启用日志收集
+  
+  // 收集级别
+  collectErrors Boolean   @default(true)   // 收集JS错误
+  collectApiErrors Boolean @default(true)  // 收集API错误
+  collectPerformance Boolean @default(false) // 收集性能数据
+  collectUserActions Boolean @default(false) // 收集用户操作
+  
+  // 上传配置
+  uploadInterval Int      @default(300)     // 上传间隔（秒），默认5分钟
+  maxBatchSize   Int      @default(50)      // 单次最大上传条数
+  
+  // 目标用户（空表示所有用户）
+  targetUserIds Json?     // [1, 2, 3] 指定用户ID列表
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  @@unique([teamCode])
+  @@index([teamCode, enabled])
+}
+
+// 客户端日志表
+model ClientLog {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  userId        Int
+  
+  // 日志类型
+  logType       String    // error/api_error/performance/user_action
+  level         String    // info/warn/error/critical
+  
+  // 日志内容
+  message       String    @db.Text  // 错误消息/操作描述
+  details       Json?     // 详细信息（堆栈、请求参数等）
+  
+  // 环境信息
+  userAgent     String?   // 浏览器信息
+  platform      String?   // 操作系统
+  screenResolution String? // 屏幕分辨率
+  networkType   String?   // 网络类型（4g/wifi等）
+  
+  // 页面信息
+  pageUrl       String?   // 当前页面URL
+  pagePath      String?   // 页面路径
+  
+  // 时间戳
+  clientTime    DateTime  // 客户端时间
+  createdAt     DateTime  @default(now())
+  
+  // 分析状态
+  analyzed      Boolean   @default(false)  // 是否已AI分析
+  analysisId    Int?     // 关联的分析结果
+  analysis      LogAnalysis? @relation(fields: [analysisId], references: [id])
+  
+  @@index([teamCode, userId])
+  @@index([teamCode, logType])
+  @@index([teamCode, level])
+  @@index([teamCode, analyzed])
+  @@index([teamCode, createdAt])
+  @@index([createdAt])
+  @@index([clientTime])
+  @@index([analysisId])
+}
+
+// AI分析结果表
+model LogAnalysis {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  
+  // 关联日志
+  logIds        Json      // [1, 2, 3] 关联的日志ID列表
+  logs          ClientLog[]
+  
+  // AI分析结果
+  errorType     String?   // 错误类型分类
+  rootCause     String?   @db.Text  // 根本原因分析
+  suggestion    String?   @db.Text  // 修复建议
+  
+  // 严重级别
+  severity      String    @default("medium") // low/medium/high/critical
+  
+  // 修复方案
+  fixType       String?   // code_patch/config_change/user_guide
+  fixContent    Json?     // 修复内容（代码补丁/配置/操作指导）
+  
+  // 状态
+  status        String    @default("pending") // pending/fix_sent/resolved/ignored
+  
+  // 处理记录
+  processedBy   Int?     // 处理人
+  processedAt   DateTime? // 处理时间
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  @@index([teamCode, severity])
+  @@index([teamCode, status])
+  @@index([createdAt])
+}
+
+// 修复包表
+model FixPackage {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  
+  // 基本信息
+  name          String    // 修复包名称
+  description   String?   @db.Text  // 修复说明
+  
+  // 关联分析
+  analysisId    Int?     // 关联的AI分析
+  
+  // 修复内容
+  fixType       String    // code_patch/config_change/user_guide
+  fixContent    Json      // 修复内容详情
+  
+  // 目标用户
+  targetUserIds Json      // [1, 2, 3] 目标用户列表
+  
+  // 下发状态
+  sentBy        Int       // 发送人
+  sentAt        DateTime  @default(now())
+  
+  // 接收状态
+  receivedCount Int       @default(0)  // 已接收人数
+  appliedCount  Int       @default(0)  // 已应用人数
+  
+  receipts      FixPackageReceipt[]
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  @@index([teamCode])
+  @@index([sentBy])
+  @@index([sentAt])
+}
+
+// 修复包接收记录表
+model FixPackageReceipt {
+  id            Int       @id @default(autoincrement())
+  packageId     Int
+  userId        Int
+  package       FixPackage @relation(fields: [packageId], references: [id])
+  
+  // 接收状态
+  received      Boolean   @default(false)
+  receivedAt    DateTime?
+  
+  // 应用状态
+  applied       Boolean   @default(false)
+  appliedAt     DateTime?
+  
+  // 反馈
+  feedback      String?   @db.Text  // 用户反馈
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  @@unique([packageId, userId])
+  @@index([packageId])
+  @@index([userId])
+}
+
+// ============================================
+// 任务到期提醒Webhook模块
+// ============================================
+
+// 压缩记录表
+model CompressionLog {
+  id            Int      @id @default(autoincrement())
+  userId        Int
+  fileName      String
+  originalSize  Int
+  compressedSize Int
+  method        String   // 'image' | 'adobe' | 'original'
+  compressionRate String
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// Webhook类型枚举
+enum WebhookType {
+  dingtalk      // 钉钉
+  feishu        // 飞书
+  wechat        // 企业微信
+  custom        // 自定义Webhook
+}
+
+// 提醒级别枚举
+enum ReminderLevel {
+  low           // 低 - 提前7天
+  medium        // 中 - 提前3天
+  high          // 高 - 提前1天
+  urgent        // 紧急 - 提前0天（当天）
+}
+
+// Webhook配置表
+model WebhookConfig {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  
+  // Webhook基本信息
+  name          String    // 配置名称，如"钉钉提醒"
+  type          WebhookType @default(custom) // Webhook类型
+  url           String    // Webhook地址URL
+  
+  // 加密配置
+  secret        String?   // 签名密钥（钉钉/飞书使用）
+  
+  // 启用状态
+  enabled       Boolean   @default(true)
+  
+  // 提醒配置
+  reminderDays   Json      @default("[7, 3, 1]") // 提前提醒天数配置，如 [7, 3, 1] 表示提前7天、3天、1天提醒
+  reminderLevels Json?     // 各级别对应天数 {"low": 7, "medium": 3, "high": 1, "urgent": 0}
+  
+  // 消息模板配置
+  templateConfig Json?     // 自定义消息模板配置
+  // 示例: {"title": "任务到期提醒", "content": "【{{taskTitle}}】任务将于{{daysLeft}}天后到期，请及时处理！"}
+  
+  // 过滤条件
+  taskCategories Json?     // 只对指定分类的任务生效，如 ["党建活动", "安全检查"]
+  priorityFilter Json?     // 只对指定优先级生效，如 ["urgent_important", "important"]
+  
+  // 责任人配置
+  notifyCreator  Boolean   @default(true)  // 通知任务创建者
+  notifyAssignee Boolean   @default(true)  // 通知任务负责人
+  notifyAdmins   Boolean   @default(false) // 通知管理员
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // 关联发送记录
+  sentLogs      WebhookSentLog[]
+  
+  @@index([teamCode])
+  @@index([teamCode, enabled])
+  @@index([type])
+}
+
+// Webhook发送记录表
+model WebhookSentLog {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  
+  // 关联配置
+  webhookConfigId Int
+  webhookConfig  WebhookConfig @relation(fields: [webhookConfigId], references: [id])
+  
+  // 关联任务
+  taskId        Int?
+  taskTitle     String?   // 冗余存储任务标题
+  
+  // 发送信息
+  reminderLevel ReminderLevel // 提醒级别
+  daysBefore   Int       // 提前多少天
+  sentAt       DateTime  @default(now())
+  
+  // 发送结果
+  success       Boolean   @default(false)
+  responseCode Int?      // HTTP响应码
+  responseBody String?   @db.Text  // 响应内容
+  errorMessage String?    // 错误信息
+  
+  // 发送目标
+  targetUsers   Json?     // 通知目标用户列表 [{"userId": 1, "name": "张三"}]
+  
+  @@index([teamCode])
+  @@index([webhookConfigId])
+  @@index([taskId])
+  @@index([sentAt])
+  @@index([success])
+}
+
+// 任务提醒记录表（记录已发送的提醒，避免重复发送）
+model TaskReminderRecord {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  
+  taskId        Int
+  webhookConfigId Int?
+  
+  // 提醒信息
+  reminderLevel ReminderLevel
+  daysBefore   Int       // 提前多少天提醒
+  dueDate      DateTime  // 任务截止日期
+  
+  // 发送状态
+  sent         Boolean   @default(false)
+  sentAt       DateTime?
+  
+  // 创建时间
+  createdAt     DateTime  @default(now())
+  
+  @@unique([taskId, webhookConfigId, daysBefore])
+  @@index([teamCode])
+  @@index([taskId])
+  @@index([sent])
+}
+
+// ============================================
+// 杂志编排模块（AI杂志自动编排MVP）
+// ============================================
+
+// 杂志表
+model Magazine {
+  id          String   @id @default(uuid())
+  name        String
+  templateId  String
+  totalPages  Int      @default(8)
+  coverImage  String?
+  status      String   @default("draft")  // draft, published
+  teamCode    String?
+  createdBy   Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  articles    MagazineArticle[]
+  sections    MagazineSection[]
+  versions    MagazineVersion[]
+}
+
+// 杂志版块表
+model MagazineSection {
+  id          String   @id @default(uuid())
+  magazineId  String
+  name        String   // 如"新闻动态"
+  pageStart   Int      @default(1)
+  pageEnd     Int      @default(1)
+  layout      String   @default("single-column")  // single-column, two-column, three-column
+  order       Int      @default(0)
+  magazine    Magazine @relation(fields: [magazineId], references: [id], onDelete: Cascade)
+  
+  articles    MagazineArticle[]
+  
+  @@index([magazineId])
+}
+
+// 杂志文章表
+model MagazineArticle {
+  id          String   @id @default(uuid())
+  magazineId  String
+  sectionId   String?
+  title       String
+  content     String   // 富文本HTML
+  author      String?
+  summary     String?
+  images      String[] // JSON数组
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  magazine    Magazine @relation(fields: [magazineId], references: [id], onDelete: Cascade)
+  section     MagazineSection? @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+
+  @@index([magazineId])
+  @@index([sectionId])
+}
+
+// 杂志版本历史表
+model MagazineVersion {
+  id            String   @id @default(uuid())
+  magazineId    String
+  versionNumber Int
+  name          String?
+  description   String?  // 版本描述，如"添加了3篇文章"
+  data          Json     // 完整的杂志快照数据
+  createdBy     Int
+  createdAt     DateTime @default(now())
+
+  magazine      Magazine @relation(fields: [magazineId], references: [id])
+
+  @@unique([magazineId, versionNumber])
+  @@index([magazineId])
+}
+
+// 杂志自动保存表
+model MagazineAutoSave {
+  id          String   @id @default(uuid())
+  magazineId  String
+  data        Json     // 临时自动保存数据
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime // 24小时后过期
+
+  @@index([magazineId])
+}

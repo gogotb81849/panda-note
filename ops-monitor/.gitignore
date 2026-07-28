@@ -1,0 +1,28 @@
+# ============================================================
+# 熊猫笔记 · 运维监控面板 - Git 忽略列表
+# 所有敏感信息文件绝不能提交到版本库！
+# ============================================================
+
+# 环境变量（含 SSH 密码、数据库密码）
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# 日志与临时
+*.log
+ops_monitor.db
+audit_log.jsonl
+
+# 部署产物
+*.zip
+frontend-dist/
+backend-dist/
+.deploy-tmp/

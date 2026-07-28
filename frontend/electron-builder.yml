@@ -1,0 +1,35 @@
+appId: com.panda.notes
+productName: 熊猫笔记
+copyright: Copyright © 2024
+
+directories:
+  output: dist-electron
+  buildResources: public
+
+files:
+  - .output/**/*
+  - electron/**/*
+  - package.json
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: public/icons/icon-512x512.png
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  installerIcon: public/icons/icon-512x512.png
+  uninstallerIcon: public/icons/icon-512x512.png
+  installerHeaderIcon: public/icons/icon-512x512.png
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: 熊猫笔记
+  deleteAppDataOnUninstall: false
+
+extraResources:
+  - from: public/icons
+    to: icons

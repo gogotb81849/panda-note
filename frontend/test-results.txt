@@ -1,0 +1,959 @@
+﻿
+ RUN  v4.1.10 D:/PYwork/熊猫笔记/nav-log-system/frontend
+
+node.exe : stderr | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列管理 > 队列初始状态应该为空
+At C:\Users\陈建华\AppData\Roaming\TRAE SOLO CN\ModularData\ai-agent\vm\tools\node\npx.ps1:16 char:5
++     & "$basedir/node$exe"  "$basedir/node_modules/npm/bin/npx-cli.js" ...
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (stderr | tests/...管理 > 队列初始状态应该为空:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+[SyncQueue] 保存同步队列失败 Error: 数据库未初始化
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:302:16
+    at new Promise (<anonymous>)
+    at IndexedDBManager.clear (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:300:12)
+    at SyncQueueManager.saveQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:113:30)
+    at SyncQueueManager.clearQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:426:16)
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/tests/composables/useSyncQueue.test.ts:11:23
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:302:11
+    at wrapper (file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/run
+ner/dist/chunk-artifact.js:722:10)
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:2305:20
+    at new Promise (<anonymous>)
+
+stdout | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列管理 > 队列初始状态应该为空
+[SyncQueue] 同步队列已清空 
+
+stderr | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列管理 > 队列初始状态应该为空
+[SyncQueue] 保存同步队列失败 Error: 数据库未初始化
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:302:16
+    at new Promise (<anonymous>)
+    at IndexedDBManager.clear (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:300:12)
+    at SyncQueueManager.saveQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:113:30)
+    at SyncQueueManager.clearQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:426:16)
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/tests/composables/useSyncQueue.test.ts:17:23
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:302:11
+    at wrapper (file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/run
+ner/dist/chunk-artifact.js:750:10)
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:2305:20
+    at new Promise (<anonymous>)
+
+stdout | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列管理 > 队列初始状态应该为空
+[SyncQueue] 同步队列已清空 
+
+stderr | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列管理 > 应该能添加条目到队列
+[SyncQueue] 保存同步队列失败 Error: 数据库未初始化
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:302:16
+    at new Promise (<anonymous>)
+    at IndexedDBManager.clear (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:300:12)
+    at SyncQueueManager.saveQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:113:30)
+    at SyncQueueManager.clearQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:426:16)
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/tests/composables/useSyncQueue.test.ts:11:23
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:302:11
+    at wrapper (file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/run
+ner/dist/chunk-artifact.js:722:10)
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:2305:20
+    at new Promise (<anonymous>)
+
+stdout | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列管理 > 应该能添加条目到队列
+[SyncQueue] 同步队列已清空 
+
+stderr | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列管理 > 应该能添加条目到队列
+[SyncQueue] 保存同步队列失败 Error: 数据库未初始化
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:302:16
+    at new Promise (<anonymous>)
+    at IndexedDBManager.clear (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:300:12)
+    at SyncQueueManager.saveQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:113:30)
+    at SyncQueueManager.clearQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:426:16)
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/tests/composables/useSyncQueue.test.ts:17:23
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:302:11
+    at wrapper (file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/run
+ner/dist/chunk-artifact.js:750:10)
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:2305:20
+    at new Promise (<anonymous>)
+
+stdout | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列管理 > 应该能添加条目到队列
+[SyncQueue] 同步队列已清空 
+
+stderr | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列管理 > 应该能获取待处理条目
+[SyncQueue] 保存同步队列失败 Error: 数据库未初始化
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:302:16
+    at new Promise (<anonymous>)
+    at IndexedDBManager.clear (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:300:12)
+    at SyncQueueManager.saveQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:113:30)
+    at SyncQueueManager.clearQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:426:16)
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/tests/composables/useSyncQueue.test.ts:11:23
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:302:11
+    at wrapper (file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/run
+ner/dist/chunk-artifact.js:722:10)
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:2305:20
+    at new Promise (<anonymous>)
+
+stdout | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列管理 > 应该能获取待处理条目
+[SyncQueue] 同步队列已清空 
+
+stderr | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列管理 > 应该能获取待处理条目
+[SyncQueue] 保存同步队列失败 Error: 数据库未初始化
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:302:16
+    at new Promise (<anonymous>)
+    at IndexedDBManager.clear (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:300:12)
+    at SyncQueueManager.saveQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:113:30)
+    at SyncQueueManager.clearQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:426:16)
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/tests/composables/useSyncQueue.test.ts:17:23
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:302:11
+    at wrapper (file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/run
+ner/dist/chunk-artifact.js:750:10)
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:2305:20
+    at new Promise (<anonymous>)
+
+stdout | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列管理 > 应该能获取待处理条目
+[SyncQueue] 同步队列已清空 
+
+stderr | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列管理 > 应该能更新队列条目状态
+[SyncQueue] 保存同步队列失败 Error: 数据库未初始化
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:302:16
+    at new Promise (<anonymous>)
+    at IndexedDBManager.clear (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:300:12)
+    at SyncQueueManager.saveQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:113:30)
+    at SyncQueueManager.clearQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:426:16)
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/tests/composables/useSyncQueue.test.ts:11:23
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:302:11
+    at wrapper (file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/run
+ner/dist/chunk-artifact.js:722:10)
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:2305:20
+    at new Promise (<anonymous>)
+
+stdout | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列管理 > 应该能更新队列条目状态
+[SyncQueue] 同步队列已清空 
+
+stderr | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列管理 > 应该能更新队列条目状态
+[SyncQueue] 保存同步队列失败 Error: 数据库未初始化
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:302:16
+    at new Promise (<anonymous>)
+    at IndexedDBManager.clear (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:300:12)
+    at SyncQueueManager.saveQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:113:30)
+    at SyncQueueManager.clearQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:426:16)
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/tests/composables/useSyncQueue.test.ts:17:23
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:302:11
+    at wrapper (file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/run
+ner/dist/chunk-artifact.js:750:10)
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:2305:20
+    at new Promise (<anonymous>)
+
+stdout | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列管理 > 应该能更新队列条目状态
+[SyncQueue] 同步队列已清空 
+
+stderr | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列管理 > 应该能标记条目失败并记录错误
+[SyncQueue] 保存同步队列失败 Error: 数据库未初始化
+stdout | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列管理 > 应该能标记条目失败并记录错误
+[SyncQueue] 同步队列已清空 
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:302:16
+    at new Promise (<anonymous>)
+    at IndexedDBManager.clear (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:300:12)
+    at SyncQueueManager.saveQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:113:30)
+    at SyncQueueManager.clearQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:426:16)
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/tests/composables/useSyncQueue.test.ts:11:23
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:302:11
+    at wrapper (file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/run
+ner/dist/chunk-artifact.js:722:10)
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:2305:20
+    at new Promise (<anonymous>)
+
+stderr | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列管理 > 应该能标记条目失败并记录错误
+[SyncQueue] 保存同步队列失败 Error: 数据库未初始化
+
+stdout | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列管理 > 应该能标记条目失败并记录错误
+[SyncQueue] 同步队列已清空 
+
+stdout | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列管理 > 应该能移除队列条目
+[SyncQueue] 同步队列已清空 
+
+stdout | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列管理 > 应该能移除队列条目
+[SyncQueue] 同步队列已清空 
+
+stdout | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列管理 > 应该能清空队列
+[SyncQueue] 同步队列已清空 
+
+stdout | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列管理 > 应该能清空队列
+[SyncQueue] 同步队列已清空 
+
+stdout | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列统计 > 应该能获取待处理数量
+[SyncQueue] 同步队列已清空 
+
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:302:16
+    at new Promise (<anonymous>)
+    at IndexedDBManager.clear (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:300:12)
+    at SyncQueueManager.saveQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:113:30)
+    at SyncQueueManager.clearQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:426:16)
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/tests/composables/useSyncQueue.test.ts:17:23
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:302:11
+    at wrapper (file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/run
+ner/dist/chunk-artifact.js:750:10)
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:2305:20
+    at new Promise (<anonymous>)
+
+stderr | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列管理 > 应该能移除队列条目
+[SyncQueue] 保存同步队列失败 Error: 数据库未初始化
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:302:16
+    at new Promise (<anonymous>)
+    at IndexedDBManager.clear (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:300:12)
+    at SyncQueueManager.saveQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:113:30)
+    at SyncQueueManager.clearQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:426:16)
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/tests/composables/useSyncQueue.test.ts:11:23
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:302:11
+    at wrapper (file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/run
+ner/dist/chunk-artifact.js:722:10)
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:2305:20
+    at new Promise (<anonymous>)
+
+stderr | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列管理 > 应该能移除队列条目
+[SyncQueue] 保存同步队列失败 Error: 数据库未初始化
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:302:16
+    at new Promise (<anonymous>)
+    at IndexedDBManager.clear (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:300:12)
+    at SyncQueueManager.saveQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:113:30)
+    at SyncQueueManager.clearQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:426:16)
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/tests/composables/useSyncQueue.test.ts:17:23
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:302:11
+    at wrapper (file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/run
+ner/dist/chunk-artifact.js:750:10)
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:2305:20
+    at new Promise (<anonymous>)
+
+stderr | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列管理 > 应该能清空队列
+[SyncQueue] 保存同步队列失败 Error: 数据库未初始化
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:302:16
+    at new Promise (<anonymous>)
+    at IndexedDBManager.clear (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:300:12)
+    at SyncQueueManager.saveQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:113:30)
+    at SyncQueueManager.clearQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:426:16)
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/tests/composables/useSyncQueue.test.ts:11:23
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:302:11
+    at wrapper (file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/run
+ner/dist/chunk-artifact.js:722:10)
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:2305:20
+    at new Promise (<anonymous>)
+
+stderr | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列管理 > 应该能清空队列
+[SyncQueue] 保存同步队列失败 Error: 数据库未初始化
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:302:16
+    at new Promise (<anonymous>)
+    at IndexedDBManager.clear (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:300:12)
+    at SyncQueueManager.saveQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:113:30)
+    at SyncQueueManager.clearQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:426:16)
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/tests/composables/useSyncQueue.test.ts:17:23
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:302:11
+    at wrapper (file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/run
+ner/dist/chunk-artifact.js:750:10)
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:2305:20
+    at new Promise (<anonymous>)
+
+stderr | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列统计 > 应该能获取待处理数量
+[SyncQueue] 保存同步队列失败 Error: 数据库未初始化
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:302:16
+    at new Promise (<anonymous>)
+    at IndexedDBManager.clear (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:300:12)
+    at SyncQueueManager.saveQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:113:30)
+    at SyncQueueManager.clearQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:426:16)
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/tests/composables/useSyncQueue.test.ts:11:23
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:302:11
+    at wrapper (file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/run
+ner/dist/chunk-artifact.js:722:10)
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:2305:20
+    at new Promise (<anonymous>)
+
+stderr | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列统计 > 应该能获取待处理数量
+[SyncQueue] 保存同步队列失败 Error: 数据库未初始化
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:302:16
+    at new Promise (<anonymous>)
+    at IndexedDBManager.clear (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:300:12)
+    at SyncQueueManager.saveQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:113:30)
+    at SyncQueueManager.clearQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:426:16)
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/tests/composables/useSyncQueue.test.ts:100:23
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:302:11
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:1903:26
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:2326:20
+    at new Promise (<anonymous>)
+
+stderr | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列统计 > 应该能获取待处理数量
+[SyncQueue] 保存同步队列失败 Error: 数据库未初始化
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:302:16
+    at new Promise (<anonymous>)
+    at IndexedDBManager.clear (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:300:12)
+    at SyncQueueManager.saveQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:113:30)
+    at SyncQueueManager.clearQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:426:16)
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/tests/composables/useSyncQueue.test.ts:17:23
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:302:11
+    at wrapper (file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/run
+ner/dist/chunk-artifact.js:750:10)
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:2305:20
+    at new Promise (<anonymous>)
+
+stderr | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列统计 > 应该能获取失败数量
+[SyncQueue] 保存同步队列失败 Error: 数据库未初始化
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:302:16
+    at new Promise (<anonymous>)
+    at IndexedDBManager.clear (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:300:12)
+    at SyncQueueManager.saveQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:113:30)
+    at SyncQueueManager.clearQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:426:16)
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/tests/composables/useSyncQueue.test.ts:11:23
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:302:11
+    at wrapper (file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/run
+ner/dist/chunk-artifact.js:722:10)
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:2305:20
+    at new Promise (<anonymous>)
+
+stderr | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列统计 > 应该能获取失败数量
+[SyncQueue] 保存同步队列失败 Error: 数据库未初始化
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:302:16
+    at new Promise (<anonymous>)
+    at IndexedDBManager.clear (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:300:12)
+    at SyncQueueManager.saveQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:113:30)
+    at SyncQueueManager.clearQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:426:16)
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/tests/composables/useSyncQueue.test.ts:17:23
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:302:11
+    at wrapper (file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/run
+ner/dist/chunk-artifact.js:750:10)
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:2305:20
+    at new Promise (<anonymous>)
+
+stderr | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列统计 > isSyncing 初始值应该为 false
+[SyncQueue] 保存同步队列失败 Error: 数据库未初始化
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:302:16
+    at new Promise (<anonymous>)
+    at IndexedDBManager.clear (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:300:12)
+    at SyncQueueManager.saveQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:113:30)
+    at SyncQueueManager.clearQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:426:16)
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/tests/composables/useSyncQueue.test.ts:11:23
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:302:11
+    at wrapper (file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/run
+ner/dist/chunk-artifact.js:722:10)
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:2305:20
+    at new Promise (<anonymous>)
+
+stderr | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列统计 > isSyncing 初始值应该为 false
+[SyncQueue] 保存同步队列失败 Error: 数据库未初始化
+stdout | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列统计 > 应该能获取待处理数量
+[SyncQueue] 同步队列已清空 
+
+stdout | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列统计 > 应该能获取待处理数量
+[SyncQueue] 同步队列已清空 
+
+stdout | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列统计 > 应该能获取失败数量
+[SyncQueue] 同步队列已清空 
+
+stdout | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列统计 > 应该能获取失败数量
+[SyncQueue] 同步队列已清空 
+
+stdout | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列统计 > isSyncing 初始值应该为 false
+[SyncQueue] 同步队列已清空 
+
+stdout | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列统计 > isSyncing 初始值应该为 false
+[SyncQueue] 同步队列已清空 
+
+stdout | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 冲突策略设置 > 应该能设置冲突策略
+[SyncQueue] 同步队列已清空 
+
+stdout | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 冲突策略设置 > 应该能设置冲突策略
+[SyncQueue] 冲突处理策略已设置为: client-first 
+[SyncQueue] 冲突处理策略已设置为: server-first 
+[SyncQueue] 冲突处理策略已设置为: manual 
+
+stdout | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 冲突策略设置 > 应该能设置冲突策略
+[SyncQueue] 同步队列已清空 
+
+stdout | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 冲突策略设置 > 默认冲突策略应该是 server-first
+[SyncQueue] 同步队列已清空 
+
+stdout | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 冲突策略设置 > 默认冲突策略应该是 server-first
+[SyncQueue] 同步队列已清空 
+
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:302:16
+    at new Promise (<anonymous>)
+    at IndexedDBManager.clear (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:300:12)
+    at SyncQueueManager.saveQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:113:30)
+    at SyncQueueManager.clearQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:426:16)
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/tests/composables/useSyncQueue.test.ts:17:23
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:302:11
+    at wrapper (file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/run
+ner/dist/chunk-artifact.js:750:10)
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:2305:20
+    at new Promise (<anonymous>)
+
+stderr | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 冲突策略设置 > 应该能设置冲突策略
+[SyncQueue] 保存同步队列失败 Error: 数据库未初始化
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:302:16
+    at new Promise (<anonymous>)
+    at IndexedDBManager.clear (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:300:12)
+    at SyncQueueManager.saveQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:113:30)
+    at SyncQueueManager.clearQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:426:16)
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/tests/composables/useSyncQueue.test.ts:11:23
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:302:11
+    at wrapper (file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/run
+ner/dist/chunk-artifact.js:722:10)
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:2305:20
+    at new Promise (<anonymous>)
+
+stderr | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 冲突策略设置 > 应该能设置冲突策略
+[SyncQueue] 保存同步队列失败 Error: 数据库未初始化
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:302:16
+    at new Promise (<anonymous>)
+    at IndexedDBManager.clear (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:300:12)
+    at SyncQueueManager.saveQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:113:30)
+    at SyncQueueManager.clearQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:426:16)
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/tests/composables/useSyncQueue.test.ts:17:23
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:302:11
+    at wrapper (file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/run
+ner/dist/chunk-artifact.js:750:10)
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:2305:20
+    at new Promise (<anonymous>)
+
+stderr | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 冲突策略设置 > 默认冲突策略应该是 server-first
+[SyncQueue] 保存同步队列失败 Error: 数据库未初始化
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:302:16
+    at new Promise (<anonymous>)
+    at IndexedDBManager.clear (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:300:12)
+    at SyncQueueManager.saveQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:113:30)
+    at SyncQueueManager.clearQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:426:16)
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/tests/composables/useSyncQueue.test.ts:11:23
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:302:11
+    at wrapper (file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/run
+ner/dist/chunk-artifact.js:722:10)
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:2305:20
+    at new Promise (<anonymous>)
+
+stderr | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 冲突策略设置 > 默认冲突策略应该是 server-first
+[SyncQueue] 保存同步队列失败 Error: 数据库未初始化
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:302:16
+    at new Promise (<anonymous>)
+    at IndexedDBManager.clear (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:300:12)
+    at SyncQueueManager.saveQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:113:30)
+    at SyncQueueManager.clearQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:426:16)
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/tests/composables/useSyncQueue.test.ts:17:23
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:302:11
+    at wrapper (file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/run
+ner/dist/chunk-artifact.js:750:10)
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:2305:20
+    at new Promise (<anonymous>)
+
+stderr | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 优先级排序 > 高优先级条目应该排在前面
+[SyncQueue] 保存同步队列失败 Error: 数据库未初始化
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:302:16
+    at new Promise (<anonymous>)
+    at IndexedDBManager.clear (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:300:12)
+    at SyncQueueManager.saveQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:113:30)
+    at SyncQueueManager.clearQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:426:16)
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/tests/composables/useSyncQueue.test.ts:11:23
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:302:11
+    at wrapper (file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/run
+ner/dist/chunk-artifact.js:722:10)
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:2305:20
+    at new Promise (<anonymous>)
+
+stderr | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 优先级排序 > 高优先级条目应该排在前面
+[SyncQueue] 保存同步队列失败 Error: 数据库未初始化
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:302:16
+    at new Promise (<anonymous>)
+    at IndexedDBManager.clear (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:300:12)
+    at SyncQueueManager.saveQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:113:30)
+    at SyncQueueManager.clearQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:426:16)
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/tests/composables/useSyncQueue.test.ts:17:23
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:302:11
+    at wrapper (file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/run
+ner/dist/chunk-artifact.js:750:10)
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:2305:20
+    at new Promise (<anonymous>)
+
+stderr | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 重试机制 > 失败条目应该有最大重试次数
+[SyncQueue] 保存同步队列失败 Error: 数据库未初始化
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:302:16
+    at new Promise (<anonymous>)
+    at IndexedDBManager.clear (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:300:12)
+stdout | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 优先级排序 > 高优先级条目应该排在前面
+[SyncQueue] 同步队列已清空 
+
+stdout | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 优先级排序 > 高优先级条目应该排在前面
+[SyncQueue] 同步队列已清空 
+
+stdout | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 重试机制 > 失败条目应该有最大重试次数
+[SyncQueue] 同步队列已清空 
+
+stdout | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 重试机制 > 失败条目应该有最大重试次数
+[SyncQueue] 同步队列已清空 
+
+    at SyncQueueManager.saveQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:113:30)
+    at SyncQueueManager.clearQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:426:16)
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/tests/composables/useSyncQueue.test.ts:11:23
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:302:11
+    at wrapper (file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/run
+ner/dist/chunk-artifact.js:722:10)
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:2305:20
+    at new Promise (<anonymous>)
+
+stderr | tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 重试机制 > 失败条目应该有最大重试次数
+[SyncQueue] 保存同步队列失败 Error: 数据库未初始化
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:302:16
+    at new Promise (<anonymous>)
+    at IndexedDBManager.clear (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useIndexedDB.ts:300:12)
+    at SyncQueueManager.saveQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:113:30)
+    at SyncQueueManager.clearQueue (D:/PYwork/熊猫笔记/nav-log-system/frontend/composables/useSyncQueue.ts:426:16)
+    at D:/PYwork/熊猫笔记/nav-log-system/frontend/tests/composables/useSyncQueue.test.ts:17:23
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:302:11
+    at wrapper (file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/run
+ner/dist/chunk-artifact.js:750:10)
+    at file:///D:/PYwork/%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/@vitest/runner/dist/
+chunk-artifact.js:2305:20
+    at new Promise (<anonymous>)
+
+ ❯ tests/composables/useSyncQueue.test.ts (14 tests | 11 failed) 53ms
+       ✓ 队列初始状态应该为空 15ms
+       × 应该能添加条目到队列 4ms
+       × 应该能获取待处理条目 3ms
+       × 应该能更新队列条目状态 3ms
+       × 应该能标记条目失败并记录错误 3ms
+       × 应该能移除队列条目 2ms
+       × 应该能清空队列 2ms
+       × 应该能获取待处理数量 3ms
+       × 应该能获取失败数量 2ms
+       ✓ isSyncing 初始值应该为 false 2ms
+       ✓ 应该能设置冲突策略 3ms
+       × 默认冲突策略应该是 server-first 6ms
+       × 高优先级条目应该排在前面 2ms
+       × 失败条目应该有最大重试次数 2ms
+ ❯ tests/composables/useApi.test.ts (6 tests | 5 failed) 17ms
+       × 应该能正常创建useApi实例 10ms
+       × 应该能正确解析列表URL的storeName 1ms
+       × 应该能正确解析详情URL的storeName 1ms
+       × navigator.onLine为false时应该识别为离线 1ms
+       ✓ localStorage可用时应该能保存和读取缓存元数据 1ms
+       × localStorage写入失败不应影响主逻辑 1ms
+ ❯ tests/composables/useIndexedDB.test.ts (27 tests | 27 failed) 280053ms
+       × 应该成功初始化数据库 20010ms
+       × 应该返回当前版本号 10002ms
+       × 应该能获取迁移历史 10002ms
+       × 应该能保存和获取单条记录 10003ms
+       × 应该自动添加 _checksum 字段 10001ms
+       × 应该自动添加 updatedAt 字段 10002ms
+       × 获取不存在的记录应该返回 null 10001ms
+       × 应该能删除记录 10001ms
+       × 应该能清空整个表 10001ms
+       × 应该能获取记录数量 10002ms
+       × 应该能批量保存多条记录 10002ms
+       × 批量保存的记录应该都有 checksum 10001ms
+       × 相同对象应该生成相同的校验和 10001ms
+       × 不同对象应该生成不同的校验和 10002ms
+       × 对象属性顺序不同应该生成相同的校验和 10001ms
+       × 未损坏的数据应该通过完整性校验 10001ms
+       × 应该能检测到损坏的数据 10001ms
+       × 应该能校验所有表的完整性 10002ms
+       × rebuildChecksum 应该能修复损坏的校验和 10002ms
+       × 应该能获取默认同步状态 10001ms
+       × 应该能设置同步状态 10001ms
+       × 新记录应该从版本1开始 10001ms
+       × 更新记录应该递增版本号 10001ms
+       × 应该能保存和获取冲突记录 10004ms
+       × 应该能解决冲突 - 选择本地版本 10002ms
+       × 应该能解决冲突 - 选择服务器版本 10001ms
+       × 应该能关闭数据库 10001ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 43 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/composables/useApi.test.ts > useApi (API拦截与缓存) > 初始化 > 应该能正常创建useApi实例
+ReferenceError: useRuntimeConfig is not defined
+ ❯ useApi composables/useApi.ts:313:18
+    311|
+    312| export const useApi = () => {
+    313|   const config = useRuntimeConfig();
+       |                  ^
+    314|   const authStore = useAuthStore();
+    315|
+ ❯ tests/composables/useApi.test.ts:11:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/46]⎯
+
+ FAIL  tests/composables/useApi.test.ts > useApi (API拦截与缓存) > URL解析逻辑 > 应该能正确解析列表URL的storeName
+ReferenceError: useRuntimeConfig is not defined
+ ❯ useApi composables/useApi.ts:313:18
+    311|
+    312| export const useApi = () => {
+    313|   const config = useRuntimeConfig();
+       |                  ^
+    314|   const authStore = useAuthStore();
+    315|
+ ❯ tests/composables/useApi.test.ts:19:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/46]⎯
+
+ FAIL  tests/composables/useApi.test.ts > useApi (API拦截与缓存) > URL解析逻辑 > 应该能正确解析详情URL的storeName
+ReferenceError: useRuntimeConfig is not defined
+ ❯ useApi composables/useApi.ts:313:18
+    311|
+    312| export const useApi = () => {
+    313|   const config = useRuntimeConfig();
+       |                  ^
+    314|   const authStore = useAuthStore();
+    315|
+ ❯ tests/composables/useApi.test.ts:37:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/46]⎯
+
+ FAIL  tests/composables/useApi.test.ts > useApi (API拦截与缓存) > 离线状态检测 > navigator.onLine为false时应该识别为离线
+ReferenceError: useRuntimeConfig is not defined
+ ❯ useApi composables/useApi.ts:313:18
+    311|
+    312| export const useApi = () => {
+    313|   const config = useRuntimeConfig();
+       |                  ^
+    314|   const authStore = useAuthStore();
+    315|
+ ❯ tests/composables/useApi.test.ts:61:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/46]⎯
+
+ FAIL  tests/composables/useApi.test.ts > useApi (API拦截与缓存) > 缓存元数据持久化 > localStorage写入失败不应影响主逻辑
+ReferenceError: useRuntimeConfig is not defined
+ ❯ useApi composables/useApi.ts:313:18
+    311|
+    312| export const useApi = () => {
+    313|   const config = useRuntimeConfig();
+       |                  ^
+    314|   const authStore = useAuthStore();
+    315|
+ ❯ tests/composables/useApi.test.ts:95:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/46]⎯
+
+ FAIL  tests/composables/useIndexedDB.test.ts > IndexedDB Manager > 初始化 > 应该成功初始化数据库
+Error: Hook timed out in 10000ms.
+If this is a long-running hook, pass a timeout value as the last argument or configure it globally with "hookTimeout".
+ ❯ tests/composables/useIndexedDB.test.ts:7:3
+      5|
+      6| describe('IndexedDB Manager', () => {
+      7|   beforeEach(async () => {
+       |   ^
+      8|     indexedDBManager['db'] = null;
+      9|     await indexedDBManager.init();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/46]⎯
+
+ FAIL  tests/composables/useIndexedDB.test.ts > IndexedDB Manager > 初始化 > 应该成功初始化数据库
+ FAIL  tests/composables/useIndexedDB.test.ts > IndexedDB Manager > 初始化 > 应该返回当前版本号
+ FAIL  tests/composables/useIndexedDB.test.ts > IndexedDB Manager > 初始化 > 应该能获取迁移历史
+ FAIL  tests/composables/useIndexedDB.test.ts > IndexedDB Manager > 基本操作 - CRUD > 应该能保存和获取单条记录
+ FAIL  tests/composables/useIndexedDB.test.ts > IndexedDB Manager > 基本操作 - CRUD > 应该自动添加 _checksum 字段
+ FAIL  tests/composables/useIndexedDB.test.ts > IndexedDB Manager > 基本操作 - CRUD > 应该自动添加 updatedAt 字段
+ FAIL  tests/composables/useIndexedDB.test.ts > IndexedDB Manager > 基本操作 - CRUD > 获取不存在的记录应该返回 null
+ FAIL  tests/composables/useIndexedDB.test.ts > IndexedDB Manager > 基本操作 - CRUD > 应该能删除记录
+ FAIL  tests/composables/useIndexedDB.test.ts > IndexedDB Manager > 基本操作 - CRUD > 应该能清空整个表
+ FAIL  tests/composables/useIndexedDB.test.ts > IndexedDB Manager > 基本操作 - CRUD > 应该能获取记录数量
+ FAIL  tests/composables/useIndexedDB.test.ts > IndexedDB Manager > 批量操作 > 应该能批量保存多条记录
+ FAIL  tests/composables/useIndexedDB.test.ts > IndexedDB Manager > 批量操作 > 批量保存的记录应该都有 checksum
+ FAIL  tests/composables/useIndexedDB.test.ts > IndexedDB Manager > 校验和 (Checksum) > 相同对象应该生成相同的校验和
+ FAIL  tests/composables/useIndexedDB.test.ts > IndexedDB Manager > 校验和 (Checksum) > 不同对象应该生成不同的校验和
+ FAIL  tests/composables/useIndexedDB.test.ts > IndexedDB Manager > 校验和 (Checksum) > 对象属性顺序不同应该生成相同的校验和
+ FAIL  tests/composables/useIndexedDB.test.ts > IndexedDB Manager > 数据完整性校验 > 未损坏的数据应该通过完整性校验
+ FAIL  tests/composables/useIndexedDB.test.ts > IndexedDB Manager > 数据完整性校验 > 应该能检测到损坏的数据
+ FAIL  tests/composables/useIndexedDB.test.ts > IndexedDB Manager > 数据完整性校验 > 应该能校验所有表的完整性
+ FAIL  tests/composables/useIndexedDB.test.ts > IndexedDB Manager > 数据完整性校验 > rebuildChecksum 应该能修复损坏的校验和
+ FAIL  tests/composables/useIndexedDB.test.ts > IndexedDB Manager > 同步状态管理 > 应该能获取默认同步状态
+ FAIL  tests/composables/useIndexedDB.test.ts > IndexedDB Manager > 同步状态管理 > 应该能设置同步状态
+ FAIL  tests/composables/useIndexedDB.test.ts > IndexedDB Manager > 带版本控制的保存 > 新记录应该从版本1开始
+ FAIL  tests/composables/useIndexedDB.test.ts > IndexedDB Manager > 带版本控制的保存 > 更新记录应该递增版本号
+ FAIL  tests/composables/useIndexedDB.test.ts > IndexedDB Manager > 冲突管理 > 应该能保存和获取冲突记录
+ FAIL  tests/composables/useIndexedDB.test.ts > IndexedDB Manager > 冲突管理 > 应该能解决冲突 - 选择本地版本
+ FAIL  tests/composables/useIndexedDB.test.ts > IndexedDB Manager > 冲突管理 > 应该能解决冲突 - 选择服务器版本
+ FAIL  tests/composables/useIndexedDB.test.ts > IndexedDB Manager > 数据库关闭 > 应该能关闭数据库
+Error: Hook timed out in 10000ms.
+If this is a long-running hook, pass a timeout value as the last argument or configure it globally with "hookTimeout".
+ ❯ tests/vitest.setup.ts:43:1
+     41|
+     42| // === 4. 清理 IndexedDB 测试数据库 ===
+     43| afterEach(async () => {
+       | ^
+     44|   try {
+     45|     const dbs = await (globalThis as any).indexedDB.databases();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/46]⎯
+
+ FAIL  tests/composables/useIndexedDB.test.ts > IndexedDB Manager > 初始化 > 应该能获取迁移历史
+NotFoundError: No objectStore named migrations in this database
+ ❯ FDBDatabase.transaction ../../../%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/fake-inde
+xeddb/build/esm/FDBDatabase.js:139:15
+ ❯ composables/useIndexedDB.ts:178:35
+    176|       }
+    177|
+    178|       const transaction = this.db.transaction([storeName], 'readonly');
+       |                                   ^
+    179|       const store = transaction.objectStore(storeName);
+    180|       const request = store.getAll();
+ ❯ IndexedDBManager.getAll composables/useIndexedDB.ts:172:12
+ ❯ IndexedDBManager.getMigrationHistory composables/useIndexedDB.ts:164:17
+ ❯ tests/composables/useIndexedDB.test.ts:31:46
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/46]⎯
+
+ FAIL  tests/composables/useIndexedDB.test.ts > IndexedDB Manager > 冲突管理 > 应该能保存和获取冲突记录
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/composables/useIndexedDB.test.ts:310:38
+    308|         _serverVersion: 0,
+    309|       });
+    310|       expect(conflictResult.success).toBe(false);
+       |                                      ^
+    311|       expect(conflictResult.conflict).toBe(true);
+    312|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/46]⎯
+
+ FAIL  tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列管理 > 应该能添加条目到队列
+TypeError: syncQueue.addItem is not a function
+ ❯ tests/composables/useSyncQueue.test.ts:28:36
+     26|
+     27|     it('应该能添加条目到队列', async () => {
+     28|       const item = await syncQueue.addItem('diaries', 'create', {
+       |                                    ^
+     29|         id: 'test-sync-1',
+     30|         title: 'Test Diary',
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/46]⎯
+
+ FAIL  tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列管理 > 应该能获取待处理条目
+TypeError: syncQueue.addItem is not a function
+ ❯ tests/composables/useSyncQueue.test.ts:45:23
+     43|
+     44|     it('应该能获取待处理条目', async () => {
+     45|       await syncQueue.addItem('diaries', 'create', { id: 'pending-1', …
+       |                       ^
+     46|       await syncQueue.addItem('diaries', 'create', { id: 'pending-2', …
+     47|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/46]⎯
+
+ FAIL  tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列管理 > 应该能更新队列条目状态
+TypeError: syncQueue.addItem is not a function
+ ❯ tests/composables/useSyncQueue.test.ts:54:36
+     52|
+     53|     it('应该能更新队列条目状态', async () => {
+     54|       const item = await syncQueue.addItem('diaries', 'create', { id: …
+       |                                    ^
+     55|
+     56|       await syncQueue.updateItemStatus(item.id, 'processing');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/46]⎯
+
+ FAIL  tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列管理 > 应该能标记条目失败并记录错误
+TypeError: syncQueue.addItem is not a function
+ ❯ tests/composables/useSyncQueue.test.ts:63:36
+     61|
+     62|     it('应该能标记条目失败并记录错误', async () => {
+     63|       const item = await syncQueue.addItem('diaries', 'create', { id: …
+       |                                    ^
+     64|
+     65|       const testError = new Error('Network error');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/46]⎯
+
+ FAIL  tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列管理 > 应该能移除队列条目
+TypeError: syncQueue.addItem is not a function
+ ❯ tests/composables/useSyncQueue.test.ts:76:36
+     74|
+     75|     it('应该能移除队列条目', async () => {
+     76|       const item = await syncQueue.addItem('diaries', 'create', { id: …
+       |                                    ^
+     77|       const beforeCount = syncQueue.queue.value.length;
+     78|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/46]⎯
+
+ FAIL  tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列管理 > 应该能清空队列
+TypeError: syncQueue.addItem is not a function
+ ❯ tests/composables/useSyncQueue.test.ts:88:23
+     86|
+     87|     it('应该能清空队列', async () => {
+     88|       await syncQueue.addItem('diaries', 'create', { id: 'clear-1', na…
+       |                       ^
+     89|       await syncQueue.addItem('diaries', 'create', { id: 'clear-2', na…
+     90|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/46]⎯
+
+ FAIL  tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列统计 > 应该能获取待处理数量
+TypeError: syncQueue.addItem is not a function
+ ❯ tests/composables/useSyncQueue.test.ts:101:23
+     99|     it('应该能获取待处理数量', async () => {
+    100|       await syncQueue.clearQueue();
+    101|       await syncQueue.addItem('diaries', 'create', { id: 'stat-1', nam…
+       |                       ^
+    102|       await syncQueue.addItem('diaries', 'create', { id: 'stat-2', nam…
+    103|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/46]⎯
+
+ FAIL  tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 队列统计 > 应该能获取失败数量
+TypeError: syncQueue.addItem is not a function
+ ❯ tests/composables/useSyncQueue.test.ts:108:36
+    106|
+    107|     it('应该能获取失败数量', async () => {
+    108|       const item = await syncQueue.addItem('diaries', 'create', { id: …
+       |                                    ^
+    109|       await syncQueue.markItemFailed(item.id, new Error('Test error'));
+    110|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/46]⎯
+
+ FAIL  tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 冲突策略设置 > 默认冲突策略应该是 server-first
+AssertionError: expected 'manual' to be 'server-first' // Object.is equality
+
+Expected: "server-first"
+Received: "manual"
+
+ ❯ tests/composables/useSyncQueue.test.ts:133:43
+    131|     it('默认冲突策略应该是 server-first', () => {
+    132|       const freshQueue = useSyncQueue();
+    133|       expect(freshQueue.conflictStrategy).toBe('server-first');
+       |                                           ^
+    134|     });
+    135|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/46]⎯
+
+ FAIL  tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 优先级排序 > 高优先级条目应该排在前面
+TypeError: syncQueue.addItem is not a function
+ ❯ tests/composables/useSyncQueue.test.ts:139:23
+    137|   describe('优先级排序', () => {
+    138|     it('高优先级条目应该排在前面', async () => {
+    139|       await syncQueue.addItem('diaries', 'create', { id: 'low-prio', n…
+       |                       ^
+    140|       await syncQueue.addItem('diaries', 'create', { id: 'high-prio', …
+    141|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/46]⎯
+
+ FAIL  tests/composables/useSyncQueue.test.ts > Sync Queue (同步队列) > 重试机制 > 失败条目应该有最大重试次数
+TypeError: syncQueue.addItem is not a function
+ ❯ tests/composables/useSyncQueue.test.ts:152:36
+    150|   describe('重试机制', () => {
+    151|     it('失败条目应该有最大重试次数', async () => {
+    152|       const item = await syncQueue.addItem('diaries', 'create', { id: …
+       |                                    ^
+    153|
+    154|       for (let i = 0; i < 5; i++) {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/46]⎯
+
+⎯⎯⎯⎯⎯⎯ Unhandled Errors ⎯⎯⎯⎯⎯⎯
+
+Vitest caught 1 unhandled error during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.
+
+⎯⎯⎯⎯⎯ Uncaught Exception ⎯⎯⎯⎯⎯
+InvalidStateError: An operation was called on an object on which it is not allowed or at a time when it is not allowed.
+ Also occurs if a request is made on a source object that has been deleted or removed. Use TransactionInactiveError or 
+ReadOnlyError when possible, as they are more specific variations of InvalidStateError.
+ ❯ FDBDatabase.transaction ../../../%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/fake-inde
+xeddb/build/esm/FDBDatabase.js:126:13
+ ❯ composables/useIndexedDB.ts:73:32
+     71|           businessStores.forEach(storeName => {
+     72|             if (db.objectStoreNames.contains(storeName)) {
+     73|               const store = db.transaction(storeName, 'readwrite').obj…
+       |                                ^
+     74|               if (!store.indexNames.contains('_version')) {
+     75|                 store.createIndex('_version', '_version', { unique: fa…
+ ❯ FDBOpenDBRequest.request.onupgradeneeded composables/useIndexedDB.ts:71:26
+ ❯ invokeEventListeners ../../../%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/fake-indexed
+db/build/esm/lib/FakeEventTarget.js:43:25
+ ❯ FDBOpenDBRequest.dispatchEvent ../../../%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/fa
+ke-indexeddb/build/esm/lib/FakeEventTarget.js:84:7
+ ❯ waitForOthersClosed ../../../%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/fake-indexedd
+b/build/esm/FDBFactory.js:112:13
+ ❯ runVersionchangeTransaction ../../../%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/fake-
+indexeddb/build/esm/FDBFactory.js:138:3
+ ❯ openDatabase ../../../%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/fake-indexeddb/build
+/esm/FDBFactory.js:156:5
+ ❯ Immediate.<anonymous> ../../../%E7%86%8A%E7%8C%AB%E7%AC%94%E8%AE%B0/nav-log-system/frontend/node_modules/fake-indexe
+ddb/build/esm/FDBFactory.js:216:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 11, INDEX_SIZE_ERR: 1, DOMSTRING_SIZE_ERR: 2, HIERARCHY_REQUEST_ERR: 3, WRONG_DOCUMENT_ERR: 4
+, INVALID_CHARACTER_ERR: 5, NO_DATA_ALLOWED_ERR: 6, NO_MODIFICATION_ALLOWED_ERR: 7, NOT_FOUND_ERR: 8, NOT_SUPPORTED_ERR
+: 9, INUSE_ATTRIBUTE_ERR: 10, INVALID_STATE_ERR: 11, SYNTAX_ERR: 12, INVALID_MODIFICATION_ERR: 13, NAMESPACE_ERR: 14, I
+NVALID_ACCESS_ERR: 15, VALIDATION_ERR: 16, TYPE_MISMATCH_ERR: 17, SECURITY_ERR: 18, NETWORK_ERR: 19, ABORT_ERR: 20, URL
+_MISMATCH_ERR: 21, QUOTA_EXCEEDED_ERR: 22, TIMEOUT_ERR: 23, INVALID_NODE_TYPE_ERR: 24, DATA_CLONE_ERR: 25 }
+This error originated in "tests/composables/useIndexedDB.test.ts" test file. It doesn't mean the error was thrown insid
+e the file itself, but while it was running.
+The latest test that might've caused the error is "应该成功初始化数据库". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+
+
+ Test Files  3 failed (3)
+      Tests  43 failed | 4 passed (47)
+     Errors  1 error
+   Start at  15:24:21
+   Duration  285.22s (transform 431ms, setup 581ms, import 2.54s, tests 280.12s, environment 13.20s)
+

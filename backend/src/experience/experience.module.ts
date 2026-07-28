@@ -1,0 +1,13 @@
+import { Module } from '@nestjs/common';
+import { ExperienceController } from './experience.controller';
+import { ExperienceService } from './experience.service';
+import { PrismaModule } from '../prisma/prisma.module';
+import { OperationLogModule } from '../operation-log/operation-log.module';
+
+@Module({
+  imports: [PrismaModule, OperationLogModule],
+  controllers: [ExperienceController],
+  providers: [ExperienceService],
+  exports: [ExperienceService],
+})
+export class ExperienceModule {}

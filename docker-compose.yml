@@ -1,0 +1,116 @@
+# ============================================================
+# 熊猫笔记 - Docker Compose 编排
+# ============================================================
+
+version: "3.9"
+
+services:
+  # -------------------- PostgreSQL 数据库 --------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: panda-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-panda}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-panda123}
+      POSTGRES_DB: ${DB_NAME:-nav_log}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - panda-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-panda} -d ${DB_NAME:-nav_log}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # -------------------- 后端 NestJS 服务 --------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: panda-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql://${DB_USER:-panda}:${DB_PASSWORD:-panda123}@postgres:5432/${DB_NAME:-nav_log}
+      PORT: 3000
+    ports:
+      - "3002:3000"
+    volumes:
+      - backend_uploads:/app/uploads
+    networks:
+      - panda-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+  # -------------------- 前端 Nuxt 服务 --------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: panda-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    env_file:
+      - ./frontend/.env
+    environment:
+      NUXT_PUBLIC_API_BASE: http://backend:3000/api
+    ports:
+      - "3000:3000"
+    networks:
+      - panda-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # -------------------- 运维监控面板 --------------------
+  ops-monitor:
+    build:
+      context: ./ops-monitor
+      dockerfile: Dockerfile
+    container_name: panda-ops-monitor
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - frontend
+    ports:
+      - "8899:8899"
+    volumes:
+      - ops_monitor_data:/app/data
+    networks:
+      - panda-network
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8899/health')\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+networks:
+  panda-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  backend_uploads:
+    driver: local
+  ops_monitor_data:
+    driver: local

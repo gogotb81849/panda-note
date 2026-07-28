@@ -1,0 +1,2 @@
+-- This is a manual migration for full-text search
+-- Run with: npx prisma migrate deploy
