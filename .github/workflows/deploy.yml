@@ -27,39 +27,57 @@ jobs:
   build:
     name: 构建前后端
     runs-on: ubuntu-latest
+    env:
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
 
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: 设置 Node.js 22
+      - name: 设置 Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
       # -------- 后端 --------
+      - name: 安装 canvas 系统依赖 (Linux)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev pkg-config
+
       - name: 安装后端依赖
         working-directory: backend
         run: npm install --no-audit --no-fund
 
-      - name: 构建后端 (NestJS → dist)
+      - name: 构建后端 (NestJS -> dist)
         working-directory: backend
         run: |
-          # tsc 类型错误不阻断构建（JS 仍会产出），部署后运行时可正常启动
-          npm run build || (echo "⚠️ tsc reported type errors but JS files were generated" && ls dist/main.js && exit 0)
+          # tsc 类型错误不阻断构建（JS 仍会产出）
+          set +e
+          npm run build
+          BUILD_EXIT=$?
+          set -e
+          if [ $BUILD_EXIT -ne 0 ]; then
+            echo "::warning::tsc reported type errors (exit=$BUILD_EXIT), but JS files were emitted"
+            if [ ! -f dist/main.js ]; then
+              echo "::error::dist/main.js not found after build"
+              exit 1
+            fi
+          fi
+          echo "✅ Backend build OK, dist/main.js exists"
+          ls -la dist/main.js
 
       # -------- 前端 --------
       - name: 安装前端依赖
         working-directory: frontend
         run: npm install --no-audit --no-fund
 
-      - name: 构建前端 (Nuxt → .output)
+      - name: 构建前端 (Nuxt -> .output)
         working-directory: frontend
         run: npm run build
 
       # -------- 打包产物 --------
       - name: 打包构建产物
         run: |
+          rm -rf dist-artifacts
           mkdir -p dist-artifacts/backend-dist
           mkdir -p dist-artifacts/prisma
           cp -r backend/dist/* dist-artifacts/backend-dist/
@@ -67,6 +85,7 @@ jobs:
           if [ -f backend/package-lock.json ]; then cp backend/package-lock.json dist-artifacts/backend-package-lock.json; fi
           cp -r backend/prisma/* dist-artifacts/prisma/
           cp -r frontend/.output dist-artifacts/frontend-output
+          echo "=== 打包文件列表 ==="
           ls -la dist-artifacts/
           tar czf dist-artifacts.tar.gz dist-artifacts
           ls -lh dist-artifacts.tar.gz
@@ -111,11 +130,11 @@ jobs:
 
       - name: 部署后端文件 - rsync
         run: |
-          SSH="ssh -p ${{ secrets.SSH_PORT }}"
           TARGET="${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_PATH }}"
 
           # 确保目录存在
-          $SSH ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} "mkdir -p ${{ secrets.DEPLOY_PATH }}/backend/dist ${{ secrets.DEPLOY_PATH }}/backend/prisma ${{ secrets.DEPLOY_PATH }}/frontend/.output"
+          ssh -p ${{ secrets.SSH_PORT }} ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            "mkdir -p ${{ secrets.DEPLOY_PATH }}/backend/dist ${{ secrets.DEPLOY_PATH }}/backend/prisma ${{ secrets.DEPLOY_PATH }}/frontend/.output"
 
           # 同步后端 dist（删除旧文件）
           rsync -avz --delete -e "ssh -p ${{ secrets.SSH_PORT }}" \
@@ -168,13 +187,7 @@ jobs:
             echo ""
             echo ">>> [1/4] 进入后端目录并安装生产依赖..."
             cd "$DEPLOY_DIR/backend"
-
-            # 优先用 npm ci（有 lock 文件时更快更稳），否则 fallback 到 npm install
-            if [ -f package-lock.json ]; then
-              npm install --omit=dev --no-audit --no-fund
-            else
-              npm install --omit=dev --no-audit --no-fund
-            fi
+            npm install --omit=dev --no-audit --no-fund
 
             echo ""
             echo ">>> [2/4] 同步数据库 schema (prisma db push)..."
@@ -197,7 +210,7 @@ jobs:
 
             echo ""
             echo "=========================================="
-            echo " ✅ 部署命令执行完毕！等待健康检查..."
+            echo " 部署命令执行完毕！等待健康检查..."
             echo "=========================================="
 
       - name: 健康检查
