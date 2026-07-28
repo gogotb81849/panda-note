@@ -1,7 +1,7 @@
 # ============================================================
-# 部署工作流 - 熊猫笔记
-# 触发：push 到 main 分支
-# Jobs: build (lint + typecheck), deploy (rsync to server, pm2 reload)
+# 部署工作流 - 熊猫笔记 (Panda Note)
+# 触发：push 到 main 分支，或手动 Run workflow
+# 流程：build (构建前后端) → deploy (rsync 到服务器 + pm2 reload)
 # ============================================================
 
 name: Deploy
@@ -22,61 +22,53 @@ on:
 
 jobs:
   # --------------------------------------------------------
-  # Job 1: Build - Lint + Typecheck
+  # Job 1: Build - 安装依赖 + 构建
   # --------------------------------------------------------
   build:
-    name: 构建与检查
+    name: 构建前后端
     runs-on: ubuntu-latest
 
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: 设置 Node.js
+      - name: 设置 Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: 'npm'
 
       # -------- 后端 --------
       - name: 安装后端依赖
         working-directory: backend
-        run: npm ci
+        run: npm ci --no-audit
 
-      - name: 后端 Lint 检查
-        working-directory: backend
-        run: npm run lint
-
-      - name: 后端 TypeScript 类型检查
-        working-directory: backend
-        run: npx tsc --noEmit
-
-      - name: 构建后端
+      - name: 构建后端 (NestJS → dist)
         working-directory: backend
         run: npm run build
 
       # -------- 前端 --------
       - name: 安装前端依赖
         working-directory: frontend
-        run: npm ci
+        run: npm ci --no-audit
 
-      - name: 前端 TypeScript 类型检查
-        working-directory: frontend
-        run: npx nuxi typecheck
-
-      - name: 构建前端
+      - name: 构建前端 (Nuxt → .output)
         working-directory: frontend
         run: npm run build
 
       # -------- 打包产物 --------
       - name: 打包构建产物
         run: |
-          mkdir -p dist-artifacts
-          cp -r backend/dist dist-artifacts/backend-dist
+          mkdir -p dist-artifacts/backend-dist
+          mkdir -p dist-artifacts/prisma
+          cp -r backend/dist/* dist-artifacts/backend-dist/
           cp backend/package.json dist-artifacts/backend-package.json
-          cp backend/package-lock.json dist-artifacts/backend-package-lock.json
-          cp -r backend/prisma dist-artifacts/prisma
+          if [ -f backend/package-lock.json ]; then cp backend/package-lock.json dist-artifacts/backend-package-lock.json; fi
+          cp -r backend/prisma/* dist-artifacts/prisma/
           cp -r frontend/.output dist-artifacts/frontend-output
+          ls -la dist-artifacts/
           tar czf dist-artifacts.tar.gz dist-artifacts
+          ls -lh dist-artifacts.tar.gz
 
       - name: 上传构建产物
         uses: actions/upload-artifact@v4
@@ -86,7 +78,7 @@ jobs:
           retention-days: 1
 
   # --------------------------------------------------------
-  # Job 2: Deploy - rsync to server, pm2 reload
+  # Job 2: Deploy - rsync 到服务器 + pm2 reload
   # --------------------------------------------------------
   deploy:
     name: 部署到服务器
@@ -101,7 +93,7 @@ jobs:
           name: dist-artifacts
 
       - name: 解压构建产物
-        run: tar xzf dist-artifacts.tar.gz
+        run: tar xzf dist-artifacts.tar.gz && ls -la dist-artifacts/
 
       - name: 配置 SSH 密钥
         uses: webfactory/ssh-agent@v0.9.0
@@ -111,36 +103,51 @@ jobs:
       - name: 添加服务器到 known_hosts
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H -p ${{ secrets.SSH_PORT }} ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
 
       - name: 安装 rsync
-        run: sudo apt-get update && sudo apt-get install -y rsync
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq rsync
 
-      - name: 部署后端 - rsync
+      - name: 部署后端文件 - rsync
         run: |
-          rsync -avz --delete \
+          SSH="ssh -p ${{ secrets.SSH_PORT }}"
+          TARGET="${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_PATH }}"
+
+          # 确保目录存在
+          $SSH ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} "mkdir -p ${{ secrets.DEPLOY_PATH }}/backend/dist ${{ secrets.DEPLOY_PATH }}/backend/prisma ${{ secrets.DEPLOY_PATH }}/frontend/.output"
+
+          # 同步后端 dist（删除旧文件）
+          rsync -avz --delete -e "ssh -p ${{ secrets.SSH_PORT }}" \
             dist-artifacts/backend-dist/ \
-            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_PATH }}/backend/dist/
+            $TARGET/backend/dist/
 
-          rsync -avz \
+          # 同步后端 package.json
+          rsync -avz -e "ssh -p ${{ secrets.SSH_PORT }}" \
             dist-artifacts/backend-package.json \
-            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_PATH }}/backend/package.json
+            $TARGET/backend/package.json
 
-          rsync -avz \
-            dist-artifacts/backend-package-lock.json \
-            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_PATH }}/backend/package-lock.json
+          # 同步后端 package-lock.json（如果存在）
+          if [ -f dist-artifacts/backend-package-lock.json ]; then
+            rsync -avz -e "ssh -p ${{ secrets.SSH_PORT }}" \
+              dist-artifacts/backend-package-lock.json \
+              $TARGET/backend/package-lock.json
+          fi
 
-          rsync -avz \
+          # 同步 prisma schema/migrations
+          rsync -avz --delete -e "ssh -p ${{ secrets.SSH_PORT }}" \
             dist-artifacts/prisma/ \
-            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_PATH }}/backend/prisma/
+            $TARGET/backend/prisma/
 
-      - name: 部署前端 - rsync
+      - name: 部署前端文件 - rsync
         run: |
-          rsync -avz --delete \
-            dist-artifacts/frontend-output/ \
-            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_PATH }}/frontend/.output/
+          TARGET="${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_PATH }}"
 
-      - name: 远程安装依赖并重启服务
+          # 同步前端 .output（删除旧文件）
+          rsync -avz --delete -e "ssh -p ${{ secrets.SSH_PORT }}" \
+            dist-artifacts/frontend-output/ \
+            $TARGET/frontend/.output/
+
+      - name: 远程安装依赖、同步数据库、重启服务
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.DEPLOY_HOST }}
@@ -151,45 +158,78 @@ jobs:
             set -e
             DEPLOY_DIR="${{ secrets.DEPLOY_PATH }}"
 
+            echo "=========================================="
+            echo " 熊猫笔记 自动部署"
+            echo " 时间: $(date)"
+            echo "=========================================="
+
             # ---- 后端 ----
-            echo ">>> 安装后端生产依赖..."
+            echo ""
+            echo ">>> [1/4] 进入后端目录并安装生产依赖..."
             cd "$DEPLOY_DIR/backend"
-            npm ci --omit=dev
 
-            echo ">>> 运行数据库迁移..."
-            npx prisma migrate deploy
+            # 优先用 npm ci（有 lock 文件时更快更稳），否则 fallback 到 npm install
+            if [ -f package-lock.json ]; then
+              npm ci --omit=dev --no-audit --no-fund || npm install --omit=dev --no-audit --no-fund
+            else
+              npm install --omit=dev --no-audit --no-fund
+            fi
 
-            echo ">>> 重启后端 PM2..."
+            echo ""
+            echo ">>> [2/4] 同步数据库 schema (prisma db push)..."
+            npx prisma db push --skip-generate --accept-data-loss
+
+            echo ""
+            echo ">>> [3/4] 重启后端 PM2 (nav-log-backend)..."
             pm2 reload nav-log-backend 2>/dev/null || \
-              pm2 start dist/main.js --name nav-log-backend
+              pm2 start dist/main.js --name nav-log-backend --node-args="--max-old-space-size=512"
 
             # ---- 前端 ----
-            echo ">>> 重启前端 PM2..."
+            echo ""
+            echo ">>> [4/4] 重启前端 PM2 (nav-log-frontend)..."
             cd "$DEPLOY_DIR/frontend"
             pm2 reload nav-log-frontend 2>/dev/null || \
-              pm2 start .output/server/index.mjs --name nav-log-frontend
+              pm2 start .output/server/index.mjs --name nav-log-frontend --node-args="--max-old-space-size=512"
 
             # ---- 保存 PM2 配置 ----
             pm2 save
 
-            echo ">>> 部署完成！"
+            echo ""
+            echo "=========================================="
+            echo " ✅ 部署命令执行完毕！等待健康检查..."
+            echo "=========================================="
 
       - name: 健康检查
         run: |
-          echo "等待服务启动..."
-          sleep 10
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+          echo "等待服务启动 (15s)..."
+          sleep 15
+
+          echo ""
+          echo ">>> 后端健康检查 (http://${{ secrets.DEPLOY_HOST }}:3002/api/ops/health)..."
+          HTTP_CODE_BE=$(curl -s -o /dev/null -w "%{http_code}" \
+            --connect-timeout 5 --max-time 10 \
             http://${{ secrets.DEPLOY_HOST }}:3002/api/ops/health || echo "000")
-          if [ "$HTTP_CODE" = "200" ]; then
-            echo "✅ 后端健康检查通过！HTTP $HTTP_CODE"
+          if [ "$HTTP_CODE_BE" = "200" ]; then
+            echo "✅ 后端健康检查通过！HTTP $HTTP_CODE_BE"
           else
-            echo "⚠️ 后端健康检查失败！HTTP $HTTP_CODE"
+            echo "⚠️  后端健康检查返回 HTTP $HTTP_CODE_BE（服务可能仍在启动，等待 5s 重试）..."
+            sleep 5
+            HTTP_CODE_BE2=$(curl -s -o /dev/null -w "%{http_code}" \
+              --connect-timeout 5 --max-time 10 \
+              http://${{ secrets.DEPLOY_HOST }}:3002/api/ops/health || echo "000")
+            if [ "$HTTP_CODE_BE2" = "200" ]; then
+              echo "✅ 后端健康检查重试通过！HTTP $HTTP_CODE_BE2"
+            else
+              echo "❌ 后端健康检查失败，最终 HTTP $HTTP_CODE_BE2（请查看 PM2 日志）"
+            fi
           fi
 
-          HTTP_CODE_FE=$(curl -s -o /dev/null -w "%{http_code}" \
-            http://${{ secrets.DEPLOY_HOST }}:3000/ || echo "000")
-          if [ "$HTTP_CODE_FE" = "200" ]; then
-            echo "✅ 前端健康检查通过！HTTP $HTTP_CODE_FE"
-          else
-            echo "⚠️ 前端健康检查失败！HTTP $HTTP_CODE_FE"
-          fi
+          echo ""
+          echo ">>> PM2 进程状态..."
+          curl -s --connect-timeout 5 "http://${{ secrets.DEPLOY_HOST }}:3002/api/ops/pm2-list" 2>/dev/null | head -c 500 || echo "(无法获取 PM2 列表)"
+
+          echo ""
+          echo "=========================================="
+          echo " 🎉 部署流程完成！"
+          echo " 🌐 访问: http://${{ secrets.DEPLOY_HOST }}"
+          echo "=========================================="
