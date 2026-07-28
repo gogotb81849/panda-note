@@ -21,9 +21,6 @@ on:
           - production
 
 jobs:
-  # --------------------------------------------------------
-  # Job 1: Build - 安装依赖 + 构建
-  # --------------------------------------------------------
   build:
     name: 构建前后端
     runs-on: ubuntu-latest
@@ -39,18 +36,20 @@ jobs:
         with:
           node-version: 20
 
+      - name: 升级 npm 到最新版（修复 edgesOut bug）
+        run: npm install -g npm@latest
+
       # -------- 后端 --------
       - name: 安装 canvas 系统依赖 (Linux)
         run: sudo apt-get update -qq && sudo apt-get install -y -qq build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev pkg-config
 
       - name: 安装后端依赖
         working-directory: backend
-        run: npm install --no-audit --no-fund
+        run: npm install --no-audit --no-fund --legacy-peer-deps
 
       - name: 构建后端 (NestJS -> dist)
         working-directory: backend
         run: |
-          # tsc 类型错误不阻断构建（JS 仍会产出）
           set +e
           npm run build
           BUILD_EXIT=$?
@@ -62,13 +61,13 @@ jobs:
               exit 1
             fi
           fi
-          echo "✅ Backend build OK, dist/main.js exists"
+          echo "✅ Backend build OK"
           ls -la dist/main.js
 
       # -------- 前端 --------
       - name: 安装前端依赖
         working-directory: frontend
-        run: npm install --no-audit --no-fund
+        run: npm install --no-audit --no-fund --legacy-peer-deps
 
       - name: 构建前端 (Nuxt -> .output)
         working-directory: frontend
@@ -97,9 +96,6 @@ jobs:
           path: dist-artifacts.tar.gz
           retention-days: 1
 
-  # --------------------------------------------------------
-  # Job 2: Deploy - rsync 到服务器 + pm2 reload
-  # --------------------------------------------------------
   deploy:
     name: 部署到服务器
     runs-on: ubuntu-latest
@@ -132,28 +128,23 @@ jobs:
         run: |
           TARGET="${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_PATH }}"
 
-          # 确保目录存在
           ssh -p ${{ secrets.SSH_PORT }} ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
             "mkdir -p ${{ secrets.DEPLOY_PATH }}/backend/dist ${{ secrets.DEPLOY_PATH }}/backend/prisma ${{ secrets.DEPLOY_PATH }}/frontend/.output"
 
-          # 同步后端 dist（删除旧文件）
           rsync -avz --delete -e "ssh -p ${{ secrets.SSH_PORT }}" \
             dist-artifacts/backend-dist/ \
             $TARGET/backend/dist/
 
-          # 同步后端 package.json
           rsync -avz -e "ssh -p ${{ secrets.SSH_PORT }}" \
             dist-artifacts/backend-package.json \
             $TARGET/backend/package.json
 
-          # 同步后端 package-lock.json（如果存在）
           if [ -f dist-artifacts/backend-package-lock.json ]; then
             rsync -avz -e "ssh -p ${{ secrets.SSH_PORT }}" \
               dist-artifacts/backend-package-lock.json \
               $TARGET/backend/package-lock.json
           fi
 
-          # 同步 prisma schema/migrations
           rsync -avz --delete -e "ssh -p ${{ secrets.SSH_PORT }}" \
             dist-artifacts/prisma/ \
             $TARGET/backend/prisma/
@@ -162,7 +153,6 @@ jobs:
         run: |
           TARGET="${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_PATH }}"
 
-          # 同步前端 .output（删除旧文件）
           rsync -avz --delete -e "ssh -p ${{ secrets.SSH_PORT }}" \
             dist-artifacts/frontend-output/ \
             $TARGET/frontend/.output/
@@ -183,11 +173,10 @@ jobs:
             echo " 时间: $(date)"
             echo "=========================================="
 
-            # ---- 后端 ----
             echo ""
-            echo ">>> [1/4] 进入后端目录并安装生产依赖..."
+            echo ">>> [1/4] 后端安装生产依赖..."
             cd "$DEPLOY_DIR/backend"
-            npm install --omit=dev --no-audit --no-fund
+            npm install --omit=dev --no-audit --no-fund --legacy-peer-deps
 
             echo ""
             echo ">>> [2/4] 同步数据库 schema (prisma db push)..."
@@ -198,14 +187,14 @@ jobs:
             pm2 reload nav-log-backend 2>/dev/null || \
               pm2 start dist/main.js --name nav-log-backend --node-args="--max-old-space-size=512"
 
-            # ---- 前端 ----
             echo ""
             echo ">>> [4/4] 重启前端 PM2 (nav-log-frontend)..."
             cd "$DEPLOY_DIR/frontend"
+            # 前端需要有 package.json 和 .output 才能启动
+            # 如果服务器上还没有 frontend/package.json，需要先上传
             pm2 reload nav-log-frontend 2>/dev/null || \
               pm2 start .output/server/index.mjs --name nav-log-frontend --node-args="--max-old-space-size=512"
 
-            # ---- 保存 PM2 配置 ----
             pm2 save
 
             echo ""
@@ -226,7 +215,7 @@ jobs:
           if [ "$HTTP_CODE_BE" = "200" ]; then
             echo "✅ 后端健康检查通过！HTTP $HTTP_CODE_BE"
           else
-            echo "⚠️  后端健康检查返回 HTTP $HTTP_CODE_BE（服务可能仍在启动，等待 5s 重试）..."
+            echo "⚠️  后端 HTTP $HTTP_CODE_BE，等待 5s 重试..."
             sleep 5
             HTTP_CODE_BE2=$(curl -s -o /dev/null -w "%{http_code}" \
               --connect-timeout 5 --max-time 10 \
@@ -234,7 +223,7 @@ jobs:
             if [ "$HTTP_CODE_BE2" = "200" ]; then
               echo "✅ 后端健康检查重试通过！HTTP $HTTP_CODE_BE2"
             else
-              echo "❌ 后端健康检查失败，最终 HTTP $HTTP_CODE_BE2（请查看 PM2 日志）"
+              echo "❌ 后端健康检查失败，最终 HTTP $HTTP_CODE_BE2"
             fi
           fi
 
