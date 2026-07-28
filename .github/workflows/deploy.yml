@@ -1,7 +1,7 @@
 # ============================================================
 # 部署工作流 - 熊猫笔记 (Panda Note)
 # 触发：push 到 main 分支，或手动 Run workflow
-# 流程：build (构建前后端) → deploy (rsync 到服务器 + pm2 reload)
+# 流程：build (构建前后端) -> deploy (rsync 到服务器 + pm2 reload)
 # ============================================================
 
 name: Deploy
@@ -58,7 +58,7 @@ jobs:
               exit 1
             fi
           fi
-          echo "✅ Backend build OK"
+          echo "Backend build OK"
           ls -la dist/main.js
 
       # -------- 前端 --------
@@ -118,8 +118,13 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -H -p ${{ secrets.SSH_PORT }} ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
 
-      - name: 安装 rsync
+      - name: 安装 rsync (本地 runner)
         run: sudo apt-get update -qq && sudo apt-get install -y -qq rsync
+
+      - name: 确保服务器上已安装 rsync
+        run: |
+          ssh -p ${{ secrets.SSH_PORT }} ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            "which rsync >/dev/null 2>&1 || (apt-get update -qq && apt-get install -y -qq rsync)"
 
       - name: 部署后端文件 - rsync
         run: |
@@ -187,8 +192,6 @@ jobs:
             echo ""
             echo ">>> [4/4] 重启前端 PM2 (nav-log-frontend)..."
             cd "$DEPLOY_DIR/frontend"
-            # 前端需要有 package.json 和 .output 才能启动
-            # 如果服务器上还没有 frontend/package.json，需要先上传
             pm2 reload nav-log-frontend 2>/dev/null || \
               pm2 start .output/server/index.mjs --name nav-log-frontend --node-args="--max-old-space-size=512"
 
@@ -210,26 +213,26 @@ jobs:
             --connect-timeout 5 --max-time 10 \
             http://${{ secrets.DEPLOY_HOST }}:3002/api/ops/health || echo "000")
           if [ "$HTTP_CODE_BE" = "200" ]; then
-            echo "✅ 后端健康检查通过！HTTP $HTTP_CODE_BE"
+            echo "Backend health check OK! HTTP $HTTP_CODE_BE"
           else
-            echo "⚠️  后端 HTTP $HTTP_CODE_BE，等待 5s 重试..."
+            echo "Backend HTTP $HTTP_CODE_BE, retrying in 5s..."
             sleep 5
             HTTP_CODE_BE2=$(curl -s -o /dev/null -w "%{http_code}" \
               --connect-timeout 5 --max-time 10 \
               http://${{ secrets.DEPLOY_HOST }}:3002/api/ops/health || echo "000")
             if [ "$HTTP_CODE_BE2" = "200" ]; then
-              echo "✅ 后端健康检查重试通过！HTTP $HTTP_CODE_BE2"
+              echo "Backend health check retry OK! HTTP $HTTP_CODE_BE2"
             else
-              echo "❌ 后端健康检查失败，最终 HTTP $HTTP_CODE_BE2"
+              echo "Backend health check FAILED, final HTTP $HTTP_CODE_BE2"
             fi
           fi
 
           echo ""
           echo ">>> PM2 进程状态..."
-          curl -s --connect-timeout 5 "http://${{ secrets.DEPLOY_HOST }}:3002/api/ops/pm2-list" 2>/dev/null | head -c 500 || echo "(无法获取 PM2 列表)"
+          curl -s --connect-timeout 5 "http://${{ secrets.DEPLOY_HOST }}:3002/api/ops/pm2-list" 2>/dev/null | head -c 500 || echo "(cannot get PM2 list)"
 
           echo ""
           echo "=========================================="
-          echo " 🎉 部署流程完成！"
-          echo " 🌐 访问: http://${{ secrets.DEPLOY_HOST }}"
+          echo " Deployment complete!"
+          echo " URL: http://${{ secrets.DEPLOY_HOST }}"
           echo "=========================================="
