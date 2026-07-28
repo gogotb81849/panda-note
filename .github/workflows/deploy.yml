@@ -40,7 +40,7 @@ jobs:
       # -------- 后端 --------
       - name: 安装后端依赖
         working-directory: backend
-        run: npm ci --no-audit
+        run: npm install --no-audit --no-fund
 
       - name: 构建后端 (NestJS → dist)
         working-directory: backend
@@ -49,7 +49,7 @@ jobs:
       # -------- 前端 --------
       - name: 安装前端依赖
         working-directory: frontend
-        run: npm ci --no-audit
+        run: npm install --no-audit --no-fund
 
       - name: 构建前端 (Nuxt → .output)
         working-directory: frontend
@@ -169,7 +169,7 @@ jobs:
 
             # 优先用 npm ci（有 lock 文件时更快更稳），否则 fallback 到 npm install
             if [ -f package-lock.json ]; then
-              npm ci --omit=dev --no-audit --no-fund || npm install --omit=dev --no-audit --no-fund
+              npm install --omit=dev --no-audit --no-fund
             else
               npm install --omit=dev --no-audit --no-fund
             fi
