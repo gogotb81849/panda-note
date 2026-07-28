@@ -89,6 +89,8 @@ Thumbs.db
 *.bak
 tmp/
 temp/
+temp_backend_dist/
+temp_dist/
 
 # ---------- 部署产物 ----------
 *.zip
@@ -97,6 +99,9 @@ temp/
 build/
 deploy/
 dist-packages/
+
+# ---------- 运维面板构建产物 ----------
+ops-monitor/static/
 
 # ---------- 运维面板缓存 ----------
 ops-monitor/ops-monitor.db
