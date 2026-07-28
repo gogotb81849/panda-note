@@ -36,9 +36,6 @@ jobs:
         with:
           node-version: 20
 
-      - name: 升级 npm 到最新版（修复 edgesOut bug）
-        run: npm install -g npm@latest
-
       # -------- 后端 --------
       - name: 安装 canvas 系统依赖 (Linux)
         run: sudo apt-get update -qq && sudo apt-get install -y -qq build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev pkg-config
