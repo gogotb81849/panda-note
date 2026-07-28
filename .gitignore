@@ -106,3 +106,6 @@ ops-monitor/static/
 # ---------- 运维面板缓存 ----------
 ops-monitor/ops-monitor.db
 ops-monitor/audit_log.jsonl
+
+# ---------- GitHub Actions（需要 PAT 含 workflow scope 才能推送，初次提交先忽略）----------
+.github/workflows/
