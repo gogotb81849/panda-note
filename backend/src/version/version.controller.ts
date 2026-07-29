@@ -1,9 +1,7 @@
-import { Controller, Get, Post, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body } from '@nestjs/common';
 import { VersionService, VersionInfo, VersionCheckResult, SchemaVersionInfo } from './version.service';
 import { FrontendHashService } from './frontend-hash.service';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
-@UseGuards(JwtAuthGuard)
 @Controller('version')
 export class VersionController {
   constructor(
