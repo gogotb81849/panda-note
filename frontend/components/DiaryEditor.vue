@@ -557,7 +557,20 @@ const loadTasks = async () => {
 const loadDiary = async () => {
   try {
     const dateStr = selectedDateStr.value
-    const diary = await api.diary.getByDate(dateStr)
+    const diaryResp = await api.diary.getByDate(dateStr)
+    // 兼容兜底：如果缓存策略异常返回了数组，从数组中匹配日期
+    let diary: any = diaryResp
+    if (Array.isArray(diaryResp)) {
+      const targetDate = new Date(dateStr)
+      targetDate.setHours(0, 0, 0, 0)
+      const targetTs = targetDate.getTime()
+      diary = diaryResp.find((item: any) => {
+        if (!item.date) return false
+        const d = new Date(item.date)
+        d.setHours(0, 0, 0, 0)
+        return d.getTime() === targetTs
+      }) || null
+    }
     if (diary) {
       currentDiaryId.value = diary.id
       diaryForm.value = {

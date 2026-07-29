@@ -529,24 +529,61 @@ export const useApi = () => {
       startPeriodicTimeSync(apiBase, authStore.token);
     }
 
-    // 离线读：从本地缓存读取
+    // 离线读：从本地缓存读取（仅列表端点返回数组，单条端点尝试按日期/ID匹配）
     if (process.client && !isWrite && storeName && isOffline) {
       const dbOk = await ensureDb();
       if (dbOk) {
         try {
-          const local = await indexedDBManager.getAll<any>(storeName);
-          if (local && local.length > 0) {
-            incrementCacheHit(storeName);
-            recordCacheHit(storeName, local);
-            recordOfflineFallback();
-            return local;
+          // 仅列表端点（URL_STORE_MAP 中直接存在的路径）直接返回 getAll 数组
+          if (isListEndpoint(url)) {
+            const local = await indexedDBManager.getAll<any>(storeName);
+            if (local && local.length > 0) {
+              incrementCacheHit(storeName);
+              recordCacheHit(storeName, local);
+              recordOfflineFallback();
+              return local;
+            }
+          } else {
+            // 单条端点：尝试从缓存中按条件匹配（如 by-date 按 date 字段，/:id 按 id 字段）
+            const local = await indexedDBManager.getAll<any>(storeName);
+            if (local && local.length > 0) {
+              let matched: any = null;
+              const id = extractIdFromUrl(url);
+              // 按日期查询：/diaries/by-date?date=xxx
+              if (url.includes('/by-date')) {
+                const queryDate = new URLSearchParams(url.split('?')[1] || '').get('date');
+                if (queryDate) {
+                  const targetDate = new Date(queryDate);
+                  targetDate.setHours(0, 0, 0, 0);
+                  const targetTs = targetDate.getTime();
+                  for (const item of local) {
+                    if (item.date) {
+                      const itemDate = new Date(item.date);
+                      itemDate.setHours(0, 0, 0, 0);
+                      if (itemDate.getTime() === targetTs) {
+                        matched = item;
+                        break;
+                      }
+                    }
+                  }
+                }
+              } else if (id !== null) {
+                // 按 ID 查询：/diaries/:id
+                matched = local.find((item: any) => String(item.id) === String(id));
+              }
+              if (matched) {
+                incrementCacheHit(storeName);
+                recordOfflineFallback();
+                return matched;
+              }
+            }
           }
         } catch {}
       }
     }
 
-    // 在线但缓存未过期：优先读缓存（减少网络请求）
-    if (process.client && !isWrite && storeName && !isOffline && !isCacheExpired(storeName)) {
+    // 在线但缓存未过期：优先读缓存（仅列表端点，单条端点强制走网络，避免按日期/ID匹配不精确导致的问题）
+    if (process.client && !isWrite && storeName && !isOffline && !isCacheExpired(storeName) && isListEndpoint(url)) {
       const dbOk = await ensureDb();
       if (dbOk) {
         try {
@@ -618,26 +655,32 @@ export const useApi = () => {
           queueCacheWrite({ storeName, type: 'list', data: result });
         }
 
-        // 写操作成功后更新本地缓存（串行写入队列，避免竞态）
-        if (process.client && isWrite && storeName && result && !Array.isArray(result)) {
-          if (method === 'POST') {
-            queueCacheWrite({ storeName, type: 'item', data: result });
-          } else if (method === 'PUT' || method === 'PATCH') {
-            const id = extractIdFromUrl(url);
-            if (id !== null) {
-              (async () => {
-                const dbOk = await ensureDb();
-                if (!dbOk) return;
-                try {
-                  const existing = await indexedDBManager.get(storeName, id);
-                  queueCacheWrite({ storeName, type: 'item', data: { ...(existing || {}), ...result } });
-                } catch {}
-              })();
-            }
-          } else if (method === 'DELETE') {
-            const id = extractIdFromUrl(url);
-            if (id !== null) {
-              queueCacheWrite({ storeName, type: 'delete', id });
+        // 写操作成功后更新本地缓存 + 让缓存元数据过期（强制下次列表请求走网络刷新）
+        if (process.client && isWrite && storeName) {
+          // 让缓存立即过期：删除该 store 的 meta，下次读就会走网络
+          _cacheMeta.delete(storeName);
+          saveCacheMeta();
+
+          if (result && !Array.isArray(result)) {
+            if (method === 'POST') {
+              queueCacheWrite({ storeName, type: 'item', data: result });
+            } else if (method === 'PUT' || method === 'PATCH') {
+              const id = extractIdFromUrl(url);
+              if (id !== null) {
+                (async () => {
+                  const dbOk = await ensureDb();
+                  if (!dbOk) return;
+                  try {
+                    const existing = await indexedDBManager.get(storeName, id);
+                    queueCacheWrite({ storeName, type: 'item', data: { ...(existing || {}), ...result } });
+                  } catch {}
+                })();
+              }
+            } else if (method === 'DELETE') {
+              const id = extractIdFromUrl(url);
+              if (id !== null) {
+                queueCacheWrite({ storeName, type: 'delete', id });
+              }
             }
           }
         }
@@ -658,13 +701,41 @@ export const useApi = () => {
     try {
       return await networkPromise;
     } catch (error: any) {
-      // 网络失败时降级读本地
+      // 网络失败时降级读本地（列表端点返回数组，单条端点按条件匹配）
       if (process.client && !isWrite && storeName && isNetworkError(error)) {
         const dbOk = await ensureDb();
         if (dbOk) {
           try {
             const local = await indexedDBManager.getAll<any>(storeName);
-            if (local && local.length > 0) return local;
+            if (local && local.length > 0) {
+              if (isListEndpoint(url)) {
+                return local;
+              }
+              // 单条端点：尝试按条件匹配
+              let matched: any = null;
+              const id = extractIdFromUrl(url);
+              if (url.includes('/by-date')) {
+                const queryDate = new URLSearchParams(url.split('?')[1] || '').get('date');
+                if (queryDate) {
+                  const targetDate = new Date(queryDate);
+                  targetDate.setHours(0, 0, 0, 0);
+                  const targetTs = targetDate.getTime();
+                  for (const item of local) {
+                    if (item.date) {
+                      const itemDate = new Date(item.date);
+                      itemDate.setHours(0, 0, 0, 0);
+                      if (itemDate.getTime() === targetTs) {
+                        matched = item;
+                        break;
+                      }
+                    }
+                  }
+                }
+              } else if (id !== null) {
+                matched = local.find((item: any) => String(item.id) === String(id));
+              }
+              if (matched) return matched;
+            }
           } catch {}
         }
       }
