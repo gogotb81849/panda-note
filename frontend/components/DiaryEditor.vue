@@ -1,7 +1,7 @@
 <template>
   <div class="diary-panel">
     <div class="diary-panel-header" @click="diaryExpanded = !diaryExpanded">
-      <span class="diary-panel-title">📝 {{ isPoliticalInstructor ? '航海日志' : '工作日记' }}</span>
+      <span class="diary-panel-title">📝 {{ authStore.diaryTypeName }}</span>
       <el-icon class="expand-icon" :class="{ expanded: diaryExpanded }"><ArrowDown /></el-icon>
     </div>
     <div v-show="diaryExpanded" class="diary-panel-content">

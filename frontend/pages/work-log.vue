@@ -34,10 +34,31 @@
       </template>
     </el-dialog>
 
+    <!-- 常驻日历 -->
+    <div class="calendar-section" :class="{ 'calendar-collapsed': calendarCollapsed }">
+      <div class="calendar-header" @click="calendarCollapsed = !calendarCollapsed">
+        <span class="calendar-title">📅 日历</span>
+        <el-icon class="calendar-toggle-icon">
+          <ArrowDown v-if="calendarCollapsed" />
+          <ArrowUp v-else />
+        </el-icon>
+      </div>
+      <div v-show="!calendarCollapsed" class="calendar-body">
+        <el-calendar v-model="calendarDate" @pick="onCalendarSelect">
+          <template #date-cell="{ data }">
+            <div class="calendar-cell" :class="{ 'has-diary': hasDiaryOnDate(data.date) }">
+              <span class="calendar-day">{{ data.day.split('-')[2] }}</span>
+              <span v-if="hasDiaryOnDate(data.date)" class="diary-dot"></span>
+            </div>
+          </template>
+        </el-calendar>
+      </div>
+    </div>
+
     <!-- 日记编辑器 -->
     <div class="diary-section">
       <div class="section-header">
-        <span class="section-title">📝 {{ isPoliticalInstructor ? '航海日志' : '工作日记' }}</span>
+        <span class="section-title">📝 {{ diaryTitle }}</span>
       </div>
       <div class="diary-content">
         <template v-if="isPoliticalInstructor">
@@ -198,7 +219,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
-import { ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowRight, ArrowUp, ArrowDown } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import type { Schedule, Ship } from '~/types'
 import { useLunar } from '~/composables/useLunar'
@@ -208,9 +229,11 @@ definePageMeta({
   middleware: ['auth'],
 })
 
-useHead({
-  title: '工作日志 - 熊猫笔记',
-})
+const pageHead = computed(() => ({
+  title: `${authStore.diaryTypeName} - 熊猫笔记`,
+}))
+
+useHead(pageHead)
 
 const api = useApi()
 const authStore = useAuthStore()
@@ -219,6 +242,9 @@ const { getLunarDate } = useLunar()
 const selectedDate = ref(new Date())
 const tempDate = ref(new Date())
 const showDatePicker = ref(false)
+const calendarDate = ref(new Date())
+const calendarCollapsed = ref(false)
+const diaryDates = ref<Set<string>>(new Set())
 
 const schedules = ref<Schedule[]>([])
 const ships = ref<Ship[]>([])
@@ -249,6 +275,10 @@ const currentDiaryId = ref<number | null>(null)
 
 const isPoliticalInstructor = computed(() => {
   return authStore.userRole === 'ship_political_instructor'
+})
+
+const diaryTitle = computed(() => {
+  return authStore.diaryTypeName
 })
 
 const selectedDateLabel = computed(() => {
@@ -405,8 +435,9 @@ const saveDiary = async () => {
       }
       ElMessage.success('日记已保存')
     }
-    // 保存成功后刷新当日日记
+    // 保存成功后刷新当日日记和日历标记
     await loadDiary()
+    await loadDiaryDates()
   } catch (error: any) {
     // 归一化错误消息：NestJS ValidationPipe 常返回 message: string[]，避免传给 ElMessage 导致 startsWith 报错
     const pickMsg = (raw: any): string => {
@@ -561,15 +592,67 @@ const handleViewChange = async (data: { view: string; shipId: number | null }) =
   currentView.value = data.view as 'ship' | 'personal'
   currentShipId.value = data.shipId
   await loadDiary()
+  await loadDiaryDates()
 }
 
 const handleShipChange = (shipId: number) => {
   currentShipId.value = shipId
 }
 
+const onCalendarSelect = (date: Date) => {
+  selectedDate.value = new Date(date)
+  calendarDate.value = new Date(date)
+}
+
+const hasDiaryOnDate = (date: Date): boolean => {
+  const dateStr = formatDate(date)
+  return diaryDates.value.has(dateStr)
+}
+
+const loadDiaryDates = async () => {
+  try {
+    const year = calendarDate.value.getFullYear()
+    const month = calendarDate.value.getMonth()
+    const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`
+    const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${new Date(year, month + 1, 0).getDate()}`
+
+    let diaries: any[] = []
+    if (currentView.value === 'ship' && currentShipId.value) {
+      const result = await api.diary.getByShipView(currentShipId.value)
+      diaries = Array.isArray(result) ? result : []
+    } else {
+      const result = await api.diary.getAll(startDate, endDate)
+      diaries = Array.isArray(result) ? result : []
+    }
+
+    const dates = new Set<string>()
+    diaries.forEach((d: any) => {
+      if (d.date) {
+        const dDate = new Date(d.date)
+        dDate.setHours(0, 0, 0, 0)
+        dates.add(formatDate(dDate))
+      }
+    })
+    diaryDates.value = dates
+  } catch (error) {
+    console.error('加载日记日期失败', error)
+  }
+}
+
 watch(selectedDate, () => {
+  calendarDate.value = new Date(selectedDate.value)
   loadSchedules()
   loadDiary()
+})
+
+watch(calendarDate, (newVal, oldVal) => {
+  const newMonth = newVal.getMonth()
+  const oldMonth = oldVal.getMonth()
+  const newYear = newVal.getFullYear()
+  const oldYear = oldVal.getFullYear()
+  if (newMonth !== oldMonth || newYear !== oldYear) {
+    loadDiaryDates()
+  }
 })
 
 onMounted(async () => {
@@ -582,6 +665,7 @@ onMounted(async () => {
   if (isPoliticalInstructor.value) {
     await loadAvailableShips()
   }
+  await loadDiaryDates()
 })
 </script>
 
@@ -589,8 +673,92 @@ onMounted(async () => {
 .work-log-page {
   padding: 16px;
   width: 100%;
-  max-width: 1200px;
+  max-width: 100%;
   margin: 0 auto;
+}
+
+.calendar-section {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.calendar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s;
+}
+
+.calendar-header:hover {
+  background: #f5f7fa;
+}
+
+.calendar-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.calendar-toggle-icon {
+  color: #909399;
+  transition: transform 0.2s;
+}
+
+.calendar-collapsed .calendar-toggle-icon {
+  transform: rotate(180deg);
+}
+
+.calendar-body {
+  padding: 0 16px 16px;
+}
+
+.calendar-body :deep(.el-calendar__header) {
+  padding: 12px 0;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.calendar-body :deep(.el-calendar__body) {
+  padding: 12px 0 0;
+}
+
+.calendar-body :deep(.el-calendar-day) {
+  padding: 4px;
+  height: auto;
+  min-height: 44px;
+}
+
+.calendar-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+  position: relative;
+}
+
+.calendar-day {
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.diary-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #f56c6c;
+  margin-top: 2px;
+}
+
+.has-diary .calendar-day {
+  color: #409eff;
+  font-weight: 600;
 }
 
 .date-selector {
@@ -811,6 +979,15 @@ onMounted(async () => {
 
   .diary-actions {
     padding-bottom: 12px;
+  }
+
+  .calendar-body :deep(.el-calendar-day) {
+    min-height: 36px;
+    padding: 2px;
+  }
+
+  .calendar-day {
+    font-size: 12px;
   }
 }
 

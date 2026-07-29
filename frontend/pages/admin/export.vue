@@ -58,7 +58,7 @@
           </div>
         </div>
 
-        <!-- 航海日记导出 -->
+        <!-- 日记导出 -->
         <div class="export-card" @click="showDiaryExportDialog" :class="{ 'is-exporting': exportingType === 'diaries' }">
           <div class="export-icon" style="background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);">
             <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -66,7 +66,7 @@
             </svg>
           </div>
           <div class="export-info">
-            <h3 class="export-title">航海日记</h3>
+            <h3 class="export-title">{{ diaryExportLabel }}</h3>
             <p class="export-desc">按团队和时间范围导出</p>
           </div>
           <div class="export-action">
@@ -100,7 +100,7 @@
           <el-checkbox-group v-model="selectedExportTypes">
             <el-checkbox label="users">用户列表</el-checkbox>
             <el-checkbox label="schedules">工作台账</el-checkbox>
-            <el-checkbox label="diaries">航海日记</el-checkbox>
+            <el-checkbox label="diaries">{{ diaryExportLabel }}</el-checkbox>
             <el-checkbox label="party-activities">党建活动</el-checkbox>
           </el-checkbox-group>
           <el-button type="primary" @click="batchExport" :loading="batchExporting" :disabled="selectedExportTypes.length === 0">
@@ -155,8 +155,8 @@
       </template>
     </el-dialog>
 
-    <!-- 航海日记导出对话框 -->
-    <el-dialog v-model="diaryExportVisible" title="导出航海日记" width="500px">
+    <!-- 日记导出对话框 -->
+    <el-dialog v-model="diaryExportVisible" :title="`导出${diaryExportLabel}`" width="500px">
       <el-form :model="diaryExportForm" label-width="80px">
         <el-form-item label="团队">
           <el-select v-model="diaryExportForm.teamCode" style="width: 100%">
@@ -181,8 +181,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { Download, Document, ArrowLeft, Upload, Loading } from '@element-plus/icons-vue'
+import { useAuthStore } from '~/stores/auth'
 
 definePageMeta({
   middleware: ['auth', 'role'],
@@ -191,6 +192,9 @@ definePageMeta({
 
 const config = useRuntimeConfig()
 const apiBase = config.public.apiBase
+const authStore = useAuthStore()
+
+const diaryExportLabel = computed(() => authStore.diaryTypeName)
 
 const exporting = ref(false)
 const exportingType = ref<string | null>(null)

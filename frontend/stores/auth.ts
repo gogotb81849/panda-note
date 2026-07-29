@@ -39,6 +39,26 @@ export const useAuthStore = defineStore('auth', {
       const roles = state.user?.roles as string[] | undefined;
       return roles?.includes('admin') || state.user?.role === 'admin';
     },
+    /** 是否为船舶层面角色（使用航海日记） */
+    isShipDiaryRole: (state) => {
+      const role = state.user?.role;
+      // 船舶层面角色：船舶政委、船长、轮机长等 ship_ 开头的角色
+      return role?.startsWith('ship_');
+    },
+    /** 是否为岸基船管层面角色（使用船管日记） */
+    isShoreDiaryRole: (state) => {
+      const role = state.user?.role;
+      // 岸基船管层面：船工主管、海务主管、机务主管、电气主管、总管、油轮船管部、系统管理员等
+      return !role?.startsWith('ship_');
+    },
+    /** 日记类型名称：船舶层面显示"航海日记"，岸基船管层面显示"船管日记" */
+    diaryTypeName: (state) => {
+      const role = state.user?.role;
+      if (role?.startsWith('ship_')) {
+        return '航海日记';
+      }
+      return '船管日记';
+    },
   },
 
   actions: {

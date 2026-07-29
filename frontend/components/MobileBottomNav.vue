@@ -24,9 +24,11 @@
 <script setup lang="ts">
 import { ref, computed, h, type Component } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { useAuthStore } from '~/stores/auth'
 
 const router = useRouter()
 const route = useRoute()
+const authStore = useAuthStore()
 
 // SVG图标组件（线条更细：stroke-width 2 → 1.5）
 const Icons = {
@@ -79,14 +81,17 @@ interface NavItem {
   badge?: number
 }
 
-const navItems: NavItem[] = [
-  { path: '/', label: '首页', icon: Icons.Home },
-  { path: '/dashboard', label: '看板', icon: Icons.Dashboard },
-  { path: '/ships', label: '船舶', icon: Icons.Ship },
-  { path: '/work-log', label: '工作日志', icon: Icons.WorkLog },
-  { path: '/files', label: '文件', icon: Icons.Folder },
-  { path: '/ai-report', label: 'AI简报', icon: Icons.AI },
-]
+const navItems = computed<NavItem[]>(() => {
+  const diaryLabel = authStore.diaryTypeName
+  return [
+    { path: '/', label: '首页', icon: Icons.Home },
+    { path: '/dashboard', label: '看板', icon: Icons.Dashboard },
+    { path: '/ships', label: '船舶', icon: Icons.Ship },
+    { path: '/work-log', label: diaryLabel, icon: Icons.WorkLog },
+    { path: '/files', label: '文件', icon: Icons.Folder },
+    { path: '/ai-report', label: 'AI简报', icon: Icons.AI },
+  ]
+})
 
 const isActive = (path: string) => {
   if (path === '/') return route.path === '/'

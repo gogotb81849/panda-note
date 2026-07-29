@@ -583,8 +583,12 @@ const loadMenuItems = async () => {
   menuLoading.value = true
   try {
     const menus = await api.menuConfig.getMyMenus()
+    const diaryLabel = authStore.diaryTypeName
     // 过滤掉日记菜单（日记功能已整合到日程页面中，不在左侧任务栏显示）
-    menuItems.value = (menus || []).filter(m => m.path !== '/diary' && m.icon !== 'diary')
+    // 同时将 work-log 菜单项的 label 替换为当前角色对应的日记名称
+    menuItems.value = (menus || [])
+      .filter(m => m.path !== '/diary' && m.icon !== 'diary')
+      .map(m => m.path === '/work-log' ? { ...m, label: diaryLabel } : m)
   } catch (error) {
     console.error('加载菜单失败，使用默认菜单', error)
     // 降级：使用硬编码默认菜单
@@ -597,12 +601,13 @@ const loadMenuItems = async () => {
 // 降级默认菜单（当API不可用时使用）
 const getDefaultMenuItems = (): { path: string; label: string; icon: string }[] => {
   const role = authStore.userRole
+  const diaryLabel = authStore.diaryTypeName
   // 与后端 DEFAULT_ROLE_MENUS 保持一致
   const defaultMenus: Record<string, { path: string; label: string; icon: string }[]> = {
     admin: [
       { path: '/', label: '工作台', icon: 'dashboard' },
       { path: '/publish-v2', label: '任务发布', icon: 'publish' },
-      { path: '/work-log', label: '工作日志', icon: 'calendar' },
+      { path: '/work-log', label: diaryLabel, icon: 'calendar' },
       { path: '/tasks', label: '工作任务', icon: 'log' },
       { path: '/gantt', label: '甘特图', icon: 'gantt' },
       { path: '/crew-list', label: '船员管理', icon: 'crew' },
@@ -620,7 +625,7 @@ const getDefaultMenuItems = (): { path: string; label: string; icon: string }[] 
       { path: '/', label: '工作台', icon: 'dashboard' },
       { path: '/publish-v2', label: '任务发布', icon: 'publish' },
       { path: '/dashboard', label: '船工看板', icon: 'data-board' },
-      { path: '/work-log', label: '工作日志', icon: 'calendar' },
+      { path: '/work-log', label: diaryLabel, icon: 'calendar' },
       { path: '/tasks', label: '工作任务', icon: 'log' },
       { path: '/gantt', label: '甘特图', icon: 'gantt' },
       { path: '/crew-list', label: '船员管理', icon: 'crew' },
@@ -636,7 +641,7 @@ const getDefaultMenuItems = (): { path: string; label: string; icon: string }[] 
     ],
     ship_political_instructor: [
       { path: '/', label: '工作台', icon: 'dashboard' },
-      { path: '/work-log', label: '工作日志', icon: 'calendar' },
+      { path: '/work-log', label: diaryLabel, icon: 'calendar' },
       { path: '/crew-list', label: '船员名单', icon: 'crew' },
       { path: '/tasks', label: '工作任务', icon: 'log' },
       { path: '/gantt', label: '甘特图', icon: 'gantt' },
@@ -655,7 +660,7 @@ const getDefaultMenuItems = (): { path: string; label: string; icon: string }[] 
   }
   return defaultMenus[role] || [
     { path: '/', label: '工作台', icon: 'dashboard' },
-    { path: '/work-log', label: '工作日志', icon: 'calendar' },
+    { path: '/work-log', label: diaryLabel, icon: 'calendar' },
     { path: '/tasks', label: '工作任务', icon: 'log' },
     { path: '/files', label: '共享文件', icon: 'files' },
     { path: '/toolbox', label: '工具箱', icon: 'toolbox' },

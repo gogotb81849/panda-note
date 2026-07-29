@@ -11,11 +11,11 @@
           <!-- P3-14: 根据角色显示不同的主操作按钮 -->
           <el-button v-if="isShoreCrewSupervisor" type="primary" size="large" @click="$router.push('/work-log')">
             <el-icon><Calendar /></el-icon>
-            工作日志
+            {{ diaryLabel }}
           </el-button>
           <el-button v-else-if="isShipRole" type="primary" size="large" @click="$router.push('/work-log')">
             <el-icon><EditPen /></el-icon>
-            工作日志
+            {{ diaryLabel }}
           </el-button>
           <el-button v-else type="primary" size="large" @click="$router.push('/dashboard')">
             <el-icon><PieChart /></el-icon>
@@ -71,7 +71,7 @@
         <div class="glass-card p-4">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-xs sm:text-sm text-gray-500">航海日记</p>
+              <p class="text-xs sm:text-sm text-gray-500">{{ diaryLabel }}</p>
               <p class="text-2xl sm:text-3xl font-bold text-[#1A1A1A] mt-1">{{ diaryCount }}</p>
             </div>
             <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-orange-100 flex items-center justify-center">
@@ -115,7 +115,7 @@
         @success="onBatchReportSuccess"
       />
 
-      <!-- 今日待办 + 航海日记 -->
+      <!-- 今日待办 + 日记 -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <!-- 今日待办 -->
         <div class="glass-card p-6">
@@ -185,7 +185,7 @@
         <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
           <NuxtLink to="/work-log" class="p-4 border rounded-lg hover:bg-blue-50 text-center bg-white hover:border-blue-300 transition-all">
             <div class="text-2xl mb-2">📝</div>
-            <p class="text-sm font-medium">工作日志</p>
+            <p class="text-sm font-medium">{{ diaryLabel }}</p>
           </NuxtLink>
           <NuxtLink to="/ships" class="p-4 border rounded-lg hover:bg-gray-50 text-center bg-white">
             <div class="text-2xl mb-2">🚢</div>
@@ -233,6 +233,7 @@ const router = useRouter()
 // 角色判断
 const isShoreCrewSupervisor = computed(() => authStore.user?.role === 'shore_crew_supervisor')
 const isShipRole = computed(() => authStore.user?.role === 'ship_political_instructor')
+const diaryLabel = computed(() => authStore.diaryTypeName)
 
 // P3-14: 角色引导文案
 const roleSubtitle = computed(() => {
