@@ -218,7 +218,7 @@
           <div class="ai-suggestion-box">
             <div class="flex items-center justify-between mb-2">
               <span class="text-sm text-[#409eff]">AI分类建议</span>
-              <el-button type="text" size="small" @click="applyAISuggestion">采纳</el-button>
+              <el-button type="primary" link size="small" @click="applyAISuggestion">采纳</el-button>
             </div>
             <el-tag type="primary" size="small" class="mr-2">{{ aiSuggestion.category }}</el-tag>
             <p class="text-xs text-[#808080] mt-2">{{ aiSuggestion.reason }}</p>

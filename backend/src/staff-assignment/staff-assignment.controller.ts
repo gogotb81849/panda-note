@@ -50,7 +50,7 @@ export class StaffAssignmentController {
   @Get('user/:userId/current')
   @UseGuards(JwtAuthGuard)
   async getCurrent(@Request() req: any, @Param('userId') userId: string) {
-    return this.staffAssignmentService.getCurrentAssignment(+userId);
+    return this.staffAssignmentService.getCurrentAssignment(+userId, req.user.teamCode);
   }
 
   @Get('user/:userId/history')
@@ -62,7 +62,7 @@ export class StaffAssignmentController {
   @Get('user/:userId/permission')
   @UseGuards(JwtAuthGuard)
   async getUserDiaryPermission(@Request() req: any, @Param('userId') userId: string) {
-    return this.staffAssignmentService.getUserDiaryPermission(+userId);
+    return this.staffAssignmentService.getUserDiaryPermission(+userId, req.user.teamCode);
   }
 
   @Get('ship/:shipId/current-staff')

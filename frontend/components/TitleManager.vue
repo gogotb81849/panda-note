@@ -259,7 +259,8 @@ const addTitle = async () => {
       body: {
         categoryFirst: form.value.categoryFirst,
         categorySecond: form.value.categorySecond,
-        description: form.value.description
+        description: form.value.description,
+        role: form.value.role
       }
     })
     ElMessage.success('添加成功')

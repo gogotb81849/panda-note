@@ -11,17 +11,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 
 const deferredPrompt = ref<any>(null)
 const showInstallButton = ref(false)
 
+const handleBeforeInstallPrompt = (e: Event) => {
+  e.preventDefault()
+  deferredPrompt.value = e
+  showInstallButton.value = true
+}
+
 onMounted(() => {
-  window.addEventListener('beforeinstallprompt', (e: Event) => {
-    e.preventDefault()
-    deferredPrompt.value = e
-    showInstallButton.value = true
-  })
+  window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
 })
 
 const install = async () => {

@@ -240,6 +240,15 @@ const flatTasks = computed(() => {
   return flatten(props.tasks)
 })
 
+// 优先级排序权重
+const priorityWeight: Record<string, number> = {
+  urgent_important: 4,
+  important: 3,
+  urgent: 2,
+  normal: 1,
+  low: 0,
+}
+
 // 筛选后的任务
 const filteredTasks = computed(() => {
   let tasks = [...flatTasks.value]
@@ -261,6 +270,28 @@ const filteredTasks = computed(() => {
   // 优先级筛选
   if (priorityFilter.value) {
     tasks = tasks.filter(t => t.priority === priorityFilter.value)
+  }
+  
+  // 排序
+  const { prop, order } = sortConfig.value
+  if (prop && order) {
+    tasks.sort((a, b) => {
+      let va: any = a[prop]
+      let vb: any = b[prop]
+      if (prop === 'priority') {
+        va = priorityWeight[va] ?? 0
+        vb = priorityWeight[vb] ?? 0
+      } else if (prop === 'dueDate' || prop === 'createdAt') {
+        va = va ? new Date(va).getTime() : 0
+        vb = vb ? new Date(vb).getTime() : 0
+      } else {
+        va = String(va ?? '')
+        vb = String(vb ?? '')
+      }
+      if (va < vb) return order === 'ascending' ? -1 : 1
+      if (va > vb) return order === 'ascending' ? 1 : -1
+      return 0
+    })
   }
   
   return tasks

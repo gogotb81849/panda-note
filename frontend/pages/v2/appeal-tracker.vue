@@ -27,25 +27,25 @@
 
     <!-- 筛选栏 -->
     <div class="filter-bar">
-      <el-select v-model="filterStatus" placeholder="全部状态" clearable style="width: 120px">
+      <el-select v-model="filterStatus" placeholder="全部状态" clearable style="width: 140px">
         <el-option label="待处理" value="pending" />
         <el-option label="处理中" value="processing" />
         <el-option label="已解决" value="resolved" />
         <el-option label="已关闭" value="closed" />
       </el-select>
-      <el-select v-model="filterPriority" placeholder="全部优先级" clearable style="width: 130px">
+      <el-select v-model="filterPriority" placeholder="全部优先级" clearable style="width: 140px">
         <el-option label="低" value="low" />
         <el-option label="普通" value="normal" />
         <el-option label="高" value="high" />
         <el-option label="紧急" value="urgent" />
       </el-select>
-      <el-select v-model="filterCategory" placeholder="全部类别" clearable style="width: 130px">
+      <el-select v-model="filterCategory" placeholder="全部类别" clearable style="width: 140px">
         <el-option v-for="c in categoryOptions" :key="c.value" :label="c.label" :value="c.value" />
       </el-select>
       <el-select v-model="filterShipId" placeholder="全部船舶" clearable filterable style="width: 160px">
         <el-option v-for="s in ships" :key="s.id" :label="s.cnShipName" :value="s.id" />
       </el-select>
-      <el-input v-model="filterSearch" placeholder="搜索标题/内容/船员/船舶" clearable style="width: 240px" @clear="loadData" @keyup.enter="loadData" />
+      <el-input v-model="filterSearch" placeholder="搜索标题/内容/船员/船舶" clearable style="width: 200px" @clear="loadData" @keyup.enter="loadData" />
       <el-button type="primary" @click="loadData">搜索</el-button>
     </div>
 

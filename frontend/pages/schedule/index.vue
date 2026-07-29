@@ -23,7 +23,7 @@
             </div>
             <!-- 有任务库时显示正常勾选界面 -->
             <template v-else>
-              <div style="margin-bottom: 12px; padding: 8px 12px; background: #ecf5ff; border-radius: 4px; font-size: 12px; color: #409eff;">
+              <div style="margin-bottom: 12px; padding: 8px 12px; background: #ecf5ff; border-radius: 4px; font-size: 12px; color: var(--color-primary);">
                 📋 已从标准任务库加载 {{ taskTemplates.length }} 个任务模板，勾选后可批量创建。如需调整分类或内容，请到【分类与任务库】管理页。
               </div>
               <div class="bulk-create-list">
@@ -34,7 +34,7 @@
                   <el-tag v-if="item.priority && item.priority !== 'normal'" size="small" type="warning" style="margin-left: 4px;">
                     {{ item.priority === 'high' ? '高' : item.priority === 'urgent' ? '紧急' : '普通' }}
                   </el-tag>
-                  <span v-else style="margin-left: 8px; flex: 1; color: #606266; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                  <span v-else style="margin-left: 8px; flex: 1; color: var(--color-gray-600); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                     {{ item.eventDetail || '（无描述）' }}
                   </span>
                 </div>
@@ -290,14 +290,14 @@
               <el-icon><MagicStick /></el-icon>
               AI 智能分类建议
             </el-button>
-            <div v-if="aiSuggestion" style="margin-top: 12px; padding: 12px; background: #f5f7fa; border-radius: 4px;">
+            <div v-if="aiSuggestion" style="margin-top: 12px; padding: 12px; background: var(--color-gray-100); border-radius: 4px;">
               <div style="display: flex; align-items: center; justify-content: space-between;">
                 <div>
-                  <span style="color: #606266; font-size: 14px;">AI 建议分类：</span>
-                  <span style="color: #409eff; font-weight: 600;">{{ aiSuggestion.categoryFirst }}</span>
-                  <span style="color: #909399;"> → </span>
-                  <span style="color: #409eff; font-weight: 600;">{{ aiSuggestion.categorySecond }}</span>
-                  <span v-if="aiSuggestion.confidence" style="margin-left: 8px; color: #909399; font-size: 12px;">
+                  <span style="color: var(--color-gray-600); font-size: 14px;">AI 建议分类：</span>
+                  <span style="color: var(--color-primary); font-weight: 600;">{{ aiSuggestion.categoryFirst }}</span>
+                  <span style="color: var(--color-info);"> → </span>
+                  <span style="color: var(--color-primary); font-weight: 600;">{{ aiSuggestion.categorySecond }}</span>
+                  <span v-if="aiSuggestion.confidence" style="margin-left: 8px; color: var(--color-info); font-size: 12px;">
                     (置信度: {{ Math.round(aiSuggestion.confidence * 100) }}%)
                   </span>
                 </div>
@@ -306,7 +306,7 @@
                   <el-button size="small" @click="aiSuggestion = null">忽略</el-button>
                 </div>
               </div>
-              <div v-if="aiSuggestion.reason" style="margin-top: 8px; color: #909399; font-size: 12px;">
+              <div v-if="aiSuggestion.reason" style="margin-top: 8px; color: var(--color-info); font-size: 12px;">
                 💡 {{ aiSuggestion.reason }}
               </div>
             </div>
@@ -806,9 +806,9 @@ const loadDailyStats = async () => {
 }
 
 const getCompletionColor = (rate: number) => {
-  if (rate >= 0.8) return '#67c23a'
-  if (rate >= 0.5) return '#e6a23c'
-  return '#f56c6c'
+  if (rate >= 0.8) return 'var(--color-success)'
+  if (rate >= 0.5) return 'var(--color-warning)'
+  return 'var(--color-danger)'
 }
 
 const getCompletionText = (item: any) => {
@@ -1020,19 +1020,19 @@ onMounted(() => {
 }
 
 .quadrant-dot.urgent-important {
-  background-color: #f56c6c;
+  background-color: var(--color-danger);
 }
 
 .quadrant-dot.important {
-  background-color: #e6a23c;
+  background-color: var(--color-warning);
 }
 
 .quadrant-dot.urgent {
-  background-color: #409eff;
+  background-color: var(--color-primary);
 }
 
 .quadrant-dot.normal {
-  background-color: #67c23a;
+  background-color: var(--color-success);
 }
 
 .search-entry {
@@ -1206,7 +1206,7 @@ onMounted(() => {
 }
 .stat-item-title {
   font-size: 12px;
-  color: #606266;
+  color: var(--color-gray-600);
   margin-bottom: 8px;
   white-space: nowrap;
   overflow: hidden;
@@ -1220,7 +1220,7 @@ onMounted(() => {
 .progress-bar-mini {
   flex: 1;
   height: 6px;
-  background: #ebeef5;
+  background: var(--color-gray-200);
   border-radius: 3px;
   overflow: hidden;
 }
@@ -1242,7 +1242,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   padding: 8px;
-  border-bottom: 1px solid #ebeef5;
+  border-bottom: 1px solid var(--color-gray-200);
 }
 .bulk-create-row:hover {
   background: #f8fafc;
@@ -1267,13 +1267,13 @@ onMounted(() => {
 .empty-guide-title {
   font-size: 18px;
   font-weight: 600;
-  color: #303133;
+  color: var(--color-gray-700);
   margin-bottom: 12px;
 }
 
 .empty-guide-desc {
   font-size: 14px;
-  color: #909399;
+  color: var(--color-info);
   line-height: 1.6;
   margin-bottom: 24px;
   max-width: 400px;

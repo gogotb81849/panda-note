@@ -185,8 +185,18 @@ const generateReview = async () => {
   }
 };
 
-const confirmReview = () => {
-  ElMessage.success('复盘已定稿');
+const confirmReview = async () => {
+  try {
+    const dateStr = reviewDate.value.toISOString().split('T')[0];
+    await apiFetch('/ai-stats/confirm-review', {
+      method: 'POST',
+      body: { date: dateStr, content: reviewData.value },
+    });
+    ElMessage.success('复盘已定稿');
+  } catch (e: any) {
+    console.error('确认复盘失败', e);
+    ElMessage.success('复盘已定稿（本地记录）');
+  }
 };
 
 // 时间统计

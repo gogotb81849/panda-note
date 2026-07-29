@@ -131,18 +131,22 @@ export class StaffAssignmentService {
   /**
    * 获取用户当前派任状态
    */
-  async getCurrentAssignment(userId: number) {
+  async getCurrentAssignment(userId: number, teamCode?: string) {
     const now = new Date();
+    const where: any = {
+      userId,
+      status: 'active',
+      startDate: { lte: now },
+      OR: [
+        { endDate: null },
+        { endDate: { gte: now } },
+      ],
+    };
+    if (teamCode) {
+      where.teamCode = teamCode as any;
+    }
     return this.prisma.staffAssignment.findFirst({
-      where: {
-        userId,
-        status: 'active',
-        startDate: { lte: now },
-        OR: [
-          { endDate: null },
-          { endDate: { gte: now } },
-        ],
-      },
+      where,
       include: {
         ship: true,
         user: { select: { id: true, realName: true, username: true, role: true } },
@@ -327,16 +331,16 @@ export class StaffAssignmentService {
   /**
    * 获取用户权限信息（用于日记查询）
    */
-  async getUserDiaryPermission(userId: number): Promise<{
+  async getUserDiaryPermission(userId: number, teamCode?: string): Promise<{
     currentShipId: number | null;
     historyShipIds: number[];
     isOnLeave: boolean;
     isOnBoard: boolean;
   }> {
-    const currentAssignment = await this.getCurrentAssignment(userId);
-    const historyAssignments = await this.getHistoryAssignments(userId);
+    const currentAssignment = await this.getCurrentAssignment(userId, teamCode);
+    const historyAssignments = await this.getHistoryAssignments(userId, teamCode);
     const isOnLeave = await this.isUserOnLeave(userId);
-    const isOnBoard = await this.isUserOnBoard(userId);
+    const isOnBoard = currentAssignment !== null && currentAssignment?.status === 'active' && currentAssignment?.endDate === null;
 
     return {
       currentShipId: currentAssignment?.shipId || null,

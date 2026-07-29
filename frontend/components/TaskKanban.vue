@@ -254,7 +254,7 @@ const onDrop = async (event: DragEvent, columnStatus: string) => {
 
 // 任务点击
 const onTaskClick = (task: any) => {
-  selectedTask.value = task
+  selectedTask.value = { ...task }
   detailVisible.value = true
   emit('task:click', task)
 }

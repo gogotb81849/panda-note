@@ -1,6 +1,8 @@
-import { Controller, Post, Get, Body, Query, Logger } from '@nestjs/common';
+import { Controller, Post, Get, Body, Query, Logger, UseGuards } from '@nestjs/common';
 import { MigrationService } from './migration.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
+@UseGuards(JwtAuthGuard)
 @Controller('migration')
 export class MigrationController {
   private readonly logger = new Logger(MigrationController.name);

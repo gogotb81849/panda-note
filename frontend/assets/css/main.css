@@ -8,23 +8,32 @@
  * 辅助色：#00508E（品牌蓝，仅用于强调/链接等）
  * ===================================================== */
 :root {
-  /* 主色体系：浅灰/白色（Notion风格） */
-  --color-primary: #f5f7fa;
-  --color-primary-hover: #eef1f5;
-  --color-primary-light: #fafbfc;
-  --color-primary-dark: #e2e6ed;
+  /* Element Plus 主色系 */
+  --color-primary: #409eff;
+  --color-primary-hover: #337ecc;
+  --color-primary-light: #79bbff;
+  --color-primary-dark: #337ecc;
 
   /* 品牌辅助蓝（用于链接、激活状态等强调） */
   --color-accent: #00508E;
   --color-accent-hover: #003d6e;
   --color-accent-light: #e6f0fa;
 
-  /* 辅助色（固定5个） */
-  --color-success: #52c41a;
-  --color-warning: #faad14;
-  --color-danger: #ff4d4f;
-  --color-info: #409eff;
+  /* Element Plus 功能色 */
+  --color-success: #67c23a;
+  --color-warning: #e6a23c;
+  --color-danger: #f56c6c;
+  --color-info: #909399;
   --color-purple: #722ed1;
+
+  /* Element Plus 灰色梯度 */
+  --color-gray-100: #f5f7fa;
+  --color-gray-200: #ebeef5;
+  --color-gray-300: #dcdfe6;
+  --color-gray-400: #c0c4cc;
+  --color-gray-500: #909399;
+  --color-gray-600: #606266;
+  --color-gray-700: #303133;
 
   /* 底色体系 */
   --color-bg: #f5f7fa;
@@ -283,6 +292,35 @@
 
   .sidebar-item.active {
     @apply bg-[var(--color-accent)] text-white shadow-sm;
+  }
+
+  /* ===== 标准表单标签宽度 ===== */
+  .el-form--standard .el-form-item__label {
+    width: 100px !important;
+  }
+  .el-form--compact .el-form-item__label {
+    width: 80px !important;
+  }
+
+  /* ===== AI 报告样式 ===== */
+  .ai-report-section {
+    background: var(--color-gray-100);
+    border-left: 4px solid var(--color-primary);
+    padding: 16px 20px;
+    border-radius: 4px;
+    margin-bottom: 16px;
+  }
+  .ai-report-section-success {
+    border-left-color: var(--color-success);
+    background: var(--color-gray-100);
+  }
+  .ai-report-section-warning {
+    border-left-color: var(--color-warning);
+    background: var(--color-gray-100);
+  }
+  .ai-report-section-danger {
+    border-left-color: var(--color-danger);
+    background: var(--color-gray-100);
   }
 
   /* ===== 手机端底部Tab导航 ===== */

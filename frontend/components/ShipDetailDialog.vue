@@ -96,7 +96,7 @@
         </div>
 
         <!-- AI分析结果 -->
-        <div v-if="aiAnalysis" class="ai-analysis-result" v-html="aiAnalysis"></div>
+        <div v-if="aiAnalysis" class="ai-analysis-result" v-html="sanitizedAiAnalysis"></div>
 
         <!-- 历史笔记 -->
         <div class="notes-history" v-if="notes.length > 0">
@@ -342,6 +342,19 @@ const newNoteTags = ref('')
 const saving = ref(false)
 const analyzing = ref(false)
 const aiAnalysis = ref('')
+
+const sanitizedAiAnalysis = computed(() => {
+  if (!aiAnalysis.value) return ''
+  return aiAnalysis.value
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<iframe[^>]*>[\s\S]*?<\/iframe>/gi, '')
+    .replace(/<object[^>]*>[\s\S]*?<\/object>/gi, '')
+    .replace(/on\w+="[^"]*"/gi, '')
+    .replace(/on\w+='[^']*'/gi, '')
+    .replace(/on\w+=\w+/gi, '')
+    .replace(/javascript:/gi, '')
+    .replace(/vbscript:/gi, '')
+})
 
 // 船舶报告书签相关状态
 const activeTab = ref<'report' | 'political' | 'notes'>('report')

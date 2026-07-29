@@ -47,7 +47,7 @@ export class AuthController {
   @Post('switch-role')
   async switchRole(@Request() req, @Body() dto: SwitchRoleDto) {
     const userId = req.user.sub || req.user.id;
-    console.log('[switchRole] 请求信息:', { userId, reqUser: req.user, targetRole: dto.role, targetUserId: dto.targetUserId });
+    console.log('[switchRole] 请求信息:', { userId, targetRole: dto.role, targetUserId: dto.targetUserId });
     if (!userId) {
       throw new ForbiddenException('无效的token，请重新登录');
     }

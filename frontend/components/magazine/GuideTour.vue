@@ -87,7 +87,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { Close, InfoFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import type { GuideStep } from './types'
@@ -306,6 +306,10 @@ watch(currentStep, () => {
 onMounted(() => {
   startGuide()
   window.addEventListener('resize', updateTarget)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', updateTarget)
 })
 
 // 暴露方法

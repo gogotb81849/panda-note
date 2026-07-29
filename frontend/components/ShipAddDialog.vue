@@ -5,9 +5,9 @@
     width="600px"
     @close="handleClose"
   >
-    <el-form :model="form" label-width="100px">
-      <el-form-item label="中文船名">
-        <el-input v-model="form.cnShipName" />
+    <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
+      <el-form-item label="中文船名" prop="cnShipName">
+        <el-input v-model="form.cnShipName" placeholder="请输入中文船名" />
       </el-form-item>
       <el-form-item label="英文船名">
         <el-input v-model="form.enShipName" />
@@ -25,7 +25,13 @@
         <el-input v-model="form.deadweightTonnage" />
       </el-form-item>
       <el-form-item label="出厂时间">
-        <el-input v-model="form.factoryDate" placeholder="如：2020" />
+        <el-date-picker
+          v-model="form.factoryDate"
+          type="date"
+          placeholder="选择日期"
+          style="width: 100%"
+          value-format="YYYY-MM-DD"
+        />
       </el-form-item>
       <el-form-item label="所属团队">
         <el-input v-model="form.teamDisplayName" />
@@ -49,7 +55,13 @@
         <el-input v-model="form.instructorIdNumber" placeholder="18位身份证号" maxlength="18" />
       </el-form-item>
       <el-form-item label="上船时间">
-        <el-input v-model="form.onBoardDate" />
+        <el-date-picker
+          v-model="form.onBoardDate"
+          type="date"
+          placeholder="选择日期"
+          style="width: 100%"
+          value-format="YYYY-MM-DD"
+        />
       </el-form-item>
       <el-form-item label="在船天数">
         <el-input v-model="form.daysOnBoard" />
@@ -80,13 +92,25 @@ const dialogVisible = computed({
   set: (val: boolean) => emit('update:modelValue', val),
 })
 
+const formRef = ref()
 const form = ref<Partial<Ship>>({})
+
+const rules = {
+  cnShipName: [
+    { required: true, message: '请输入中文船名', trigger: 'blur' },
+  ],
+}
 
 const handleClose = () => {
   form.value = {}
 }
 
-const handleSave = () => {
-  emit('save', { ...form.value })
+const handleSave = async () => {
+  if (!formRef.value) return
+  await formRef.value.validate((valid: boolean) => {
+    if (valid) {
+      emit('save', { ...form.value })
+    }
+  })
 }
 </script>

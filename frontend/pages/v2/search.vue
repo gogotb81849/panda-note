@@ -111,10 +111,13 @@
 import { ref, computed } from 'vue';
 import { Search, Loading, Ship, Collection, User } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
+import { useAuthStore } from '~/stores/auth';
 
 definePageMeta({
   layout: false,
 });
+
+const authStore = useAuthStore();
 
 const searchQuery = ref('');
 const lastQuery = ref('');
@@ -151,7 +154,7 @@ async function doSearch() {
   lastQuery.value = q;
 
   try {
-    const token = localStorage.getItem('token');
+    const token = authStore.token || localStorage.getItem('auth_token');
     const response = await $fetch('/api/search', {
       method: 'GET',
       params: { q },

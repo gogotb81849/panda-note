@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Query, Res, UseGuards, Body, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Query, Res, UseGuards, Body, BadRequestException, Request } from '@nestjs/common';
 import { Response } from 'express';
 import { DataExportService } from './data-export.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -22,11 +22,13 @@ export class DataExportController {
 
   @Get('schedules')
   async exportSchedules(
+    @Request() req: any,
     @Res() res: Response,
-    @Query('teamCode') teamCode: string,
+    @Query('teamCode') queryTeamCode?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
   ) {
+    const teamCode = req.user.role === 'admin' && queryTeamCode ? queryTeamCode : req.user.teamCode;
     if (!teamCode) {
       throw new BadRequestException('团队代码不能为空');
     }
@@ -39,11 +41,13 @@ export class DataExportController {
 
   @Get('diaries')
   async exportDiaries(
+    @Request() req: any,
     @Res() res: Response,
-    @Query('teamCode') teamCode: string,
+    @Query('teamCode') queryTeamCode?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
   ) {
+    const teamCode = req.user.role === 'admin' && queryTeamCode ? queryTeamCode : req.user.teamCode;
     if (!teamCode) {
       throw new BadRequestException('团队代码不能为空');
     }
@@ -56,9 +60,11 @@ export class DataExportController {
 
   @Get('party-activities')
   async exportPartyActivities(
+    @Request() req: any,
     @Res() res: Response,
-    @Query('teamCode') teamCode: string,
+    @Query('teamCode') queryTeamCode?: string,
   ) {
+    const teamCode = req.user.role === 'admin' && queryTeamCode ? queryTeamCode : req.user.teamCode;
     if (!teamCode) {
       throw new BadRequestException('团队代码不能为空');
     }
