@@ -26,11 +26,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         realName: true,
         teamCode: true,
         role: true,
+        roles: true,
+        lastLoginAt: true,
         createdAt: true,
         updatedAt: true,
-        password: false,
-        refreshToken: false,
-        ipAddresses: false,
       },
     });
     return user;
