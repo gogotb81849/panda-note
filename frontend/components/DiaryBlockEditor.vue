@@ -18,7 +18,7 @@
         @dragstart="onDragStart(idx, $event)"
         @dragend="onDragEnd"
         @dragover.prevent="dropIdx = idx"
-        @dragleave="if(dropIdx===idx) dropIdx = null"
+        @dragleave="dropIdx = dropIdx === idx ? null : dropIdx"
         @drop.prevent="onDrop(idx)"
       >
         <!-- 拖拽手柄 + 块类型标签 -->
