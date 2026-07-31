@@ -12,9 +12,6 @@
 
     <!-- 顶部日期选择器 -->
     <div class="date-selector">
-      <button class="nav-btn" @click="prevDay">
-        <el-icon><ArrowLeft /></el-icon>
-      </button>
       <div class="date-display" @click="showDatePicker = true">
         <span class="date-big">{{ selectedDateDay }}</span>
         <div class="date-meta">
@@ -22,15 +19,18 @@
           <span class="date-lunar">{{ lunarInfo.lunar }}{{ lunarInfo.holiday ? ' ' + lunarInfo.holiday : '' }}</span>
         </div>
       </div>
+      <button class="nav-btn" @click="prevDay">
+        <el-icon><ArrowLeft /></el-icon>
+      </button>
+      <button class="today-btn" @click="goToday">今天</button>
       <button class="nav-btn" @click="nextDay">
         <el-icon><ArrowRight /></el-icon>
       </button>
-      <button class="today-btn" @click="goToday">今天</button>
       <!-- 弹出式迷你日历（类似下拉框日历） -->
       <el-popover placement="bottom" :width="280" trigger="click" v-model:visible="calPopoverVisible">
         <template #reference>
           <button class="today-btn calendar-trigger-btn">
-            <span>📅 {{ formattedSelectedDate }}</span>
+            <span>📅 {{ formattedSelectedDate }} 月历</span>
             <el-icon class="cal-trigger-arrow"><ArrowDown /></el-icon>
           </button>
         </template>
@@ -186,37 +186,31 @@
 
         <!-- 非政委表单 -->
         <template v-else>
-          <div class="info-bar">
-            <div class="info-row">
-              <div class="info-group">
-                <label class="info-label">天气</label>
-                <el-select v-model="diaryForm.weather" placeholder="天气" size="small">
-                  <el-option label="☀ 晴" value="晴" />
-                  <el-option label="☁ 多云" value="多云" />
-                  <el-option label="☂ 阴" value="阴" />
-                  <el-option label="🌦 小雨" value="小雨" />
-                  <el-option label="🌧 中雨" value="中雨" />
-                  <el-option label="🌧 大雨" value="大雨" />
-                  <el-option label="🌧 暴雨" value="暴雨" />
-                  <el-option label="🌫 雾" value="雾" />
-                  <el-option label="❄ 雪" value="雪" />
-                  <el-option label="⛈ 雷阵雨" value="雷阵雨" />
-                </el-select>
-              </div>
-              <div class="info-group">
-                <label class="info-label">今日动态</label>
-                <el-select v-model="diaryForm.dynamicStatus" placeholder="今日动态" size="small">
-                  <el-option label="在公司" value="在公司" />
-                  <el-option label="出差访船" value="出差访船" />
-                  <el-option label="出差路上" value="出差路上" />
-                  <el-option label="培训" value="培训" />
-                  <el-option label="开会" value="开会" />
-                  <el-option label="休假" value="休假" />
-                  <el-option label="其他" value="其他" />
-                </el-select>
-              </div>
-              <div class="info-group">
-                <label class="info-label">船舶</label>
+          <div class="info-bar compact-info-bar">
+            <div class="compact-row">
+              <el-select v-model="diaryForm.weather" placeholder="天气" size="small" class="compact-select">
+                <el-option label="☀ 晴" value="晴" />
+                <el-option label="☁ 多云" value="多云" />
+                <el-option label="☂ 阴" value="阴" />
+                <el-option label="🌦 小雨" value="小雨" />
+                <el-option label="🌧 中雨" value="中雨" />
+                <el-option label="🌧 大雨" value="大雨" />
+                <el-option label="🌧 暴雨" value="暴雨" />
+                <el-option label="🌫 雾" value="雾" />
+                <el-option label="❄ 雪" value="雪" />
+                <el-option label="⛈ 雷阵雨" value="雷阵雨" />
+              </el-select>
+              <el-select v-model="diaryForm.dynamicStatus" placeholder="今日动态" size="small" class="compact-select">
+                <el-option label="在公司" value="在公司" />
+                <el-option label="出差访船" value="出差访船" />
+                <el-option label="出差路上" value="出差路上" />
+                <el-option label="培训" value="培训" />
+                <el-option label="开会" value="开会" />
+                <el-option label="休假" value="休假" />
+                <el-option label="其他" value="其他" />
+              </el-select>
+              <div class="compact-ship-group">
+                <span class="compact-ship-label">船舶</span>
                 <div v-if="detectedShipName" class="ship-name-badge" title="自动识别船舶">
                   <el-tag type="primary" size="small" effect="light">🚢 {{ detectedShipName }}</el-tag>
                 </div>
@@ -993,23 +987,28 @@ onMounted(async () => {
 .date-selector {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 16px;
+  gap: 8px;
+  padding: 10px 16px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   border-radius: 12px;
   color: white;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .nav-btn {
   background: rgba(255, 255, 255, 0.2);
   border: none;
   border-radius: 8px;
-  padding: 8px 10px;
+  height: 36px;
+  min-width: 36px;
+  padding: 0 10px;
   color: white;
   cursor: pointer;
   transition: all 0.2s;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .nav-btn:hover {
@@ -1025,7 +1024,7 @@ onMounted(async () => {
 }
 
 .date-big {
-  font-size: 28px;
+  font-size: 34px;
   font-weight: 700;
   line-height: 1;
   white-space: nowrap;
@@ -1053,12 +1052,16 @@ onMounted(async () => {
   background: rgba(255, 255, 255, 0.2);
   border: none;
   border-radius: 8px;
-  padding: 8px 14px;
+  height: 36px;
+  padding: 0 16px;
   color: white;
   cursor: pointer;
   font-size: 13px;
   transition: all 0.2s;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .today-btn:hover {
@@ -1066,15 +1069,47 @@ onMounted(async () => {
 }
 
 .calendar-trigger-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+  gap: 6px;
+  padding: 0 20px !important;
   white-space: nowrap;
 }
 
 .cal-trigger-arrow {
   font-size: 11px;
   opacity: 0.85;
+}
+
+/* ===== 紧凑信息栏（天气/今日动态/船舶 一行） ===== */
+.compact-info-bar {
+  padding: 6px 12px !important;
+}
+
+.compact-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.compact-select {
+  width: 130px !important;
+  flex-shrink: 0;
+}
+
+.compact-ship-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.compact-ship-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #303133;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .diary-section {
@@ -1220,23 +1255,43 @@ onMounted(async () => {
 
 @media (max-width: 767px) {
   .date-selector {
-    padding: 10px 12px;
+    padding: 8px 10px;
+    gap: 6px;
   }
 
   .date-big {
-    font-size: 22px;
+    font-size: 24px;
   }
 
   .date-weekday {
-    font-size: 12px;
+    font-size: 11px;
   }
 
   .date-lunar {
     font-size: 10px;
   }
 
+  .nav-btn {
+    height: 32px;
+    min-width: 32px;
+  }
+
   .today-btn {
-    padding: 6px 10px;
+    height: 32px;
+    padding: 0 10px;
+    font-size: 12px;
+  }
+
+  .calendar-trigger-btn {
+    padding: 0 12px !important;
+    font-size: 11px;
+  }
+
+  .compact-select {
+    width: 100px !important;
+  }
+
+  .compact-ship-label {
     font-size: 12px;
   }
 
@@ -1291,7 +1346,7 @@ onMounted(async () => {
   }
 
   .date-big {
-    font-size: 20px;
+    font-size: 28px;
   }
 
   .date-weekday {
