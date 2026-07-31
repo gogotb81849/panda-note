@@ -34,52 +34,50 @@
       </template>
     </el-dialog>
 
-    <!-- 迷你日历 -->
-    <div class="calendar-section" :class="{ 'calendar-collapsed': calendarCollapsed }">
-      <div class="calendar-header" @click="calendarCollapsed = !calendarCollapsed">
-        <span class="calendar-title">📅 {{ calendarYearMonth }}</span>
-        <div class="calendar-nav">
-          <button class="cal-nav-btn" @click.stop="prevMonth">‹</button>
-          <button class="cal-nav-btn" @click.stop="nextMonth">›</button>
-          <el-icon class="calendar-toggle-icon">
-            <ArrowDown v-if="calendarCollapsed" />
-            <ArrowUp v-else />
-          </el-icon>
-        </div>
-      </div>
-      <div v-show="!calendarCollapsed" class="calendar-body">
-        <!-- 星期表头 -->
-        <div class="mini-cal-weekdays">
-          <span v-for="w in weekdayLabels" :key="w">{{ w }}</span>
-        </div>
-        <!-- 日期网格 -->
-        <div class="mini-cal-grid">
-          <div
-            v-for="day in miniCalendarDays"
-            :key="day.dateStr"
-            class="mini-cal-day"
-            :class="{
-              'is-other-month': !day.inCurrentMonth,
-              'is-today': day.isToday,
-              'is-selected': day.isSelected,
-              'has-diary': day.hasDiary,
-              'has-todo': day.hasTodo,
-            }"
-            @click="jumpToDate(day.dateStr)"
-          >
-            <span class="mini-cal-daynum">{{ day.dayNum }}</span>
-            <span class="mini-cal-dots">
-              <span v-if="day.hasDiary" class="dot dot-diary"></span>
-              <span v-if="day.hasTodo" class="dot dot-todo"></span>
-            </span>
+    <!-- 弹出式迷你日历（类似下拉框日历） -->
+    <div class="cal-trigger-bar">
+      <el-popover placement="bottom" :width="280" trigger="click" v-model:visible="calPopoverVisible">
+        <template #reference>
+          <button class="cal-trigger-btn">
+            <span>📅 {{ calendarYearMonth }} · {{ formattedSelectedDate }}</span>
+            <el-icon class="cal-trigger-arrow"><ArrowDown /></el-icon>
+          </button>
+        </template>
+        <!-- 弹出日历内容 -->
+        <div class="mini-cal-popover">
+          <div class="mini-cal-head">
+            <button class="mc-nav-btn" @click="prevMonth">‹</button>
+            <span class="mc-title">{{ calendarYearMonth }}</span>
+            <button class="mc-nav-btn" @click="nextMonth">›</button>
+          </div>
+          <div class="mini-cal-weekdays">
+            <span v-for="w in weekdayLabels" :key="w">{{ w }}</span>
+          </div>
+          <div class="mini-cal-grid">
+            <div
+              v-for="day in miniCalendarDays"
+              :key="day.dateStr"
+              class="mc-day"
+              :class="{
+                'is-other-month': !day.inCurrentMonth,
+                'is-today': day.isToday,
+                'is-selected': day.isSelected,
+                'has-diary': day.hasDiary,
+                'has-todo': day.hasTodo,
+              }"
+              @click="jumpToDate(day.dateStr); calPopoverVisible = false"
+            >
+              <span class="mc-daynum">{{ day.dayNum }}</span>
+              <span v-if="day.hasDiary" class="mc-dot mc-dot-diary"></span>
+              <span v-if="day.hasTodo" class="mc-dot mc-dot-todo"></span>
+            </div>
+          </div>
+          <div class="mini-cal-legend">
+            <span class="mc-legend-item"><span class="mc-dot mc-dot-diary"></span>日记</span>
+            <span class="mc-legend-item"><span class="mc-dot mc-dot-todo"></span>待办</span>
           </div>
         </div>
-        <!-- 图例 -->
-        <div class="mini-cal-legend">
-          <span class="legend-item"><span class="dot dot-diary"></span>有日记</span>
-          <span class="legend-item"><span class="dot dot-todo"></span>有待办</span>
-        </div>
-      </div>
+      </el-popover>
     </div>
 
     <!-- 日记编辑器 -->
@@ -267,7 +265,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
-import { ArrowLeft, ArrowRight, ArrowUp, ArrowDown } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowRight, ArrowDown } from '@element-plus/icons-vue'
 import DiaryBlockEditor from '~/components/DiaryBlockEditor.vue'
 import type DiaryBlockEditorComp from '~/components/DiaryBlockEditor.vue'
 import { ElMessage } from 'element-plus'
@@ -293,7 +291,7 @@ const selectedDate = ref(new Date())
 const tempDate = ref(new Date())
 const showDatePicker = ref(false)
 const calendarDate = ref(new Date())
-const calendarCollapsed = ref(false)
+const calPopoverVisible = ref(false)
 const diaryDates = ref<Set<string>>(new Set())
 
 const schedules = ref<Schedule[]>([])
@@ -336,6 +334,11 @@ const selectedDateLabel = computed(() => {
   const d = selectedDate.value
   const weekDays = ['日', '一', '二', '三', '四', '五', '六']
   return `${d.getMonth() + 1}月${d.getDate()}日 周${weekDays[d.getDay()]}`
+})
+
+const formattedSelectedDate = computed(() => {
+  const d = selectedDate.value
+  return `${d.getMonth() + 1}/${d.getDate()}`
 })
 
 const selectedDateStr = computed(() => {
@@ -828,187 +831,182 @@ onMounted(async () => {
   margin: 0 auto;
 }
 
-.calendar-section {
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-  margin-bottom: 16px;
-  overflow: hidden;
+/* ===== 弹出式迷你日历 ===== */
+.cal-trigger-bar {
+  margin-bottom: 12px;
 }
 
-.calendar-header {
+.cal-trigger-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 1px solid #dcdfe6;
+  border-radius: 8px;
+  background: white;
+  font-size: 13px;
+  color: #303133;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.cal-trigger-btn:hover {
+  border-color: #409eff;
+  color: #409eff;
+}
+
+.cal-trigger-arrow {
+  font-size: 12px;
+  color: #909399;
+}
+
+/* 弹出日历面板 */
+.mini-cal-popover {
+  padding: 4px 0;
+  user-select: none;
+}
+
+.mini-cal-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 16px;
-  cursor: pointer;
-  user-select: none;
-  transition: background 0.2s;
+  padding: 0 4px 8px;
 }
 
-.calendar-header:hover {
-  background: #f5f7fa;
-}
-
-.calendar-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #1a1a1a;
-}
-
-.calendar-nav {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.cal-nav-btn {
+.mc-nav-btn {
   width: 24px;
   height: 24px;
   border: none;
   background: transparent;
   color: #606266;
-  font-size: 18px;
-  line-height: 1;
+  font-size: 16px;
   cursor: pointer;
   border-radius: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s;
 }
 
-.cal-nav-btn:hover {
-  background: #ecf0f1;
+.mc-nav-btn:hover {
+  background: #f0f2f5;
   color: #409eff;
 }
 
-.calendar-toggle-icon {
-  color: #909399;
-  transition: transform 0.2s;
-  margin-left: 4px;
+.mc-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1a1a1a;
 }
 
-.calendar-collapsed .calendar-toggle-icon {
-  transform: rotate(180deg);
-}
-
-.calendar-body {
-  padding: 8px 12px 12px;
-}
-
-/* 迷你日历星期表头 */
 .mini-cal-weekdays {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 2px;
-  margin-bottom: 4px;
+  gap: 1px;
+  margin-bottom: 2px;
 }
 
 .mini-cal-weekdays span {
   text-align: center;
-  font-size: 11px;
-  color: #909399;
+  font-size: 10px;
+  color: #c0c4cc;
   font-weight: 500;
-  padding: 2px 0;
+  padding: 1px 0;
 }
 
-/* 迷你日历日期网格 */
 .mini-cal-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 2px;
+  gap: 1px;
 }
 
-.mini-cal-day {
-  aspect-ratio: 1;
+.mc-day {
+  height: 28px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
+  border-radius: 4px;
   cursor: pointer;
   position: relative;
   transition: background 0.15s;
-  min-height: 32px;
 }
 
-.mini-cal-day:hover {
+.mc-day:hover {
   background: #ecf5ff;
 }
 
-.mini-cal-day.is-other-month {
-  opacity: 0.35;
+.mc-day.is-other-month {
+  opacity: 0.3;
 }
 
-.mini-cal-day.is-today {
+.mc-day.is-today {
   background: #f0f9ff;
   border: 1px solid #409eff;
 }
 
-.mini-cal-day.is-selected {
+.mc-day.is-selected {
   background: #409eff;
 }
 
-.mini-cal-day.is-selected .mini-cal-daynum {
+.mc-day.is-selected .mc-daynum {
   color: white;
   font-weight: 700;
 }
 
-.mini-cal-daynum {
-  font-size: 13px;
+.mc-daynum {
+  font-size: 11px;
   color: #303133;
-  line-height: 1.2;
+  line-height: 1;
 }
 
-.mini-cal-day.has-diary .mini-cal-daynum {
+.mc-day.has-diary .mc-daynum {
   color: #67c23a;
   font-weight: 600;
 }
 
-.mini-cal-day.has-todo .mini-cal-daynum {
+.mc-day.has-todo .mc-daynum {
   color: #f56c6c;
   font-weight: 600;
 }
 
-/* 日期下方的点标记 */
-.mini-cal-dots {
-  display: flex;
-  gap: 3px;
-  margin-top: 1px;
-  height: 4px;
-}
-
-.dot {
-  width: 4px;
-  height: 4px;
+.mc-dot {
+  width: 3px;
+  height: 3px;
   border-radius: 50%;
+  position: absolute;
+  bottom: 2px;
 }
 
-.dot-diary {
+.mc-dot-diary {
   background: #67c23a;
+  left: calc(50% - 4px);
 }
 
-.dot-todo {
+.mc-dot-todo {
   background: #f56c6c;
+  left: calc(50% + 1px);
 }
 
-/* 图例 */
+.mc-day.is-selected .mc-dot {
+  opacity: 0.8;
+}
+
 .mini-cal-legend {
   display: flex;
-  gap: 16px;
+  gap: 12px;
   justify-content: center;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid #f0f0f0;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid #f5f5f5;
 }
 
-.legend-item {
+.mc-legend-item {
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  color: #909399;
+  gap: 3px;
+  font-size: 10px;
+  color: #c0c4cc;
 }
 
 .date-selector {
