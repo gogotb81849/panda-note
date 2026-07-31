@@ -168,10 +168,10 @@
       <el-tooltip content="日记：记录今天发生的事情、会议、工作内容等客观事实" placement="top" :show-after="300">
         <el-button size="small" @click="insertBlock('diary')">+ 日记</el-button>
       </el-tooltip>
-      <el-tooltip content="备忘：提醒自己不要忘记的事情，如"别忘了下午开会"" placement="top" :show-after="300">
+      <el-tooltip content="备忘：提醒自己不要忘记的事情，如「别忘了下午开会」" placement="top" :show-after="300">
         <el-button size="small" type="warning" @click="insertBlock('memo')">+ 备忘</el-button>
       </el-tooltip>
-      <el-tooltip content="待办：需要完成的任务，如"给某轮送备件"。未完成的待办会自动显示在船舶卡片中" placement="top" :show-after="300">
+      <el-tooltip content="待办：需要完成的任务，如「给某轮送备件」。未完成的待办会自动显示在船舶卡片中" placement="top" :show-after="300">
         <el-button size="small" type="primary" @click="insertBlock('todo')">+ 待办</el-button>
       </el-tooltip>
       <el-tooltip content="图片：粘贴图片 URL，支持点击大图查看" placement="top" :show-after="300">
