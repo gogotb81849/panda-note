@@ -87,6 +87,7 @@ model User {
   createdStandardTaskTemplates StandardTaskTemplate[] @relation("StandardTaskTemplateCreatedBy")
   recurringScheduleTemplatesAssigned RecurringScheduleTemplate[] @relation("RecurringScheduleAssignedTo")
   recurringScheduleTemplatesCreated RecurringScheduleTemplate[] @relation("RecurringScheduleCreatedBy")
+  diaryBlocks  DiaryBlock[]
 
   @@index([username])
 }
@@ -180,6 +181,7 @@ model Ship {
   healthReports HealthReportUpload[]
   partyConfig  ShipPartyConfig?
   recurringScheduleTemplates RecurringScheduleTemplate[]
+  diaryBlocks  DiaryBlock[]
 }
 
 // 船舶党建差异化配置表（一船一策）
@@ -247,6 +249,7 @@ model Schedule {
 
   // 反向关联：一条日程可被多条日记引用
   relatedDiaries DiaryScheduleRelation[]
+  diaryBlocks  DiaryBlock[]
 
   @@index([teamCode, recordDate])
   @@index([teamCode, shipId])
