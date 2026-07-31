@@ -26,23 +26,11 @@
         <el-icon><ArrowRight /></el-icon>
       </button>
       <button class="today-btn" @click="goToday">今天</button>
-    </div>
-
-    <!-- 日期选择弹窗 -->
-    <el-dialog v-model="showDatePicker" title="选择日期" width="360px" :close-on-click-modal="true">
-      <el-calendar v-model="tempDate" />
-      <template #footer>
-        <el-button @click="showDatePicker = false">取消</el-button>
-        <el-button type="primary" @click="confirmDate">确定</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- 弹出式迷你日历（类似下拉框日历） -->
-    <div class="cal-trigger-bar">
+      <!-- 弹出式迷你日历（类似下拉框日历） -->
       <el-popover placement="bottom" :width="280" trigger="click" v-model:visible="calPopoverVisible">
         <template #reference>
-          <button class="cal-trigger-btn">
-            <span>📅 {{ calendarYearMonth }} · {{ formattedSelectedDate }}</span>
+          <button class="today-btn calendar-trigger-btn">
+            <span>📅 {{ formattedSelectedDate }}</span>
             <el-icon class="cal-trigger-arrow"><ArrowDown /></el-icon>
           </button>
         </template>
@@ -82,6 +70,15 @@
         </div>
       </el-popover>
     </div>
+
+    <!-- 日期选择弹窗 -->
+    <el-dialog v-model="showDatePicker" title="选择日期" width="360px" :close-on-click-modal="true">
+      <el-calendar v-model="tempDate" />
+      <template #footer>
+        <el-button @click="showDatePicker = false">取消</el-button>
+        <el-button type="primary" @click="confirmDate">确定</el-button>
+      </template>
+    </el-dialog>
 
     <!-- 日记编辑器 -->
     <div class="diary-section">
@@ -845,36 +842,6 @@ onMounted(async () => {
   margin: 0 auto;
 }
 
-/* ===== 弹出式迷你日历 ===== */
-.cal-trigger-bar {
-  margin-bottom: 12px;
-}
-
-.cal-trigger-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
-  border: 1px solid #dcdfe6;
-  border-radius: 8px;
-  background: white;
-  font-size: 13px;
-  color: #303133;
-  cursor: pointer;
-  transition: all 0.2s;
-  white-space: nowrap;
-}
-
-.cal-trigger-btn:hover {
-  border-color: #409eff;
-  color: #409eff;
-}
-
-.cal-trigger-arrow {
-  font-size: 12px;
-  color: #909399;
-}
-
 /* 弹出日历面板 */
 .mini-cal-popover {
   padding: 4px 0;
@@ -1096,6 +1063,18 @@ onMounted(async () => {
 
 .today-btn:hover {
   background: rgba(255, 255, 255, 0.3);
+}
+
+.calendar-trigger-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.cal-trigger-arrow {
+  font-size: 11px;
+  opacity: 0.85;
 }
 
 .diary-section {
