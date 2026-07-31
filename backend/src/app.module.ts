@@ -52,6 +52,7 @@ import { NotificationModule } from './notification/notification.module';
 import { MagazineModule } from './magazine/magazine.module';
 import { MockDataModule } from './mock-data/mock-data.module';
 import { ShipNoteModule } from './ship-note/ship-note.module';
+import { DiaryBlockModule } from './diary-block/diary-block.module';
 
 @Module({
   imports: [
@@ -107,6 +108,7 @@ import { ShipNoteModule } from './ship-note/ship-note.module';
     MagazineModule,
     MockDataModule,
     ShipNoteModule,
+    DiaryBlockModule,
   ],
   controllers: [HealthController],
   providers: [],

@@ -57,6 +57,19 @@
           :class="{ 'report-tab--active': activeTab === 'notes' }"
           @click="activeTab = 'notes'"
         >📝 交流记录</div>
+        <div
+          class="report-tab"
+          :class="{ 'report-tab--active': activeTab === 'diaryBlocks' }"
+          @click="activeTab = 'diaryBlocks'; loadDiaryBlocks()"
+        >
+          📌 日记流转
+          <el-badge
+            v-if="unfinishedDiaryTodoCount > 0"
+            :value="unfinishedDiaryTodoCount"
+            :max="99"
+            class="todo-badge"
+          />
+        </div>
       </div>
 
       <!-- 交流记录区域 -->
@@ -286,6 +299,85 @@
           <div class="dynamic-empty-tip">请通过首页「批量粘贴政委报告」功能导入微信报告。</div>
         </div>
       </div>
+
+      <!-- 日记流转区域（来自船管日记的待办、备忘、日记自动流转） -->
+      <div class="notes-section diary-blocks-section" v-show="activeTab === 'diaryBlocks'">
+        <div class="section-header">
+          <h4 class="section-title">📌 日记流转（来自船管日记的自动记录）</h4>
+          <el-tag size="small" type="info">待办完成后自动隐藏</el-tag>
+        </div>
+        <div class="diary-blocks-tip">
+          以下内容来自用户在「船管笔记」中记录的与本船相关的条目（待办/备忘/日记）。
+          只有未完成的待办会显示，完成后自动归档。
+        </div>
+
+        <div v-if="loadingDiaryBlocks" class="dynamic-empty">
+          <div class="dynamic-empty-text">加载中...</div>
+        </div>
+        <div v-else-if="!diaryBlocksFromShip.length" class="dynamic-empty">
+          <div class="dynamic-empty-icon">📋</div>
+          <div class="dynamic-empty-text">暂无从日记流转的记录</div>
+          <div class="dynamic-empty-tip">在船管笔记中输入"船名 + 内容"，如「远顺海轮需制作图章」，系统会自动识别并流转到此处。</div>
+        </div>
+        <div v-else class="diary-block-list">
+          <div
+            v-for="blk in diaryBlocksFromShip"
+            :key="blk.id"
+            class="diary-block-card"
+            :class="{ completed: blk.blockType === 'todo' && blk.todoStatus === 'completed' }"
+          >
+            <div class="dbc-head">
+              <el-tag
+                :type="blk.blockType === 'todo' ? 'primary' : blk.blockType === 'memo' ? 'warning' : 'success'"
+                size="small"
+              >{{ blk.blockType === 'todo' ? '待办' : blk.blockType === 'memo' ? '备忘' : blk.blockType === 'image' ? '图片' : blk.blockType === 'file' ? '文件' : blk.blockType === 'link' ? '链接' : '日记' }}</el-tag>
+              <span class="dbc-date" v-if="blk.diary?.date">{{ formatDiaryDate(blk.diary.date) }}</span>
+            </div>
+            <div class="dbc-body">
+              <!-- 待办：前置勾选框 -->
+              <div v-if="blk.blockType === 'todo'" class="dbc-todo-checkbox">
+                <el-checkbox
+                  :model-value="blk.todoStatus === 'completed'"
+                  @change="toggleDiaryBlockTodo(blk, $event)"
+                />
+              </div>
+              <div class="dbc-content">
+                <!-- 链接块 -->
+                <el-link
+                  v-if="blk.blockType === 'link' && extractLinkMeta(blk.metaJson, blk.content).url"
+                  :href="extractLinkMeta(blk.metaJson, blk.content).url"
+                  target="_blank"
+                  type="primary"
+                >
+                  <el-icon><Link /></el-icon>
+                  {{ extractLinkMeta(blk.metaJson, blk.content).title || extractLinkMeta(blk.metaJson, blk.content).url }}
+                </el-link>
+                <!-- 文件块 -->
+                <el-link
+                  v-else-if="blk.blockType === 'file' && extractLinkMeta(blk.metaJson, blk.content).url"
+                  :href="extractLinkMeta(blk.metaJson, blk.content).url"
+                  target="_blank"
+                >
+                  <el-icon><Paperclip /></el-icon>
+                  {{ extractLinkMeta(blk.metaJson, blk.content).title || '附件' }}
+                </el-link>
+                <!-- 图片块 -->
+                <img
+                  v-else-if="blk.blockType === 'image' && extractLinkMeta(blk.metaJson, blk.content).url"
+                  :src="extractLinkMeta(blk.metaJson, blk.content).url"
+                  class="dbc-image"
+                />
+                <!-- 默认文本 -->
+                <span v-else>{{ blk.content }}</span>
+              </div>
+            </div>
+            <div v-if="blk.detectedShipName" class="dbc-foot">
+              <el-tag size="small" effect="plain" type="info">🚢 {{ blk.detectedShipName }}</el-tag>
+              <span v-if="blk.userChanged" class="dbc-user-opt">👤 用户确认类型</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </el-dialog>
 
@@ -314,7 +406,7 @@
 
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
-import { MagicStick } from '@element-plus/icons-vue'
+import { MagicStick, Paperclip, Link } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { ShipDynamicStatus } from '~/types'
 
@@ -343,6 +435,10 @@ const saving = ref(false)
 const analyzing = ref(false)
 const aiAnalysis = ref('')
 
+// 日记流转（船管日记→船舶卡片）相关状态
+const diaryBlocksFromShip = ref<any[]>([])
+const loadingDiaryBlocks = ref(false)
+
 const sanitizedAiAnalysis = computed(() => {
   if (!aiAnalysis.value) return ''
   return aiAnalysis.value
@@ -356,8 +452,13 @@ const sanitizedAiAnalysis = computed(() => {
     .replace(/vbscript:/gi, '')
 })
 
+// 未完成待办数量（用于 Tab 右上角角标）
+const unfinishedDiaryTodoCount = computed(() =>
+  diaryBlocksFromShip.value.filter(b => b.blockType === 'todo' && b.todoStatus !== 'completed').length,
+)
+
 // 船舶报告书签相关状态
-const activeTab = ref<'report' | 'political' | 'notes'>('report')
+const activeTab = ref<'report' | 'political' | 'notes' | 'diaryBlocks'>('report')
 
 // 当前船舶动态数据来源与更新时间（从 shipDetail 读取，展示"谁最新以谁为准"）
 const lastDynamicUpdate = computed(() => shipDetail.value?.dynamicUpdatedAt || '')
@@ -396,6 +497,7 @@ watch(() => props.visible, (val) => {
     loadShipDetail(props.ship.shipId)
     loadNotes(props.ship.shipId)
     loadTags(props.ship.shipId)
+    loadDiaryBlocks()
     aiAnalysis.value = ''
     filterKeyword.value = ''
     filterTag.value = ''
@@ -407,6 +509,7 @@ watch(() => props.visible, (val) => {
     newNoteTags.value = ''
     aiAnalysis.value = ''
     shipDetail.value = null
+    diaryBlocksFromShip.value = []
   }
 })
 
@@ -599,6 +702,63 @@ function formatETA(eta: any): string {
   const hours = String(date.getHours()).padStart(2, '0')
   const mins = String(date.getMinutes()).padStart(2, '0')
   return `${month}-${day} ${hours}:${mins}`
+}
+
+// ========== 日记流转相关功能 ==========
+async function loadDiaryBlocks() {
+  if (!props.ship) return
+  loadingDiaryBlocks.value = true
+  try {
+    const list = await api.diaryBlocks.getByShipId(props.ship.shipId)
+    diaryBlocksFromShip.value = Array.isArray(list) ? list : []
+  } catch (e: any) {
+    diaryBlocksFromShip.value = []
+  } finally {
+    loadingDiaryBlocks.value = false
+  }
+}
+
+async function toggleDiaryBlockTodo(blk: any, checked: boolean) {
+  if (blk.blockType !== 'todo') return
+  blk.todoStatus = checked ? 'completed' : 'pending'
+  try {
+    await api.diaryBlocks.update(blk.id, { todoStatus: blk.todoStatus })
+    ElMessage.success(checked ? '已完成' : '已恢复为未完成')
+    // P3-3: 如果被标记完成，后端的查询接口会自动过滤，下次加载时即消失
+    // 这里同时做前端视觉移除
+    if (checked) {
+      diaryBlocksFromShip.value = diaryBlocksFromShip.value.filter(b => !(b.id === blk.id && b.blockType === 'todo' && b.todoStatus === 'completed'))
+    }
+  } catch (e: any) {
+    ElMessage.error('切换状态失败：' + (e.message || e))
+    blk.todoStatus = checked ? 'pending' : 'completed'
+  }
+}
+
+function formatDiaryDate(dt: any): string {
+  if (!dt) return ''
+  const d = new Date(dt)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function extractLinkMeta(metaJson: string | null | undefined, content: string): { url?: string; title?: string; name?: string } {
+  try {
+    if (metaJson) {
+      const obj = JSON.parse(metaJson)
+      if (obj && typeof obj === 'object') {
+        return obj
+      }
+    }
+  } catch {
+    // fallback
+  }
+  if (/^https?:\/\//.test(content || '')) {
+    return { url: content, title: content, name: content }
+  }
+  return {}
 }
 
 function formatNoteTime(dateStr: string): string {
@@ -1018,5 +1178,90 @@ function diff(a: any, b: any): boolean {
   font-size: 12px;
   color: #c0c4cc;
   line-height: 1.6;
+}
+
+/* Tab 角标 */
+.todo-badge {
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+/* 日记流转面板 */
+.diary-blocks-tip {
+  font-size: 12px;
+  color: #909399;
+  background: #f4f8ff;
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin: 8px 0 16px;
+  line-height: 1.6;
+}
+
+.diary-block-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.diary-block-card {
+  background: white;
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  padding: 10px 12px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+  transition: box-shadow 0.15s, opacity 0.2s;
+}
+.diary-block-card:hover {
+  box-shadow: 0 2px 8px rgba(64,158,255,0.12);
+}
+.diary-block-card.completed {
+  opacity: 0.5;
+  background: #f7f8fa;
+}
+
+.dbc-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.dbc-date {
+  font-size: 12px;
+  color: #909399;
+}
+
+.dbc-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 14px;
+  color: #303133;
+  line-height: 1.6;
+}
+.dbc-todo-checkbox {
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+.dbc-content {
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+}
+.dbc-image {
+  max-width: 240px;
+  max-height: 180px;
+  border-radius: 4px;
+  margin: 4px 0;
+}
+
+.dbc-foot {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+  font-size: 12px;
+}
+.dbc-user-opt {
+  color: #909399;
 }
 </style>

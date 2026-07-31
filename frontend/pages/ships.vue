@@ -743,13 +743,19 @@ const onCellEdit = (row: any, field: string, event: Event) => {
   const target = event.target as HTMLElement;
   const newValue = target.textContent?.trim() || '';
   const oldValue = row[field];
-  
+
+  // 归一化：'-' 显示占位符视为空
+  const normalizedNew = newValue === '-' ? '' : newValue;
+
+  // 值未变化时不触发保存，避免点击但未修改导致不必要的请求
+  if (normalizedNew === (oldValue ?? '')) return;
+
   // 更新数据
-  row[field] = newValue === '-' ? '' : newValue;
-  
+  row[field] = normalizedNew;
+
   // 标记有修改
   hasChanges.value = true;
-  
+
   // 触发自动保存（3秒防抖）
   triggerAutoSave();
 };

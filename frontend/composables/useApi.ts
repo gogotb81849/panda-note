@@ -1526,6 +1526,37 @@ export const useApi = () => {
       delete: (id: number) => apiFetch(`/ship-notes/${id}`, { method: 'DELETE' }),
     },
 
+    // 日记行级块（日记/待办/备忘混排）
+    diaryBlocks: {
+      getByDiaryId: (diaryId: number) => apiFetch(`/diary-blocks/by-diary/${diaryId}`),
+      getByShipId: (shipId: number) => apiFetch(`/diary-blocks/by-ship/${shipId}`),
+      getOne: (id: number) => apiFetch(`/diary-blocks/${id}`),
+      create: (data: {
+        diaryId: number;
+        sortOrder?: number;
+        blockType?: 'diary' | 'todo' | 'memo' | 'image' | 'file' | 'link';
+        content: string;
+        todoStatus?: string;
+        todoDueDate?: string;
+        metaJson?: string;
+        scheduleId?: number;
+      }) => apiFetch('/diary-blocks', { method: 'POST', body: data }),
+      update: (id: number, data: {
+        sortOrder?: number;
+        blockType?: 'diary' | 'todo' | 'memo' | 'image' | 'file' | 'link';
+        content?: string;
+        todoStatus?: string;
+        todoDueDate?: string;
+        metaJson?: string;
+        scheduleId?: number;
+        userManuallyChangedType?: boolean;
+      }) => apiFetch(`/diary-blocks/${id}`, { method: 'PUT', body: data }),
+      remove: (id: number) => apiFetch(`/diary-blocks/${id}`, { method: 'DELETE' }),
+      reorder: (diaryId: number, orderedIds: number[]) =>
+        apiFetch(`/diary-blocks/reorder/${diaryId}`, { method: 'POST', body: { orderedIds } }),
+      retrain: () => apiFetch('/diary-blocks/retrain', { method: 'POST' }),
+    },
+
     // 工具箱
     toolbox: {
       /**

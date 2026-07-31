@@ -118,6 +118,7 @@ export function useRealtimeSync() {
   }
 
   function getStoreName(entity: string): string | null {
+    // store 名必须与 useApi.ts 中 URL_STORE_MAP 的 value 一致（驼峰命名）
     const mapping: Record<string, string> = {
       ship: 'ships',
       ships: 'ships',
@@ -127,11 +128,39 @@ export function useRealtimeSync() {
       diaries: 'diaries',
       task: 'tasks',
       tasks: 'tasks',
-      staff: 'staff',
-      staff_history: 'staff_history',
-      sop_flow: 'sop_flow',
-      health_report: 'health_report',
-      file: 'files',
+      staff: 'staffHistory',
+      staff_history: 'staffHistory',
+      staffHistory: 'staffHistory',
+      sop_flow: 'sopFlow',
+      sopFlow: 'sopFlow',
+      sopflow: 'sopFlow',
+      public_case: 'publicCase',
+      publicCase: 'publicCase',
+      party_activity: 'partyActivities',
+      party_activities: 'partyActivities',
+      partyActivities: 'partyActivities',
+      integrity_record: 'integrityRecords',
+      integrity_records: 'integrityRecords',
+      integrityRecords: 'integrityRecords',
+      officer_profile: 'officerProfiles',
+      officer_profiles: 'officerProfiles',
+      officerProfiles: 'officerProfiles',
+      thought_report: 'thoughtReports',
+      thought_reports: 'thoughtReports',
+      thoughtReports: 'thoughtReports',
+      experience: 'experiences',
+      experiences: 'experiences',
+      file: 'fileRecords',
+      files: 'fileRecords',
+      file_record: 'fileRecords',
+      file_records: 'fileRecords',
+      fileRecords: 'fileRecords',
+      health_report: 'healthReports',
+      health_reports: 'healthReports',
+      standard_task_template: 'standardTaskTemplates',
+      standard_task_templates: 'standardTaskTemplates',
+      publish_template: 'publishTemplates',
+      publish_templates: 'publishTemplates',
     };
     return mapping[entity.toLowerCase()] || null;
   }

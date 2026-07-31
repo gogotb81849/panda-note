@@ -46,18 +46,23 @@ export class FrontendHashService {
   private getFiles(dir: string): string[] {
     let results: string[] = [];
     const list = fs.readdirSync(dir);
-    
+
     list.forEach(file => {
+      // 排除 node_modules、.nuxt、.git 等非业务目录，避免遍历数万文件导致性能问题
+      if (file === 'node_modules' || file === '.nuxt' || file === '.git' || file === '.output') {
+        return;
+      }
+
       const filePath = path.join(dir, file);
       const stat = fs.statSync(filePath);
-      
+
       if (stat && stat.isDirectory()) {
         results = results.concat(this.getFiles(filePath).map(f => path.join(file, f)));
       } else {
         results.push(file);
       }
     });
-    
+
     return results.filter(f => !f.endsWith('.map') && !f.includes('.git'));
   }
 }

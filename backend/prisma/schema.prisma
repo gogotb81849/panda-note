@@ -429,6 +429,9 @@ model Diary {
   // 多对多关联：一条日记可关联多条已完成日程
   relatedSchedules DiaryScheduleRelation[]
 
+  // 行级块（日记/待办/备忘混排）
+  blocks DiaryBlock[]
+
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -453,6 +456,67 @@ model DiaryScheduleRelation {
   @@unique([diaryId, scheduleId])
   @@index([teamCode, diaryId])
   @@index([teamCode, scheduleId])
+}
+
+// 日记行级块（支持 日记/待办/备忘 混排、图片、文件、链接、拖拽排序）
+enum DiaryBlockType {
+  diary    // 日记：对事件的描述
+  todo     // 待办：需要完成的事项
+  memo     // 备忘：提醒性信息
+  image    // 图片
+  file     // 文件附件
+  link     // 超链接
+}
+
+model DiaryBlock {
+  id           Int            @id @default(autoincrement())
+  diaryId      Int
+  userId       Int
+  teamCode     TeamCode
+  sortOrder    Int            @default(0) // 展示顺序，同日记内递增
+  blockType    DiaryBlockType @default(diary)
+  content      String         @db.Text
+  // todo 专用
+  todoStatus   String?        // pending / completed
+  todoDueDate  DateTime?
+  // 块内容元信息（JSON，image/file/link 的 url、name、size 等）
+  metaJson     String?        @db.Text
+  // AI 识别关联
+  aiSuggested  DiaryBlockType? // AI 建议的类型
+  userChanged  Boolean        @default(false) // 用户是否手动修改过类型（用于自学习）
+  detectedShipId   Int?          // AI 识别出的关联船舶
+  detectedShipName String?        // 冗余存储船舶名，便于查询
+  // 关联到 Schedule 表（todo 类型块复用现有日程系统）
+  scheduleId   Int?
+
+  diary      Diary     @relation(fields: [diaryId], references: [id], onDelete: Cascade)
+  user       User      @relation(fields: [userId], references: [id])
+  ship       Ship?     @relation(fields: [detectedShipId], references: [id])
+  schedule   Schedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([diaryId, sortOrder])
+  @@index([userId, blockType])
+  @@index([userId, blockType, todoStatus])
+  @@index([detectedShipId, todoStatus])  // 船舶卡片快速查询
+  @@index([teamCode])
+}
+
+// 自学习：用户手动纠正块类型的历史记录（用于关键词权重训练）
+model DiaryBlockClassificationLog {
+  id             Int            @id @default(autoincrement())
+  userId         Int
+  teamCode       TeamCode
+  aiSuggested    DiaryBlockType // AI 建议的类型
+  userCorrected  DiaryBlockType // 用户实际修改的类型
+  content        String         @db.Text // 块内容文本（关键词抽取源）
+  createdAt      DateTime       @default(now())
+
+  @@index([userId])
+  @@index([teamCode])
+  @@index([aiSuggested, userCorrected])
 }
 
 // 港口信息表

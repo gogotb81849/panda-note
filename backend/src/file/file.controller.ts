@@ -196,6 +196,11 @@ export class FileController {
 
     const fileSize = statSync(filePath).size;
     const fileName = file.originalName || file.fileName;
+    const mimeType = file.fileType || 'application/octet-stream';
+
+    // 判断是否为图片类型，图片应内联显示而非下载
+    const isImage = mimeType.startsWith('image/');
+    const disposition = isImage ? 'inline' : 'attachment';
 
     // 支持 Range 请求（断点续传下载）
     if (range) {
@@ -208,8 +213,8 @@ export class FileController {
         'Content-Range': `bytes ${start}-${end}/${fileSize}`,
         'Accept-Ranges': 'bytes',
         'Content-Length': chunkSize,
-        'Content-Type': 'application/octet-stream',
-        'Content-Disposition': `attachment; filename="${encodeURIComponent(fileName)}"`,
+        'Content-Type': mimeType,
+        'Content-Disposition': `${disposition}; filename="${encodeURIComponent(fileName)}"`,
       });
 
       createReadStream(filePath, { start, end }).pipe(res);
@@ -217,8 +222,8 @@ export class FileController {
       res.writeHead(200, {
         'Content-Length': fileSize,
         'Accept-Ranges': 'bytes',
-        'Content-Type': 'application/octet-stream',
-        'Content-Disposition': `attachment; filename="${encodeURIComponent(fileName)}"`,
+        'Content-Type': mimeType,
+        'Content-Disposition': `${disposition}; filename="${encodeURIComponent(fileName)}"`,
       });
 
       createReadStream(filePath).pipe(res);

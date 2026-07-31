@@ -389,7 +389,7 @@ const getDiaryPreview = (content: string) => {
 const goToDiary = (diary: any) => {
   const dateVal = diary.date
   const dateStr = dateVal instanceof Date ? dateVal.toISOString().split('T')[0] : String(dateVal).split('T')[0]
-  router.push(`/diary?date=${dateStr}`)
+  router.push(`/work-log?date=${dateStr}`)
 }
 
 const handleShipClick = (ship: any) => {

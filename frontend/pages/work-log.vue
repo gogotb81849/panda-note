@@ -34,24 +34,51 @@
       </template>
     </el-dialog>
 
-    <!-- 常驻日历 -->
+    <!-- 迷你日历 -->
     <div class="calendar-section" :class="{ 'calendar-collapsed': calendarCollapsed }">
       <div class="calendar-header" @click="calendarCollapsed = !calendarCollapsed">
-        <span class="calendar-title">📅 日历</span>
-        <el-icon class="calendar-toggle-icon">
-          <ArrowDown v-if="calendarCollapsed" />
-          <ArrowUp v-else />
-        </el-icon>
+        <span class="calendar-title">📅 {{ calendarYearMonth }}</span>
+        <div class="calendar-nav">
+          <button class="cal-nav-btn" @click.stop="prevMonth">‹</button>
+          <button class="cal-nav-btn" @click.stop="nextMonth">›</button>
+          <el-icon class="calendar-toggle-icon">
+            <ArrowDown v-if="calendarCollapsed" />
+            <ArrowUp v-else />
+          </el-icon>
+        </div>
       </div>
       <div v-show="!calendarCollapsed" class="calendar-body">
-        <el-calendar v-model="calendarDate" @pick="onCalendarSelect">
-          <template #date-cell="{ data }">
-            <div class="calendar-cell" :class="{ 'has-diary': hasDiaryOnDate(data.date) }">
-              <span class="calendar-day">{{ data.day.split('-')[2] }}</span>
-              <span v-if="hasDiaryOnDate(data.date)" class="diary-dot"></span>
-            </div>
-          </template>
-        </el-calendar>
+        <!-- 星期表头 -->
+        <div class="mini-cal-weekdays">
+          <span v-for="w in weekdayLabels" :key="w">{{ w }}</span>
+        </div>
+        <!-- 日期网格 -->
+        <div class="mini-cal-grid">
+          <div
+            v-for="day in miniCalendarDays"
+            :key="day.dateStr"
+            class="mini-cal-day"
+            :class="{
+              'is-other-month': !day.inCurrentMonth,
+              'is-today': day.isToday,
+              'is-selected': day.isSelected,
+              'has-diary': day.hasDiary,
+              'has-todo': day.hasTodo,
+            }"
+            @click="jumpToDate(day.dateStr)"
+          >
+            <span class="mini-cal-daynum">{{ day.dayNum }}</span>
+            <span class="mini-cal-dots">
+              <span v-if="day.hasDiary" class="dot dot-diary"></span>
+              <span v-if="day.hasTodo" class="dot dot-todo"></span>
+            </span>
+          </div>
+        </div>
+        <!-- 图例 -->
+        <div class="mini-cal-legend">
+          <span class="legend-item"><span class="dot dot-diary"></span>有日记</span>
+          <span class="legend-item"><span class="dot dot-todo"></span>有待办</span>
+        </div>
       </div>
     </div>
 
@@ -203,10 +230,31 @@
           </div>
         </template>
 
-        <!-- 日记编辑器 -->
+        <!-- 日记编辑器（兼容模式：纯文本大框） -->
         <div class="diary-editor">
-          <el-input v-model="diaryForm.content" type="textarea" :rows="15" placeholder="记录今天的工作内容..." />
+          <el-input v-model="diaryForm.content" type="textarea" :rows="10" placeholder="记录今天的工作内容（兼容传统模式，下方为新式「条目化记录」）..." />
         </div>
+
+        <!-- 条目化块编辑器（日记 + 待办 + 备忘 混排） -->
+        <div v-if="currentDiaryId > 0" class="blocks-section">
+          <div class="section-header blocks-header">
+            <span class="section-title">📌 条目化记录（日记/待办/备忘/图片/文件/链接混排，右键切换类型）</span>
+            <el-tag size="small" type="info">回车换行 · 拖拽排序 · AI 自动识别船名并流转</el-tag>
+          </div>
+          <DiaryBlockEditor
+            ref="blockEditorRef"
+            :diary-id="currentDiaryId"
+            :api="api"
+          />
+        </div>
+        <el-alert
+          v-else
+          type="info"
+          :closable="false"
+          show-icon
+          title="提示：先保存日记，即可开启条目化记录（待办、备忘、图片、文件等）"
+          class="blocks-empty-tip"
+        />
 
         <!-- 保存按钮 -->
         <div class="diary-actions">
@@ -220,6 +268,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { ArrowLeft, ArrowRight, ArrowUp, ArrowDown } from '@element-plus/icons-vue'
+import DiaryBlockEditor from '~/components/DiaryBlockEditor.vue'
+import type DiaryBlockEditorComp from '~/components/DiaryBlockEditor.vue'
 import { ElMessage } from 'element-plus'
 import type { Schedule, Ship } from '~/types'
 import { useLunar } from '~/composables/useLunar'
@@ -272,6 +322,7 @@ const diaryForm = ref({
 })
 const diarySaving = ref(false)
 const currentDiaryId = ref<number | null>(null)
+const blockEditorRef = ref<InstanceType<typeof DiaryBlockEditorComp> | null>(null)
 
 const isPoliticalInstructor = computed(() => {
   return authStore.userRole === 'ship_political_instructor'
@@ -435,9 +486,13 @@ const saveDiary = async () => {
       }
       ElMessage.success('日记已保存')
     }
-    // 保存成功后刷新当日日记和日历标记
+    // 保存成功后刷新当日日记、日历标记，和条目化块编辑器
     await loadDiary()
     await loadDiaryDates()
+    if (currentDiaryId.value) {
+      await nextTick()
+      blockEditorRef.value?.loadBlocks()
+    }
   } catch (error: any) {
     // 归一化错误消息：NestJS ValidationPipe 常返回 message: string[]，避免传给 ElMessage 导致 startsWith 报错
     const pickMsg = (raw: any): string => {
@@ -524,6 +579,11 @@ const loadDiary = async () => {
         shipName: '',
       }
     }
+    // 加载条目化块编辑器
+    if (currentDiaryId.value) {
+      await nextTick()
+      blockEditorRef.value?.loadBlocks()
+    }
   } catch (error) {
     currentDiaryId.value = null
     diaryForm.value = {
@@ -599,14 +659,76 @@ const handleShipChange = (shipId: number) => {
   currentShipId.value = shipId
 }
 
-const onCalendarSelect = (date: Date) => {
-  selectedDate.value = new Date(date)
-  calendarDate.value = new Date(date)
+// ====== 迷你日历相关 ======
+
+const weekdayLabels = ['一', '二', '三', '四', '五', '六', '日']
+const todoDates = ref<Set<string>>(new Set())
+
+const calendarYearMonth = computed(() => {
+  const y = calendarDate.value.getFullYear()
+  const m = calendarDate.value.getMonth() + 1
+  return `${y}年${m}月`
+})
+
+interface MiniCalDay {
+  dateStr: string
+  dayNum: number
+  inCurrentMonth: boolean
+  isToday: boolean
+  isSelected: boolean
+  hasDiary: boolean
+  hasTodo: boolean
 }
 
-const hasDiaryOnDate = (date: Date): boolean => {
-  const dateStr = formatDate(date)
-  return diaryDates.value.has(dateStr)
+const miniCalendarDays = computed<MiniCalDay[]>(() => {
+  const year = calendarDate.value.getFullYear()
+  const month = calendarDate.value.getMonth()
+  const todayStr = formatDate(new Date())
+  const selectedStr = formatDate(selectedDate.value)
+
+  // 当月第一天是星期几（0=周日，转为周一为首）
+  const firstDay = new Date(year, month, 1)
+  let firstWeekday = firstDay.getDay() // 0=周日
+  firstWeekday = firstWeekday === 0 ? 6 : firstWeekday - 1 // 转为 0=周一
+
+  // 日历起始日期（可能包含上月末尾几天）
+  const startDate = new Date(year, month, 1 - firstWeekday)
+
+  const days: MiniCalDay[] = []
+  for (let i = 0; i < 42; i++) {
+    const d = new Date(startDate)
+    d.setDate(startDate.getDate() + i)
+    const ds = formatDate(d)
+    days.push({
+      dateStr: ds,
+      dayNum: d.getDate(),
+      inCurrentMonth: d.getMonth() === month,
+      isToday: ds === todayStr,
+      isSelected: ds === selectedStr,
+      hasDiary: diaryDates.value.has(ds),
+      hasTodo: todoDates.value.has(ds),
+    })
+  }
+  return days
+})
+
+const jumpToDate = (dateStr: string) => {
+  const d = new Date(dateStr)
+  d.setHours(0, 0, 0, 0)
+  selectedDate.value = d
+  calendarDate.value = new Date(d)
+}
+
+const prevMonth = () => {
+  const d = new Date(calendarDate.value)
+  d.setMonth(d.getMonth() - 1)
+  calendarDate.value = d
+}
+
+const nextMonth = () => {
+  const d = new Date(calendarDate.value)
+  d.setMonth(d.getMonth() + 1)
+  calendarDate.value = d
 }
 
 const loadDiaryDates = async () => {
@@ -639,6 +761,31 @@ const loadDiaryDates = async () => {
   }
 }
 
+// 加载当月有待办（未完成日程）的日期
+const loadTodoDates = async () => {
+  try {
+    const year = calendarDate.value.getFullYear()
+    const month = calendarDate.value.getMonth()
+    const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`
+    const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${new Date(year, month + 1, 0).getDate()}`
+
+    // 查询当月日程，筛选未完成项
+    const result = await api.schedules.getAll(startDate, endDate)
+    const scheds = Array.isArray(result) ? result : []
+    const dates = new Set<string>()
+    scheds.forEach((s: any) => {
+      if (s.recordDate && s.finishStatus !== 'completed') {
+        const d = new Date(s.recordDate)
+        d.setHours(0, 0, 0, 0)
+        dates.add(formatDate(d))
+      }
+    })
+    todoDates.value = dates
+  } catch (error) {
+    console.error('加载待办日期失败', error)
+  }
+}
+
 watch(selectedDate, () => {
   calendarDate.value = new Date(selectedDate.value)
   loadSchedules()
@@ -652,6 +799,7 @@ watch(calendarDate, (newVal, oldVal) => {
   const oldYear = oldVal.getFullYear()
   if (newMonth !== oldMonth || newYear !== oldYear) {
     loadDiaryDates()
+    loadTodoDates()
   }
 })
 
@@ -665,7 +813,10 @@ onMounted(async () => {
   if (isPoliticalInstructor.value) {
     await loadAvailableShips()
   }
-  await loadDiaryDates()
+  await Promise.all([
+    loadDiaryDates(),
+    loadTodoDates(),
+  ])
 })
 </script>
 
@@ -689,7 +840,7 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
+  padding: 10px 16px;
   cursor: pointer;
   user-select: none;
   transition: background 0.2s;
@@ -700,14 +851,42 @@ onMounted(async () => {
 }
 
 .calendar-title {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: #1a1a1a;
+}
+
+.calendar-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cal-nav-btn {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: #606266;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+
+.cal-nav-btn:hover {
+  background: #ecf0f1;
+  color: #409eff;
 }
 
 .calendar-toggle-icon {
   color: #909399;
   transition: transform 0.2s;
+  margin-left: 4px;
 }
 
 .calendar-collapsed .calendar-toggle-icon {
@@ -715,50 +894,121 @@ onMounted(async () => {
 }
 
 .calendar-body {
-  padding: 0 16px 16px;
+  padding: 8px 12px 12px;
 }
 
-.calendar-body :deep(.el-calendar__header) {
-  padding: 12px 0;
-  border-bottom: 1px solid #ebeef5;
+/* 迷你日历星期表头 */
+.mini-cal-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  margin-bottom: 4px;
 }
 
-.calendar-body :deep(.el-calendar__body) {
-  padding: 12px 0 0;
+.mini-cal-weekdays span {
+  text-align: center;
+  font-size: 11px;
+  color: #909399;
+  font-weight: 500;
+  padding: 2px 0;
 }
 
-.calendar-body :deep(.el-calendar-day) {
-  padding: 4px;
-  height: auto;
-  min-height: 44px;
+/* 迷你日历日期网格 */
+.mini-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
 }
 
-.calendar-cell {
+.mini-cal-day {
+  aspect-ratio: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100%;
-  width: 100%;
+  border-radius: 6px;
+  cursor: pointer;
   position: relative;
+  transition: background 0.15s;
+  min-height: 32px;
 }
 
-.calendar-day {
-  font-size: 14px;
-  line-height: 1.4;
+.mini-cal-day:hover {
+  background: #ecf5ff;
 }
 
-.diary-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: #f56c6c;
-  margin-top: 2px;
+.mini-cal-day.is-other-month {
+  opacity: 0.35;
 }
 
-.has-diary .calendar-day {
-  color: #409eff;
+.mini-cal-day.is-today {
+  background: #f0f9ff;
+  border: 1px solid #409eff;
+}
+
+.mini-cal-day.is-selected {
+  background: #409eff;
+}
+
+.mini-cal-day.is-selected .mini-cal-daynum {
+  color: white;
+  font-weight: 700;
+}
+
+.mini-cal-daynum {
+  font-size: 13px;
+  color: #303133;
+  line-height: 1.2;
+}
+
+.mini-cal-day.has-diary .mini-cal-daynum {
+  color: #67c23a;
   font-weight: 600;
+}
+
+.mini-cal-day.has-todo .mini-cal-daynum {
+  color: #f56c6c;
+  font-weight: 600;
+}
+
+/* 日期下方的点标记 */
+.mini-cal-dots {
+  display: flex;
+  gap: 3px;
+  margin-top: 1px;
+  height: 4px;
+}
+
+.dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+}
+
+.dot-diary {
+  background: #67c23a;
+}
+
+.dot-todo {
+  background: #f56c6c;
+}
+
+/* 图例 */
+.mini-cal-legend {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #909399;
 }
 
 .date-selector {
@@ -939,6 +1189,21 @@ onMounted(async () => {
   border-radius: 8px;
 }
 
+.blocks-section {
+  margin-bottom: 16px;
+}
+
+.blocks-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.blocks-empty-tip {
+  margin: 8px 0 16px;
+}
+
 .diary-actions {
   display: flex;
   justify-content: flex-end;
@@ -981,12 +1246,11 @@ onMounted(async () => {
     padding-bottom: 12px;
   }
 
-  .calendar-body :deep(.el-calendar-day) {
-    min-height: 36px;
-    padding: 2px;
+  .mini-cal-day {
+    min-height: 28px;
   }
 
-  .calendar-day {
+  .mini-cal-daynum {
     font-size: 12px;
   }
 }
