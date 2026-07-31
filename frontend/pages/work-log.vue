@@ -16,8 +16,11 @@
         <el-icon><ArrowLeft /></el-icon>
       </button>
       <div class="date-display" @click="showDatePicker = true">
-        <div class="date-main">{{ selectedDateLabel }}</div>
-        <div class="date-sub">{{ lunarInfo.lunar }} {{ lunarInfo.holiday || '' }}</div>
+        <span class="date-big">{{ selectedDateDay }}</span>
+        <div class="date-meta">
+          <span class="date-weekday">{{ selectedDateWeekday }}</span>
+          <span class="date-lunar">{{ lunarInfo.lunar }}{{ lunarInfo.holiday ? ' ' + lunarInfo.holiday : '' }}</span>
+        </div>
       </div>
       <button class="nav-btn" @click="nextDay">
         <el-icon><ArrowRight /></el-icon>
@@ -334,6 +337,17 @@ const selectedDateLabel = computed(() => {
   const d = selectedDate.value
   const weekDays = ['日', '一', '二', '三', '四', '五', '六']
   return `${d.getMonth() + 1}月${d.getDate()}日 周${weekDays[d.getDay()]}`
+})
+
+const selectedDateDay = computed(() => {
+  const d = selectedDate.value
+  return `${d.getMonth() + 1}.${d.getDate()}`
+})
+
+const selectedDateWeekday = computed(() => {
+  const d = selectedDate.value
+  const weekDays = ['日', '一', '二', '三', '四', '五', '六']
+  return `周${weekDays[d.getDay()]}`
 })
 
 const formattedSelectedDate = computed(() => {
@@ -1012,8 +1026,8 @@ onMounted(async () => {
 .date-selector {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 16px;
+  gap: 10px;
+  padding: 12px 16px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   border-radius: 12px;
   color: white;
@@ -1024,10 +1038,11 @@ onMounted(async () => {
   background: rgba(255, 255, 255, 0.2);
   border: none;
   border-radius: 8px;
-  padding: 8px 12px;
+  padding: 8px 10px;
   color: white;
   cursor: pointer;
   transition: all 0.2s;
+  flex-shrink: 0;
 }
 
 .nav-btn:hover {
@@ -1036,30 +1051,47 @@ onMounted(async () => {
 
 .date-display {
   flex: 1;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   cursor: pointer;
 }
 
-.date-main {
-  font-size: 20px;
-  font-weight: 600;
+.date-big {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
 }
 
-.date-sub {
+.date-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.date-weekday {
   font-size: 13px;
-  opacity: 0.9;
-  margin-top: 2px;
+  opacity: 0.95;
+  line-height: 1.2;
+}
+
+.date-lunar {
+  font-size: 11px;
+  opacity: 0.75;
+  line-height: 1.2;
 }
 
 .today-btn {
   background: rgba(255, 255, 255, 0.2);
   border: none;
   border-radius: 8px;
-  padding: 8px 16px;
+  padding: 8px 14px;
   color: white;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
   transition: all 0.2s;
+  flex-shrink: 0;
 }
 
 .today-btn:hover {
@@ -1209,11 +1241,24 @@ onMounted(async () => {
 
 @media (max-width: 767px) {
   .date-selector {
-    padding: 12px;
+    padding: 10px 12px;
   }
 
-  .date-main {
-    font-size: 18px;
+  .date-big {
+    font-size: 22px;
+  }
+
+  .date-weekday {
+    font-size: 12px;
+  }
+
+  .date-lunar {
+    font-size: 10px;
+  }
+
+  .today-btn {
+    padding: 6px 10px;
+    font-size: 12px;
   }
 
   .info-row {
@@ -1266,12 +1311,16 @@ onMounted(async () => {
     gap: 10px;
   }
 
-  .date-main {
-    font-size: 18px;
+  .date-big {
+    font-size: 20px;
   }
 
-  .date-sub {
-    font-size: 12px;
+  .date-weekday {
+    font-size: 11px;
+  }
+
+  .date-lunar {
+    font-size: 10px;
   }
 
   .diary-content {
