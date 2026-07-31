@@ -13,7 +13,12 @@
     <!-- 顶部日期选择器 -->
     <div class="date-selector">
       <div class="date-display" @click="showDatePicker = true">
-        <span class="date-big">{{ selectedDateDay }}</span>
+        <div class="date-big-group">
+          <span class="date-big">{{ selectedDateDay }}</span>
+          <span class="date-unit">月</span>
+          <span class="date-big">{{ selectedDateDayNum }}</span>
+          <span class="date-unit">日</span>
+        </div>
         <div class="date-meta">
           <span class="date-weekday">{{ selectedDateWeekday }}</span>
           <span class="date-lunar">{{ lunarInfo.lunar }}{{ lunarInfo.holiday ? ' ' + lunarInfo.holiday : '' }}</span>
@@ -222,17 +227,8 @@
           </div>
         </template>
 
-        <!-- 日记编辑器（兼容模式：纯文本大框） -->
-        <div class="diary-editor">
-          <el-input v-model="diaryForm.content" type="textarea" :rows="10" placeholder="记录今天的工作内容（兼容传统模式，下方为新式「条目化记录」）..." />
-        </div>
-
-        <!-- 条目化块编辑器（日记 + 待办 + 备忘 混排） -->
+        <!-- 条目化块编辑器（日记 + 待办 + 备忘 混排，统一入口） -->
         <div v-if="currentDiaryId > 0" class="blocks-section">
-          <div class="section-header blocks-header">
-            <span class="section-title">📌 条目化记录（日记/待办/备忘/图片/文件/链接混排，右键切换类型）</span>
-            <el-tag size="small" type="info">回车换行 · 拖拽排序 · AI 自动识别船名并流转</el-tag>
-          </div>
           <DiaryBlockEditor
             ref="blockEditorRef"
             :diary-id="currentDiaryId"
@@ -244,7 +240,7 @@
           type="info"
           :closable="false"
           show-icon
-          title="提示：先保存日记，即可开启条目化记录（待办、备忘、图片、文件等）"
+          title="提示：先保存日记，即可开启条目化记录（日记、待办、备忘、图片、文件等）"
           class="blocks-empty-tip"
         />
 
@@ -332,7 +328,12 @@ const selectedDateLabel = computed(() => {
 
 const selectedDateDay = computed(() => {
   const d = selectedDate.value
-  return `${d.getMonth() + 1}.${d.getDate()}`
+  return d.getMonth() + 1
+})
+
+const selectedDateDayNum = computed(() => {
+  const d = selectedDate.value
+  return d.getDate()
 })
 
 const selectedDateWeekday = computed(() => {
@@ -1023,11 +1024,26 @@ onMounted(async () => {
   cursor: pointer;
 }
 
+.date-big-group {
+  display: flex;
+  align-items: baseline;
+  gap: 1px;
+  margin-left: 4px;
+}
+
 .date-big {
   font-size: 34px;
   font-weight: 700;
   line-height: 1;
   white-space: nowrap;
+}
+
+.date-unit {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1;
+  opacity: 0.9;
+  margin: 0 1px;
 }
 
 .date-meta {
@@ -1102,6 +1118,7 @@ onMounted(async () => {
   gap: 6px;
   flex: 1;
   min-width: 0;
+  height: 32px;
 }
 
 .compact-ship-label {
@@ -1263,6 +1280,10 @@ onMounted(async () => {
     font-size: 24px;
   }
 
+  .date-unit {
+    font-size: 14px;
+  }
+
   .date-weekday {
     font-size: 11px;
   }
@@ -1347,6 +1368,10 @@ onMounted(async () => {
 
   .date-big {
     font-size: 28px;
+  }
+
+  .date-unit {
+    font-size: 16px;
   }
 
   .date-weekday {

@@ -93,13 +93,14 @@ export class DiaryBlockService {
         const sched = await this.prisma.schedule.create({
           data: {
             teamCode,
-            userId,
+            createdById: userId,
             shipId: ship?.id ?? diary.shipId ?? undefined,
             recordDate: diary.date,
             firstType: '待办事项',
             secondType: '日记流转',
-            content: dto.content,
-            finishStatus: dto.todoStatus || 'pending',
+            title: dto.content.slice(0, 100),
+            description: dto.content,
+            finishStatus: 'pending',
           },
         });
         scheduleId = sched.id;
@@ -171,13 +172,14 @@ export class DiaryBlockService {
         const sched = await this.prisma.schedule.create({
           data: {
             teamCode,
-            userId,
+            createdById: userId,
             shipId: newShip?.id ?? block.detectedShipId ?? diary?.shipId ?? undefined,
             recordDate: diary?.date ?? new Date(),
             firstType: '待办事项',
             secondType: '日记流转',
-            content: dto.content ?? block.content,
-            finishStatus: dto.todoStatus || block.todoStatus || 'pending',
+            title: (dto.content ?? block.content).slice(0, 100),
+            description: dto.content ?? block.content,
+            finishStatus: 'pending',
           },
         });
         scheduleId = sched.id;
