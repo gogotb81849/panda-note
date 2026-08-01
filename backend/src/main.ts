@@ -88,12 +88,11 @@ async function bootstrap() {
   });
 
   app.useGlobalPipes(new ValidationPipe({
-    whitelist: true,
-    transform: true,           // 启用 class-transformer，自动把 JSON 字符串类型转成 DTO 声明类型（Number/Boolean/Date）
+    whitelist: false,
+    transform: true,
     transformOptions: {
-      enableImplicitConversion: true,  // 允许不需要显式 @Type 也做简单的类型转换（更宽松）
+      enableImplicitConversion: true,
     },
-    // 允许前端字段无 decorator 时通过（避免 forbidNonWhitelisted 报 400，仅由 whitelist: true 自动剥离）
     forbidNonWhitelisted: false,
   }));
   
