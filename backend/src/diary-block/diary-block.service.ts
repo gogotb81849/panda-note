@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { DiaryBlockType, TeamCode } from '@prisma/client';
 import { CreateDiaryBlockDto } from './dto/create-diary-block.dto';
@@ -61,72 +61,91 @@ export class DiaryBlockService {
    * 创建块：自动执行 AI 分类 + 船名识别
    */
   async create(dto: CreateDiaryBlockDto, userId: number, teamCode: TeamCode) {
-    const diary = await this.prisma.diary.findUnique({ where: { id: dto.diaryId } });
-    if (!diary) throw new NotFoundException('日记不存在');
-    if (diary.teamCode !== teamCode || diary.userId !== userId) {
-      throw new ForbiddenException('无权在该日记下创建块');
-    }
-
-    // 若没有指定 sortOrder，则取当前最大 +1
-    let sortOrder = dto.sortOrder;
-    if (sortOrder === undefined || sortOrder === null) {
-      const max = await this.prisma.diaryBlock.aggregate({
-        where: { diaryId: dto.diaryId },
-        _max: { sortOrder: true },
-      });
-      sortOrder = (max._max.sortOrder ?? -1) + 1;
-    }
-
-    // AI 分类 + 船名识别
-    let suggested: DiaryBlockType = dto.blockType ? (dto.blockType as DiaryBlockType) : DiaryBlockType.diary;
-    if (!dto.blockType) {
-      suggested = this.classifier.classifyType(dto.content).suggested;
-    }
-
-    const ship = await this.classifier.detectShip(dto.content, teamCode);
-
-    // 如果 blockType 是 todo，同步创建一条 Schedule（复用现有日程系统）
-    let scheduleId = dto.scheduleId;
-    const finalBlockType = dto.blockType ? (dto.blockType as DiaryBlockType) : suggested;
-    if (finalBlockType === DiaryBlockType.todo && !scheduleId) {
-      try {
-        const sched = await this.prisma.schedule.create({
-          data: {
-            teamCode,
-            createdById: userId,
-            shipId: ship?.id ?? diary.shipId ?? undefined,
-            recordDate: diary.date,
-            firstType: '待办事项',
-            secondType: '日记流转',
-            title: dto.content.slice(0, 100),
-            description: dto.content,
-            finishStatus: 'pending',
-          },
-        });
-        scheduleId = sched.id;
-      } catch (e) {
-        this.logger.warn('创建关联 Schedule 失败，继续创建 DiaryBlock：', e.message);
+    try {
+      const diary = await this.prisma.diary.findUnique({ where: { id: dto.diaryId } });
+      if (!diary) throw new NotFoundException('日记不存在');
+      if (diary.teamCode !== teamCode || diary.userId !== userId) {
+        throw new ForbiddenException('无权在该日记下创建块');
       }
-    }
 
-    return this.prisma.diaryBlock.create({
-      data: {
-        diaryId: dto.diaryId,
-        userId,
-        teamCode,
-        sortOrder,
-        blockType: finalBlockType,
-        content: dto.content,
-        todoStatus: finalBlockType === DiaryBlockType.todo ? (dto.todoStatus || 'pending') : undefined,
-        todoDueDate: dto.todoDueDate ? new Date(dto.todoDueDate) : undefined,
-        metaJson: dto.metaJson,
-        aiSuggested: suggested,
-        userChanged: !!dto.blockType && dto.blockType !== suggested,
-        detectedShipId: ship?.id,
-        detectedShipName: ship?.name,
-        scheduleId,
-      },
-    });
+      // 若没有指定 sortOrder，则取当前最大 +1
+      let sortOrder = dto.sortOrder;
+      if (sortOrder === undefined || sortOrder === null) {
+        const max = await this.prisma.diaryBlock.aggregate({
+          where: { diaryId: dto.diaryId },
+          _max: { sortOrder: true },
+        });
+        sortOrder = (max._max.sortOrder ?? -1) + 1;
+      }
+
+      // AI 分类 + 船名识别（容错处理，AI 失败不阻止创建）
+      let suggested: DiaryBlockType = dto.blockType ? (dto.blockType as DiaryBlockType) : DiaryBlockType.diary;
+      if (!dto.blockType) {
+        try {
+          suggested = this.classifier.classifyType(dto.content).suggested;
+        } catch {
+          this.logger.warn('AI分类失败，使用默认 diary 类型');
+        }
+      }
+
+      let ship: { id: number; name: string } | null = null;
+      try {
+        ship = await this.classifier.detectShip(dto.content, teamCode);
+      } catch {
+        this.logger.warn('船舶识别失败，继续创建块');
+      }
+
+      // 如果 blockType 是 todo，同步创建一条 Schedule（复用现有日程系统）
+      let scheduleId = dto.scheduleId;
+      const finalBlockType = dto.blockType ? (dto.blockType as DiaryBlockType) : suggested;
+      if (finalBlockType === DiaryBlockType.todo && !scheduleId) {
+        try {
+          const sched = await this.prisma.schedule.create({
+            data: {
+              teamCode,
+              createdById: userId,
+              shipId: ship?.id ?? diary.shipId ?? undefined,
+              recordDate: diary.date,
+              firstType: '待办事项',
+              secondType: '日记流转',
+              title: dto.content.slice(0, 100),
+              description: dto.content,
+              finishStatus: 'pending',
+            },
+          });
+          scheduleId = sched.id;
+        } catch (e) {
+          this.logger.warn('创建关联 Schedule 失败，继续创建 DiaryBlock：', e.message);
+        }
+      }
+
+      return await this.prisma.diaryBlock.create({
+        data: {
+          diaryId: dto.diaryId,
+          userId,
+          teamCode,
+          sortOrder,
+          blockType: finalBlockType,
+          content: dto.content,
+          todoStatus: finalBlockType === DiaryBlockType.todo ? (dto.todoStatus || 'pending') : undefined,
+          todoDueDate: dto.todoDueDate ? new Date(dto.todoDueDate) : undefined,
+          metaJson: dto.metaJson,
+          aiSuggested: suggested,
+          userChanged: !!dto.blockType && dto.blockType !== suggested,
+          detectedShipId: ship?.id,
+          detectedShipName: ship?.name,
+          scheduleId,
+        },
+      });
+    } catch (err: any) {
+      if (err.status || err.getStatus) {
+        throw err;
+      }
+      this.logger.error('创建 DiaryBlock 失败：', err.message, err.stack);
+      throw new InternalServerErrorException(
+        `创建日记块失败：${err.message || '未知错误'}，可能是数据库表结构未更新，请重新部署`
+      );
+    }
   }
 
   async update(id: number, dto: UpdateDiaryBlockDto, userId: number, teamCode: TeamCode) {

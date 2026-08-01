@@ -148,6 +148,9 @@ jobs:
             cd "$DEPLOY_DIR/backend"
             npm install --omit=dev --no-audit --no-fund --legacy-peer-deps
 
+            echo "[3.5/5] Regenerate Prisma client..."
+            npx prisma@5 generate --schema=prisma/schema.prisma
+
             echo "[4/5] Sync DB schema..."
             cd "$DEPLOY_DIR/backend"
             npx prisma@5 db push --schema=prisma/schema.prisma --accept-data-loss
