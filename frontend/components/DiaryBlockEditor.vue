@@ -422,7 +422,6 @@ function previewImage(url: string) {
 // ============== 新增块 ==============
 async function insertBlock(type: BlockType, afterIdx?: number, initialContent = '') {
   if (!props.diaryId) {
-    // 没有今日日记：通知父组件先创建日记，再插入对应块
     emit('need-create-diary', { type, afterIdx, initialContent });
     return;
   }
@@ -431,7 +430,7 @@ async function insertBlock(type: BlockType, afterIdx?: number, initialContent = 
     : blocks.value.length;
 
   const block: DiaryBlock = {
-    id: -(Date.now() + Math.random()), // 临时负 ID
+    id: -(Date.now() + Math.random()),
     diaryId: props.diaryId,
     userId: 0,
     sortOrder,
@@ -445,7 +444,6 @@ async function insertBlock(type: BlockType, afterIdx?: number, initialContent = 
   const insertAt = afterIdx !== undefined ? afterIdx + 1 : blocks.value.length;
   blocks.value.splice(insertAt, 0, block);
 
-  // 立即保存到后端
   try {
     const saved = await props.api.diaryBlocks.create({
       diaryId: props.diaryId,
@@ -459,12 +457,15 @@ async function insertBlock(type: BlockType, afterIdx?: number, initialContent = 
       blocks.value[idx] = normalizeBlock(saved);
     }
   } catch (e: any) {
+    const idx = blocks.value.findIndex(b => b.id === block.id);
+    if (idx >= 0) blocks.value.splice(idx, 1);
     ElMessage.error('保存失败：' + (e.message || e));
+    emit('blocks-changed', blocks.value);
+    return;
   }
 
   emit('blocks-changed', blocks.value);
 
-  // 自动聚焦文本块
   await nextTick();
   if (type === 'diary' || type === 'todo' || type === 'memo') {
     const target = blocks.value[insertAt];
@@ -528,21 +529,27 @@ function debounceCommit(block: DiaryBlock) {
 
 async function commitBlock(block: DiaryBlock) {
   if (!block.$dirty) return;
-  // 新增块：insertBlock 时已经保存，update 走 update
   try {
-    if (block.$isNew) {
-      // 应当在 insertBlock 时已经有 ID，这里做兜底
-      block.$isNew = false;
-    }
-    const saved = await props.api.diaryBlocks.update(block.id, {
+    const payload = {
       content: block.content,
       blockType: block.blockType,
       todoStatus: block.blockType === 'todo' ? (block.todoStatus ?? undefined) : undefined,
-    });
+    };
+    let saved: any;
+    if (block.id < 0 || block.$isNew) {
+      saved = await props.api.diaryBlocks.create({
+        diaryId: props.diaryId,
+        sortOrder: block.sortOrder,
+        ...payload,
+      });
+      block.$isNew = false;
+    } else {
+      saved = await props.api.diaryBlocks.update(block.id, payload);
+    }
     Object.assign(block, normalizeBlock(saved));
     block.$dirty = false;
   } catch (e: any) {
-    // 静默：可能是网络问题，下一次 blur 再重试
+    console.warn('[commitBlock] 保存失败', { id: block.id, error: e?.message });
   }
   emit('blocks-changed', blocks.value);
 }

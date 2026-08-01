@@ -744,56 +744,38 @@ export const useApi = () => {
       const responseData = error?.response?._data || error?.data || {};
       const code = responseData.code !== undefined && responseData.code !== null ? String(responseData.code) : undefined;
       const serverMessage = responseData.message || error?.message;
+      const silent = options.silent === true;
 
-      // 根据错误码获取友好消息
       const friendlyMessage = getFriendlyMessage(code, serverMessage || '请求失败');
 
-      // 401未授权：Token已过期或无效，自动登出
       if (status === 401 || code?.startsWith('401')) {
         authStore.logout();
-        if (process.client) {
-          ElMessage.error(friendlyMessage);
-        }
+        if (process.client && !silent) ElMessage.error(friendlyMessage);
         throw new Error(friendlyMessage);
       }
 
-      // 403禁止访问
       if (status === 403 || code?.startsWith('403')) {
-        if (process.client) {
-          ElMessage.error(friendlyMessage);
-        }
+        if (process.client && !silent) ElMessage.error(friendlyMessage);
         throw new Error(friendlyMessage);
       }
 
-      // 404资源不存在
       if (status === 404 || code?.startsWith('404')) {
-        if (process.client) {
-          ElMessage.error(friendlyMessage);
-        }
+        if (process.client && !silent) ElMessage.error(friendlyMessage);
         throw new Error(friendlyMessage);
       }
 
-      // 409冲突错误
       if (status === 409 || code?.startsWith('409')) {
-        if (process.client) {
-          ElMessage.error(friendlyMessage);
-        }
+        if (process.client && !silent) ElMessage.error(friendlyMessage);
         throw new Error(friendlyMessage);
       }
 
-      // 422业务逻辑错误
       if (status === 422 || code?.startsWith('422')) {
-        if (process.client) {
-          ElMessage.error(friendlyMessage);
-        }
+        if (process.client && !silent) ElMessage.error(friendlyMessage);
         throw new Error(friendlyMessage);
       }
 
-      // 500服务器错误
       if (status === 500 || code?.startsWith('500')) {
-        if (process.client) {
-          ElMessage.error(friendlyMessage);
-        }
+        if (process.client && !silent) ElMessage.error(friendlyMessage);
         throw new Error(friendlyMessage);
       }
 
@@ -1540,7 +1522,7 @@ export const useApi = () => {
         todoDueDate?: string;
         metaJson?: string;
         scheduleId?: number;
-      }) => apiFetch('/diary-blocks', { method: 'POST', body: data }),
+      }) => apiFetch('/diary-blocks', { method: 'POST', body: data, silent: true }),
       update: (id: number, data: {
         sortOrder?: number;
         blockType?: 'diary' | 'todo' | 'memo' | 'image' | 'file' | 'link';
@@ -1550,7 +1532,7 @@ export const useApi = () => {
         metaJson?: string;
         scheduleId?: number;
         userManuallyChangedType?: boolean;
-      }) => apiFetch(`/diary-blocks/${id}`, { method: 'PUT', body: data }),
+      }) => apiFetch(`/diary-blocks/${id}`, { method: 'PUT', body: data, silent: true }),
       remove: (id: number) => apiFetch(`/diary-blocks/${id}`, { method: 'DELETE' }),
       reorder: (diaryId: number, orderedIds: number[]) =>
         apiFetch(`/diary-blocks/reorder/${diaryId}`, { method: 'POST', body: { orderedIds } }),
