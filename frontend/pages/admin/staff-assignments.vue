@@ -121,12 +121,14 @@
       <el-tab-pane label="甘特图视图" name="gantt">
         <!-- 甘特图颜色图例 -->
         <div class="gantt-legend">
+          <span class="legend-item">
+            <span class="legend-gradient" style="background:linear-gradient(to right,#67c23a 0%,#67c23a 45%,#e6a23c 65%,#f89a3c 80%,#f56c6c 92%,#ad0606 100%)"></span>
+            在船渐变（绿→红）
+          </span>
           <span class="legend-item"><span class="legend-color" style="background:#67c23a"></span>≤6月 正常</span>
-          <span class="legend-item"><span class="legend-color" style="background:#e6a23c"></span>6-8月 关注</span>
-          <span class="legend-item"><span class="legend-color" style="background:#f89a3c"></span>8-10月 预警</span>
-          <span class="legend-item"><span class="legend-color" style="background:#f56c6c"></span>10-11月 极限</span>
+          <span class="legend-item"><span class="legend-color" style="background:#f89a3c"></span>8月 预警</span>
           <span class="legend-item"><span class="legend-color" style="background:#ad0606"></span>>11月 违规</span>
-          <span class="legend-item"><span class="legend-color" style="background:#b0b0b0"></span>已下船</span>
+          <span class="legend-item"><span class="legend-color" style="background:#b8b8b8"></span>已下船</span>
           <span class="legend-item"><span class="legend-color" style="background:#e6a23c;background-image:repeating-linear-gradient(45deg,#fff 0,#fff 2px,transparent 2px,transparent 6px)"></span>休假</span>
         </div>
         <!-- 甘特图组件 -->
@@ -227,6 +229,12 @@
         </div>
         <div class="popover-actions">
           <el-button size="small" @click="handleEdit(popoverAssignment!)">编辑</el-button>
+          <el-button
+            v-if="popoverAssignment?.status === 'active' && !popoverAssignment?.endDate"
+            size="small"
+            type="warning"
+            @click="handleReplaceFromPopover"
+          >换班</el-button>
           <el-button
             v-if="popoverAssignment?.status === 'active' && !popoverAssignment?.endDate"
             size="small"
@@ -1094,6 +1102,16 @@ const showQuickReplaceDialog = () => {
   showReplaceDialog.value = true;
 };
 
+// 从甘特图 popover 触发换班：自动带入当前船舶
+const handleReplaceFromPopover = () => {
+  const a = popoverAssignment.value;
+  if (!a?.shipId) return;
+  popoverVisible.value = false;
+  replaceForm.value.shipId = a.shipId;
+  onReplaceShipChange(a.shipId);
+  showReplaceDialog.value = true;
+};
+
 const resetReplaceForm = () => {
   replaceForm.value = {
     shipId: undefined,
@@ -1320,6 +1338,14 @@ onMounted(async () => {
 .legend-color {
   display: inline-block;
   width: 16px;
+  height: 12px;
+  border-radius: 2px;
+  border: 1px solid #dcdfe6;
+}
+
+.legend-gradient {
+  display: inline-block;
+  width: 48px;
   height: 12px;
   border-radius: 2px;
   border: 1px solid #dcdfe6;

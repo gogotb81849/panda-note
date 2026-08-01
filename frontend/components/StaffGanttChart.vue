@@ -25,7 +25,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import VChart from 'vue-echarts'
 import { use, graphic } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
@@ -87,9 +87,9 @@ function getDaysOnBoard(startDate: string, endDate?: string | null): number {
   return Math.floor((end - start) / DAY_MS)
 }
 
-// 根据状态与在船天数获取色条颜色
+// 根据状态与在船天数获取色条颜色（用于 tooltip / 兜底）
 function getBarColor(assignment: AssignmentItem): string {
-  if (assignment.status === 'ended' || assignment.endDate) return '#b0b0b0'
+  if (assignment.status === 'ended' || assignment.endDate) return '#b8b8b8'
   if (assignment.status === 'leave') return '#e6a23c'
   const days = getDaysOnBoard(assignment.startDate, assignment.endDate)
   if (days > 330) return '#ad0606'
@@ -97,6 +97,33 @@ function getBarColor(assignment: AssignmentItem): string {
   if (days > 240) return '#f89a3c'
   if (days > 180) return '#e6a23c'
   return '#67c23a'
+}
+
+// === 渐变色条：6个月内纯绿，6个月后沿时间轴向红色渐变 ===
+function getBarFill(assignment: AssignmentItem): string | object {
+  // 已下船：整条灰色
+  if (assignment.status === 'ended' || assignment.endDate) return '#b8b8b8'
+  // 休假：斜线图案
+  if (assignment.status === 'leave') return getLeavePattern()
+
+  const days = getDaysOnBoard(assignment.startDate, assignment.endDate)
+  // 6个月内：纯绿
+  if (days <= 180) return '#67c23a'
+
+  // 6个月后：沿色条时间轴渐变 绿→橙→红→深红
+  const totalDays = Math.max(days, 1)
+  const stops: { offset: number; color: string }[] = [
+    { offset: 0, color: '#67c23a' },
+    { offset: Math.min(180 / totalDays, 1), color: '#67c23a' },
+  ]
+  if (totalDays > 240) stops.push({ offset: Math.min(240 / totalDays, 1), color: '#f89a3c' })
+  if (totalDays > 300) stops.push({ offset: Math.min(300 / totalDays, 1), color: '#f56c6c' })
+  if (totalDays > 330) stops.push({ offset: Math.min(330 / totalDays, 1), color: '#ad0606' })
+
+  const endColor = days > 330 ? '#ad0606' : days > 300 ? '#f56c6c' : days > 240 ? '#f89a3c' : '#e6a23c'
+  stops.push({ offset: 1, color: endColor })
+
+  return { type: 'linear', x: 0, y: 0, x2: 1, y2: 0, colorStops: stops }
 }
 
 function statusLabel(status: string): string {
@@ -198,56 +225,6 @@ const assignmentMap = computed(() => {
   return map
 })
 
-// 休假中的派任 id 集合，renderItem 用以判断是否使用斜线图案
-const leaveIds = computed(() => {
-  const set = new Set<number>()
-  for (const a of props.assignments) {
-    if (a.status === 'leave') set.add(a.id)
-  }
-  return set
-})
-
-// 是否存在在船 >330 天的派任（用于启用深红闪烁）
-function isOverdueBlinkItem(a: AssignmentItem): boolean {
-  return (
-    a.status !== 'ended' &&
-    !a.endDate &&
-    a.status !== 'leave' &&
-    getDaysOnBoard(a.startDate, a.endDate) > 330
-  )
-}
-
-const hasOverdueBlink = computed(() => props.assignments.some(isOverdueBlinkItem))
-
-// 闪烁状态
-const blink = ref(true)
-let blinkTimer: ReturnType<typeof setInterval> | null = null
-
-function startBlink() {
-  if (blinkTimer) return
-  blinkTimer = setInterval(() => {
-    blink.value = !blink.value
-  }, 800)
-}
-
-function stopBlink() {
-  if (blinkTimer) {
-    clearInterval(blinkTimer)
-    blinkTimer = null
-  }
-}
-
-watch(
-  hasOverdueBlink,
-  (v) => {
-    if (v) startBlink()
-    else stopBlink()
-  },
-  { immediate: true },
-)
-
-onBeforeUnmount(() => stopBlink())
-
 // 时间轴范围：覆盖所有派任数据 + 今天，并预留缓冲
 const timeRange = computed(() => {
   let minT = Infinity
@@ -280,11 +257,7 @@ const seriesData = computed(() => {
     const shipIndex = shipIdToYIndex.value.get(a.shipId) ?? 0
     const start = new Date(a.startDate).getTime()
     const end = a.endDate ? new Date(a.endDate).getTime() : Date.now()
-    let color = getBarColor(a)
-    // 在船 >330 天：深红闪烁
-    if (isOverdueBlinkItem(a)) {
-      color = blink.value ? '#ad0606' : '#ff0000'
-    }
+    const color = getBarColor(a)
     const officerName = a.user?.realName || '未指派'
     return [shipIndex, start, end, color, officerName, a.id]
   })
@@ -298,8 +271,19 @@ function renderItem(_params: any, api: any) {
   const height = api.size([0, 1])[1] * 0.6
 
   const assignmentId = api.value(5)
-  const isLeave = leaveIds.value.has(assignmentId)
-  const fill = isLeave ? getLeavePattern() : api.value(3)
+  const assignment = assignmentMap.value.get(assignmentId)
+
+  // 从 assignment 计算渐变填充 + 文字颜色
+  let fill: string | object = '#ccc'
+  let textFill = '#fff'
+  let opacity = 1
+  if (assignment) {
+    fill = getBarFill(assignment)
+    if (assignment.status === 'ended' || assignment.endDate) {
+      textFill = '#888'
+      opacity = 0.65
+    }
+  }
 
   const barWidth = Math.max(end[0] - start[0], 3)
 
@@ -316,11 +300,12 @@ function renderItem(_params: any, api: any) {
     style: {
       fill: fill,
       text: api.value(4),
-      textFill: '#fff',
+      textFill: textFill,
       fontSize: 11,
       textPosition: 'insideLeft',
       textAlign: 'left',
       textVerticalAlign: 'middle',
+      opacity: opacity,
     },
   }
 }
