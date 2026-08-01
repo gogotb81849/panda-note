@@ -1,5 +1,13 @@
 <template>
-  <div class="diary-block-editor" @contextmenu.prevent>
+  <div
+    class="diary-block-editor"
+    :class="{ 'is-dragover-file': dragOverFile }"
+    @contextmenu.prevent
+    @paste="onPaste"
+    @dragover.prevent="onDragOverFile"
+    @dragleave="onDragLeaveFile"
+    @drop.prevent="onRootDrop"
+  >
     <!-- 块列表 -->
     <div
       v-if="blocks.length"
@@ -19,7 +27,7 @@
         @dragend="onDragEnd"
         @dragover.prevent="dropIdx = idx"
         @dragleave="dropIdx = dropIdx === idx ? null : dropIdx"
-        @drop.prevent="onDrop(idx)"
+        @drop.prevent="onDrop(idx, $event)"
       >
         <!-- 拖拽手柄 + 块类型标签 -->
         <div class="block-left-bar" @mousedown.stop>
@@ -67,13 +75,22 @@
             class="inline-image"
             @click="previewImage(imageUrl(block))"
           />
-          <textarea
-            v-if="false"
-          /><!-- 占位以保留 structure 一致性 -->
+          <div v-else class="upload-zone" @click="triggerFileInput(block)">
+            <el-icon size="20"><Picture /></el-icon>
+            <span class="upload-zone-text">点击上传 / 粘贴 / 拖拽图片</span>
+            <input
+              :ref="(el) => setFileInputRef(block.id, el as any)"
+              type="file"
+              accept="image/*"
+              class="hidden-file-input"
+              @change="onFileInputChange(block, $event)"
+            />
+          </div>
           <input
-            v-else-if="!imageUrl(block)"
+            v-if="!imageUrl(block)"
             type="text"
-            placeholder="请输入图片 URL，或粘贴图片链接"
+            class="url-fallback-input"
+            placeholder="或粘贴图片 URL"
             :value="block.content"
             @input="onContentInput(block, ($event.target as HTMLInputElement).value)"
             @blur="commitBlock(block)"
@@ -92,10 +109,21 @@
             <el-icon><Paperclip /></el-icon>
             {{ fileMeta(block).name || '文件附件' }}
           </el-link>
+          <div v-else class="upload-zone" @click="triggerFileInput(block)">
+            <el-icon size="20"><Document /></el-icon>
+            <span class="upload-zone-text">点击上传 / 粘贴 / 拖拽文件</span>
+            <input
+              :ref="(el) => setFileInputRef(block.id, el as any)"
+              type="file"
+              class="hidden-file-input"
+              @change="onFileInputChange(block, $event)"
+            />
+          </div>
           <input
-            v-else
+            v-if="!fileMeta(block)"
             type="text"
-            placeholder="粘贴文件链接（PDF、Word 等）"
+            class="url-fallback-input"
+            placeholder="或粘贴文件 URL"
             :value="block.content"
             @input="onContentInput(block, ($event.target as HTMLInputElement).value)"
             @blur="commitBlock(block)"
@@ -140,6 +168,43 @@
             @keydown="onKeydown(block, idx, $event)"
             @contextmenu.prevent.stop="openContextMenu(block, idx, $event)"
           />
+          <!-- 待办：截止时间 + 日程关联 -->
+          <div v-if="block.blockType === 'todo'" class="todo-extra">
+            <el-popover trigger="click" placement="bottom" :width="280">
+              <template #reference>
+                <el-tag
+                  size="small"
+                  :type="block.todoDueDate ? 'danger' : 'info'"
+                  effect="plain"
+                  class="todo-due-tag"
+                >
+                  <el-icon><Clock /></el-icon>
+                  {{ block.todoDueDate ? formatDueDate(block.todoDueDate) : '设置提醒时间' }}
+                </el-tag>
+              </template>
+              <div class="due-date-picker">
+                <el-date-picker
+                  v-model="dueDateDraft"
+                  type="datetime"
+                  placeholder="选择截止时间"
+                  format="YYYY-MM-DD HH:mm"
+                  value-format="YYYY-MM-DDTHH:mm:ss"
+                  style="width: 100%"
+                  @change="onDueDateChange(block, $event)"
+                />
+                <el-button
+                  v-if="block.todoDueDate"
+                  size="small"
+                  text
+                  type="danger"
+                  @click="onDueDateChange(block, null)"
+                >清除</el-button>
+              </div>
+            </el-popover>
+            <el-tag v-if="block.scheduleId" size="small" type="success" effect="plain" class="todo-schedule-tag">
+              已关联日程
+            </el-tag>
+          </div>
         </div>
 
         <!-- 右侧快捷按钮：删除 -->
@@ -188,10 +253,10 @@
       <el-tooltip content="待办：需要完成的任务，如「给某轮送备件」。未完成的待办会自动显示在船舶卡片中" placement="top" :show-after="300">
         <el-button size="small" type="primary" @click="insertBlock('todo')">+ 待办</el-button>
       </el-tooltip>
-      <el-tooltip content="图片：粘贴图片 URL，支持点击大图查看" placement="top" :show-after="300">
+      <el-tooltip content="图片：点击上传、粘贴或拖拽图片文件" placement="top" :show-after="300">
         <el-button size="small" type="success" @click="insertBlock('image')">+ 图片</el-button>
       </el-tooltip>
-      <el-tooltip content="文件：粘贴文件链接（PDF、Word 等），可点击下载" placement="top" :show-after="300">
+      <el-tooltip content="文件：点击上传、粘贴或拖拽文件（PDF、Word 等）" placement="top" :show-after="300">
         <el-button size="small" type="info" @click="insertBlock('file')">+ 文件</el-button>
       </el-tooltip>
       <el-tooltip content="链接：粘贴网页链接，可点击跳转" placement="top" :show-after="300">
@@ -227,7 +292,7 @@
 <script setup lang="ts">
 import { ref, reactive, nextTick, onMounted, onBeforeUnmount, computed, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Delete, Paperclip, Link, Refresh } from '@element-plus/icons-vue';
+import { Delete, Paperclip, Link, Refresh, Picture, Document, Clock } from '@element-plus/icons-vue';
 
 type BlockType = 'diary' | 'todo' | 'memo' | 'image' | 'file' | 'link';
 
@@ -270,6 +335,10 @@ const blockListRef = ref<HTMLDivElement | null>(null);
 const dragIdx = ref<number | null>(null);
 const dropIdx = ref<number | null>(null);
 const reloading = ref(false);
+const uploading = ref(false);
+const dragOverFile = ref(false);
+const dueDateDraft = ref<string | null>(null);
+const fileInputRefs = reactive<Record<number, HTMLInputElement | null>>({});
 
 const ctxMenu = reactive<{
   visible: boolean;
@@ -371,13 +440,15 @@ function parseMeta(block: DiaryBlock): any {
 
 function imageUrl(block: DiaryBlock): string {
   const m = parseMeta(block);
-  return m.url || /^https?:\/\//.test(block.content) ? block.content : '';
+  if (m.url) return m.url;
+  if (/^(https?:)?\/\//.test(block.content)) return block.content;
+  return '';
 }
 
 function fileMeta(block: DiaryBlock): { url?: string; name?: string; size?: number } | null {
   const m = parseMeta(block);
   if (m.url) return m;
-  if (/^https?:\/\//.test(block.content)) return { url: block.content, name: '附件' };
+  if (/^(https?:)?\/\//.test(block.content)) return { url: block.content, name: '附件' };
   return null;
 }
 
@@ -419,8 +490,128 @@ function previewImage(url: string) {
   window.open(url, '_blank');
 }
 
+// ============== 文件上传：粘贴 / 拖拽 / 点击 ==============
+function setFileInputRef(id: number, el: HTMLInputElement | null) {
+  fileInputRefs[id] = el;
+}
+
+function triggerFileInput(block: DiaryBlock) {
+  const input = fileInputRefs[block.id];
+  if (input) {
+    input.value = '';
+    input.click();
+  }
+}
+
+async function onFileInputChange(block: DiaryBlock, evt: Event) {
+  const input = evt.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (file) {
+    await handleFileUpload(file, block);
+  }
+}
+
+async function handleFileUpload(file: File, existingBlock?: DiaryBlock) {
+  if (uploading.value) return;
+  uploading.value = true;
+  try {
+    const result: any = await props.api.files.upload(file);
+    const fileUrl = `/${result.filePath}`;
+    const isImage = file.type.startsWith('image/');
+    const meta = JSON.stringify({
+      url: fileUrl,
+      name: result.originalName || file.name,
+      size: result.fileSize || file.size,
+      fileId: result.id,
+    });
+    if (existingBlock) {
+      // 更新已有块
+      existingBlock.content = fileUrl;
+      existingBlock.metaJson = meta;
+      existingBlock.$dirty = true;
+      if (isImage && existingBlock.blockType !== 'image') {
+        existingBlock.blockType = 'image';
+      } else if (!isImage && existingBlock.blockType !== 'file') {
+        existingBlock.blockType = 'file';
+      }
+      await commitBlock(existingBlock);
+    } else {
+      // 创建新块（一步到位，包含 metaJson）
+      await insertBlock(isImage ? 'image' : 'file', undefined, fileUrl, meta);
+    }
+    ElMessage.success(`${isImage ? '图片' : '文件'}上传成功`);
+  } catch (e: any) {
+    ElMessage.error('文件上传失败：' + (e?.message || '未知错误'));
+  } finally {
+    uploading.value = false;
+  }
+}
+
+function onPaste(e: ClipboardEvent) {
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  for (let i = 0; i < items.length; i++) {
+    if (items[i].kind === 'file') {
+      const file = items[i].getAsFile();
+      if (file) {
+        e.preventDefault();
+        handleFileUpload(file);
+        return;
+      }
+    }
+  }
+}
+
+function onDragOverFile(e: DragEvent) {
+  if (e.dataTransfer?.types?.includes('Files')) {
+    dragOverFile.value = true;
+  }
+}
+
+function onDragLeaveFile(e: DragEvent) {
+  const related = e.relatedTarget as Node | null;
+  const current = e.currentTarget as Node | null;
+  if (!related || !current?.contains(related)) {
+    dragOverFile.value = false;
+  }
+}
+
+function onRootDrop(e: DragEvent) {
+  dragOverFile.value = false;
+  if (e.dataTransfer?.files?.length) {
+    handleFileUpload(e.dataTransfer.files[0]);
+  }
+}
+
+// ============== 待办截止时间 ==============
+function formatDueDate(dateStr: string): string {
+  const d = new Date(dateStr);
+  const now = new Date();
+  const diff = d.getTime() - now.getTime();
+  const dateLabel = `${d.getMonth() + 1}月${d.getDate()}日 ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  if (diff < 0) return `已逾期 · ${dateLabel}`;
+  if (diff < 3600000) return `${Math.ceil(diff / 60000)}分钟后 · ${dateLabel}`;
+  if (diff < 86400000) return `${Math.ceil(diff / 3600000)}小时后 · ${dateLabel}`;
+  return dateLabel;
+}
+
+async function onDueDateChange(block: DiaryBlock, value: string | null) {
+  block.todoDueDate = value;
+  block.$dirty = true;
+  dueDateDraft.value = value;
+  try {
+    const saved = await props.api.diaryBlocks.update(block.id, {
+      todoDueDate: value === null ? '' : value,
+    });
+    Object.assign(block, normalizeBlock(saved));
+    block.$dirty = false;
+  } catch (e: any) {
+    ElMessage.error('设置提醒时间失败：' + (e?.message || ''));
+  }
+}
+
 // ============== 新增块 ==============
-async function insertBlock(type: BlockType, afterIdx?: number, initialContent = '') {
+async function insertBlock(type: BlockType, afterIdx?: number, initialContent = '', initialMetaJson?: string) {
   if (!props.diaryId) {
     emit('need-create-diary', { type, afterIdx, initialContent });
     return;
@@ -437,6 +628,7 @@ async function insertBlock(type: BlockType, afterIdx?: number, initialContent = 
     blockType: type,
     content: initialContent,
     todoStatus: type === 'todo' ? 'pending' : undefined,
+    metaJson: initialMetaJson,
     $isNew: true,
     $dirty: true,
   };
@@ -451,6 +643,7 @@ async function insertBlock(type: BlockType, afterIdx?: number, initialContent = 
       blockType: block.blockType,
       content: block.content,
       todoStatus: block.todoStatus ?? undefined,
+      metaJson: block.metaJson || undefined,
     });
     const idx = blocks.value.findIndex(b => b.id === block.id);
     if (idx >= 0) {
@@ -534,6 +727,8 @@ async function commitBlock(block: DiaryBlock) {
       content: block.content,
       blockType: block.blockType,
       todoStatus: block.blockType === 'todo' ? (block.todoStatus ?? undefined) : undefined,
+      todoDueDate: block.todoDueDate || undefined,
+      metaJson: block.metaJson || undefined,
     };
     let saved: any;
     if (block.id < 0 || block.$isNew) {
@@ -674,7 +869,13 @@ function onDragEnd() {
   dragIdx.value = null;
   dropIdx.value = null;
 }
-async function onDrop(targetIdx: number) {
+async function onDrop(targetIdx: number, evt?: DragEvent) {
+  if (evt?.dataTransfer?.files?.length) {
+    dragIdx.value = null;
+    dropIdx.value = null;
+    await handleFileUpload(evt.dataTransfer.files[0]);
+    return;
+  }
   if (dragIdx.value === null || dragIdx.value === targetIdx) return;
   const src = dragIdx.value;
   const item = blocks.value.splice(src, 1)[0];
@@ -894,6 +1095,74 @@ defineExpose({
   border-radius: 6px;
   cursor: zoom-in;
   box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+}
+
+/* 上传区域 */
+.upload-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 16px 12px;
+  border: 2px dashed #dcdfe6;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  color: #909399;
+  font-size: 13px;
+}
+.upload-zone:hover {
+  border-color: #409eff;
+  background: rgba(64, 158, 255, 0.04);
+  color: #409eff;
+}
+.upload-zone-text {
+  font-size: 12px;
+}
+.hidden-file-input {
+  display: none;
+}
+.url-fallback-input {
+  width: 100%;
+  border: 1px dashed #e4e7ed;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 12px;
+  outline: none;
+  margin-top: 4px;
+  color: #909399;
+}
+.url-fallback-input:focus {
+  border-color: #c0c4cc;
+}
+
+/* 文件拖拽到编辑器时的视觉反馈 */
+.diary-block-editor.is-dragover-file {
+  outline: 3px dashed #409eff;
+  outline-offset: -3px;
+  background: rgba(64, 158, 255, 0.04);
+}
+
+/* 待办截止时间 + 日程关联 */
+.todo-extra {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+.todo-due-tag {
+  cursor: pointer;
+  font-size: 11px;
+}
+.todo-schedule-tag {
+  font-size: 11px;
+}
+.due-date-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px;
 }
 
 .block-actions {

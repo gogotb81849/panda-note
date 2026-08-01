@@ -1079,6 +1079,18 @@ export const useApi = () => {
       update: (id: number, data: UpdateFileRecordRequest) => apiFetch(`/files/${id}`, { method: 'PUT', body: data }),
       delete: (id: number) => apiFetch(`/files/${id}`, { method: 'DELETE' }),
       download: (id: number) => apiFetch(`/files/${id}/download`, { method: 'POST' }),
+      upload: (file: File, description?: string) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        if (description) formData.append('description', description);
+        return $fetch(`${apiBase}/files/upload`, {
+          method: 'POST',
+          body: formData,
+          headers: {
+            Authorization: authStore.token ? `Bearer ${authStore.token}` : undefined,
+          },
+        });
+      },
     },
 
     portCheck: {

@@ -228,7 +228,7 @@ export class DiaryBlockService {
         todoStatus: finalBlockType === DiaryBlockType.todo
           ? (dto.todoStatus ?? block.todoStatus ?? 'pending')
           : undefined,
-        todoDueDate: dto.todoDueDate ? new Date(dto.todoDueDate) : block.todoDueDate,
+        todoDueDate: dto.todoDueDate === undefined ? block.todoDueDate : (dto.todoDueDate ? new Date(dto.todoDueDate) : null),
         metaJson: dto.metaJson ?? block.metaJson,
         aiSuggested: newSuggested,
         userChanged: dto.userManuallyChangedType ?? block.userChanged,
