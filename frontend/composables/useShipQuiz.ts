@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue'
 import type { Ship } from '~/types'
+import { useApi } from '~/composables/useApi'
 
 // ====== 类型定义 ======
 type QuestionType = 'marine' | 'engineer' | 'company' | 'flag' | 'political'
@@ -221,8 +222,7 @@ export function useShipQuiz() {
   // 初始化：加载船舶数据 + 卡片状态
   async function init() {
     try {
-      // 加载船舶列表（优先从 IndexedDB 离线缓存，再从 API）
-      const { useApi } = await import('~/composables/useApi')
+      // 加载船舶列表（useApi 在顶层调用以保持 Nuxt context）
       const api = useApi()
       ships.value = await api.ships.getAll() as Ship[]
 

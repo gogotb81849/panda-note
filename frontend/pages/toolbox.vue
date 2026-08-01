@@ -55,6 +55,16 @@
           <el-button type="primary" class="tool-btn">打开时钟</el-button>
         </div>
       </el-card>
+      
+      <!-- 船名达人 -->
+      <el-card class="tool-card cursor-pointer hover:shadow-lg transition-shadow" @click="openShipQuiz">
+        <div class="tool-content">
+          <div class="tool-icon">🚢</div>
+          <h3>船名达人</h3>
+          <p>船舶知识记忆训练，间隔重复学习</p>
+          <el-button type="primary" class="tool-btn">开始训练</el-button>
+        </div>
+      </el-card>
     </div>
     
     <!-- PDF压缩对话框 -->
@@ -111,6 +121,10 @@ const openScreensaver = () => {
 
 const openMagazine = () => {
   router.push('/magazine')
+}
+
+const openShipQuiz = () => {
+  router.push('/training/ship-quiz')
 }
 </script>
 

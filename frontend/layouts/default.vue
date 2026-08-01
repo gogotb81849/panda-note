@@ -145,12 +145,6 @@
               </button>
             </div>
 
-            <!-- 船名达人入口 -->
-            <NuxtLink to="/training/ship-quiz" class="quiz-entry-btn" title="船名达人 - 船舶知识记忆训练">
-              <span class="quiz-emoji">🚢</span>
-              <span v-if="!isTabletMode" class="quiz-label">船名达人</span>
-            </NuxtLink>
-
             <!-- 下载本地电脑版按钮（始终可见） -->
             <button class="offline-download-btn" @click="showOfflineDialog = true" title="下载数据到本地电脑（断网可用）">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2046,31 +2040,6 @@ onUnmounted(() => {
   background: var(--color-accent);
   color: #fff;
   border-color: var(--color-accent);
-}
-
-.quiz-entry-btn {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: all 0.2s;
-  font-size: 12px;
-  border: 1px solid rgba(56, 189, 248, 0.3);
-  background: rgba(56, 189, 248, 0.08);
-  color: #0284c7;
-  flex-shrink: 0;
-  text-decoration: none;
-}
-
-.quiz-entry-btn:hover {
-  background: rgba(56, 189, 248, 0.18);
-  border-color: rgba(56, 189, 248, 0.5);
-}
-
-.quiz-emoji {
-  font-size: 14px;
 }
 
 .notification-bell {
