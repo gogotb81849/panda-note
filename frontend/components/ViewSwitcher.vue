@@ -17,7 +17,7 @@
       </el-tab-pane>
       <el-tab-pane label="👤 个人视角" name="personal">
         <div class="personal-info">
-          <span>{{ currentUserInfo?.realName || '我的' }} 的历史日记</span>
+          <span>{{ (currentUserInfo && currentUserInfo.realName) || '我的' }} 的历史日记</span>
           <span class="hint">跨船汇总显示</span>
         </div>
       </el-tab-pane>
@@ -45,7 +45,7 @@ const shipOptions = computed(() => {
 
 const selectedShipName = computed(() => {
   const ship = shipOptions.value.find(s => s.id === selectedShipId.value)
-  return ship?.cnShipName || ''
+  return (ship && ship.cnShipName) || ''
 })
 
 const currentShipInfo = computed(() => {
@@ -59,9 +59,10 @@ const currentShipInfo = computed(() => {
     berthed: { text: '靠泊中', color: '#67c23a' },
   }
   
+  const statusEntry = statusMap[ship.currentStatus]
   return {
-    statusText: statusMap[ship.currentStatus]?.text || ship.currentStatus,
-    statusColor: statusMap[ship.currentStatus]?.color || '#909399',
+    statusText: (statusEntry && statusEntry.text) || ship.currentStatus,
+    statusColor: (statusEntry && statusEntry.color) || '#909399',
     isOnBoard: false,
   }
 })

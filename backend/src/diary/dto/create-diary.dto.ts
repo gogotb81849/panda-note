@@ -15,8 +15,8 @@ export class CreateDiaryDto {
   date: string;
 
   @IsString({ message: '日记内容必须是字符串' })
-  @IsNotEmpty({ message: '日记内容不能为空' })
-  content: string;
+  @IsOptional()
+  content?: string;
 
   @IsInt({ message: 'shipId 必须是整数' })
   @IsOptional()

@@ -9,10 +9,13 @@ const pkg = JSON.parse(readFileSync(join(__dirname, 'package.json'), 'utf-8'))
 export default defineNuxtConfig({
   compatibilityDate: '2024-04-03',
   devtools: { enabled: true },
-  // 生产环境：将 /api 请求代理到后端服务（SSR和客户端都可用）
+  // 将 /api 请求代理到后端服务（SSR和客户端都可用）
   routeRules: {
     '/api/**': {
-      proxy: 'http://106.14.57.62:3002/api/**',
+      proxy: 'http://localhost:3002/api/**',
+    },
+    '/uploads/**': {
+      proxy: 'http://localhost:3002/uploads/**',
     },
   },
   modules: [
@@ -71,9 +74,9 @@ export default defineNuxtConfig({
       runtimeCaching: [
         {
           urlPattern: /\/_nuxt\/.*\.(js|css)$/i,
-          handler: 'CacheFirst',
+          handler: 'NetworkFirst',
           options: {
-            cacheName: 'app-cache-v10',
+            cacheName: 'app-cache-v11',
             expiration: {
               maxEntries: 200,
               maxAgeSeconds: 60 * 60 * 24 * 30,
@@ -84,7 +87,7 @@ export default defineNuxtConfig({
           urlPattern: /^https:\/\/.*\/api\//i,
           handler: 'NetworkFirst',
           options: {
-            cacheName: 'api-cache-v10',
+            cacheName: 'api-cache-v11',
             expiration: {
               maxEntries: 200,
               maxAgeSeconds: 60 * 60 * 24,
@@ -98,7 +101,7 @@ export default defineNuxtConfig({
           urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp|woff2?)$/,
           handler: 'CacheFirst',
           options: {
-            cacheName: 'static-cache-v10',
+            cacheName: 'static-cache-v11',
             expiration: {
               maxEntries: 100,
               maxAgeSeconds: 60 * 60 * 24 * 30,
@@ -109,7 +112,7 @@ export default defineNuxtConfig({
           urlPattern: ({ request }) => request.mode === 'navigate',
           handler: 'NetworkFirst',
           options: {
-            cacheName: 'pages-cache-v10',
+            cacheName: 'pages-cache-v11',
             networkTimeoutSeconds: 3,
             expiration: {
               maxEntries: 50,
@@ -167,6 +170,11 @@ export default defineNuxtConfig({
   vite: {
     optimizeDeps: {
       include: ['@fullcalendar/core', '@fullcalendar/daygrid', '@fullcalendar/interaction', '@fullcalendar/vue3'],
+    },
+    ssr: {
+      // 将 CommonJS 依赖打包进 SSR 产物，避免 ESM/CJS 互操作错误
+      // （Element Plus 间接依赖 @popperjs/core，其为 CommonJS 模块）
+      noExternal: ['@popperjs/core'],
     },
   },
 });

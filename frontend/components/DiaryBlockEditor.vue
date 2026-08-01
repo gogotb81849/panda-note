@@ -84,7 +84,7 @@
         <!-- 文件块 -->
         <div v-else-if="block.blockType === 'file'" class="block-content block-file">
           <el-link
-            v-if="fileMeta(block)?.url"
+            v-if="fileMeta(block) && fileMeta(block).url"
             :href="fileMeta(block).url"
             target="_blank"
             type="primary"
@@ -106,7 +106,7 @@
         <!-- 链接块 -->
         <div v-else-if="block.blockType === 'link'" class="block-content block-link">
           <el-link
-            v-if="linkMeta(block)?.url"
+            v-if="linkMeta(block) && linkMeta(block).url"
             :href="linkMeta(block).url"
             target="_blank"
             type="primary"
@@ -129,7 +129,7 @@
         <!-- 文本 / 待办 / 备忘 / 日记：textarea 行级编辑 -->
         <div v-else class="block-content block-text">
           <textarea
-            ref="el => setTextareaRef(block.id, el as any)"
+            :ref="(el) => setTextareaRef(block.id, el as any)"
             class="block-textarea"
             :placeholder="placeholderFor(block)"
             :class="{ 'is-completed': block.blockType === 'todo' && block.todoStatus === 'completed' }"
@@ -160,7 +160,21 @@
 
     <!-- 空态 -->
     <div v-else class="empty-tip">
-      <p>暂无内容，按下下方按钮开始记录</p>
+      <!-- 旧内容保底显示 -->
+      <div v-if="legacyContent && legacyContent.trim()" class="legacy-content">
+        <div class="legacy-header">
+          <span>📜 历史记录（来自旧版日记）</span>
+          <el-button size="small" type="primary" text @click="doMigrateLegacy">迁移为条目</el-button>
+        </div>
+        <pre class="legacy-text">{{ legacyContent }}</pre>
+      </div>
+      <div v-else class="empty-actions">
+        <p>暂无内容，按下下方按钮开始记录</p>
+        <el-button v-if="diaryId" size="small" type="info" text @click="reloadBlocks" :loading="reloading">
+          <el-icon><Refresh /></el-icon>
+          重新加载条目
+        </el-button>
+      </div>
     </div>
 
     <!-- 底部添加栏 -->
@@ -198,7 +212,7 @@
           v-for="t in allTypes"
           :key="t.value"
           class="ctx-item"
-          :class="{ 'is-active': ctxMenu.block?.blockType === t.value }"
+          :class="{ 'is-active': ctxMenu.block && ctxMenu.block.blockType === t.value }"
           @click="changeBlockType(t.value)"
         >
           <span class="ctx-item-label">{{ t.label }}</span>
@@ -211,9 +225,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, nextTick, onMounted, onBeforeUnmount, computed } from 'vue';
+import { ref, reactive, nextTick, onMounted, onBeforeUnmount, computed, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Delete, Paperclip, Link } from '@element-plus/icons-vue';
+import { Delete, Paperclip, Link, Refresh } from '@element-plus/icons-vue';
 
 type BlockType = 'diary' | 'todo' | 'memo' | 'image' | 'file' | 'link';
 
@@ -242,10 +256,12 @@ interface DiaryBlock {
 const props = defineProps<{
   diaryId: number | null;
   api: any;
+  legacyContent?: string;
 }>();
 
 const emit = defineEmits<{
   (e: 'blocks-changed', blocks: DiaryBlock[]): void;
+  (e: 'need-create-diary', payload: { type: BlockType; afterIdx?: number; initialContent?: string }): void;
 }>();
 
 const blocks = ref<DiaryBlock[]>([]);
@@ -253,6 +269,7 @@ const textareaRefs = reactive<Record<number, HTMLTextAreaElement | null>>({});
 const blockListRef = ref<HTMLDivElement | null>(null);
 const dragIdx = ref<number | null>(null);
 const dropIdx = ref<number | null>(null);
+const reloading = ref(false);
 
 const ctxMenu = reactive<{
   visible: boolean;
@@ -273,14 +290,43 @@ const allTypes: { label: string; value: BlockType }[] = [
 
 // ============== 外部 API：加载块 ==============
 async function loadBlocks() {
-  if (!props.diaryId) return;
+  if (!props.diaryId) {
+    console.log('[loadBlocks] 无 diaryId，跳过加载');
+    blocks.value = [];
+    return;
+  }
   try {
     const list = await props.api.diaryBlocks.getByDiaryId(props.diaryId);
     blocks.value = (list || []).map((b: any) => normalizeBlock(b));
+    console.log('[loadBlocks] 加载完成', {
+      diaryId: props.diaryId,
+      blocksCount: blocks.value.length,
+      blockTypes: blocks.value.map(b => b.blockType),
+    });
   } catch (e: any) {
+    console.error('[loadBlocks] 加载失败', { diaryId: props.diaryId, error: e?.message || e });
     blocks.value = [];
   }
   emit('blocks-changed', blocks.value);
+}
+
+// 手动重新加载（用户点击"重新加载条目"按钮）
+async function reloadBlocks() {
+  if (!props.diaryId) return;
+  reloading.value = true;
+  try {
+    await loadBlocks();
+    // 如果还是空，且有 legacyContent，提示用户迁移
+    if (blocks.value.length === 0 && props.legacyContent && props.legacyContent.trim()) {
+      ElMessage.info('检测到历史内容，可点击"迁移为条目"按钮导入');
+    } else if (blocks.value.length > 0) {
+      ElMessage.success(`已加载 ${blocks.value.length} 条记录`);
+    } else {
+      ElMessage.info('暂无条目记录');
+    }
+  } finally {
+    reloading.value = false;
+  }
 }
 
 function normalizeBlock(b: any): DiaryBlock {
@@ -344,7 +390,8 @@ function linkMeta(block: DiaryBlock): { url?: string; title?: string } | null {
 
 // ============== UI 辅助 ==============
 function blockTypeLabel(t: BlockType): string {
-  return allTypes.find(x => x.value === t)?.label ?? t;
+  const found = allTypes.find(x => x.value === t)
+  return (found && found.label) || t;
 }
 
 function blockTagType(t: BlockType): '' | 'success' | 'warning' | 'danger' | 'info' | 'primary' {
@@ -375,11 +422,12 @@ function previewImage(url: string) {
 // ============== 新增块 ==============
 async function insertBlock(type: BlockType, afterIdx?: number, initialContent = '') {
   if (!props.diaryId) {
-    ElMessage.warning('请先保存日记，再添加条目');
+    // 没有今日日记：通知父组件先创建日记，再插入对应块
+    emit('need-create-diary', { type, afterIdx, initialContent });
     return;
   }
   const sortOrder = afterIdx !== undefined
-    ? (blocks.value[afterIdx]?.sortOrder ?? blocks.value.length) + 1
+    ? ((blocks.value[afterIdx] && blocks.value[afterIdx].sortOrder) ?? blocks.value.length) + 1
     : blocks.value.length;
 
   const block: DiaryBlock = {
@@ -635,10 +683,70 @@ async function onDrop(targetIdx: number) {
   }
 }
 
+// ============== 旧内容迁移：将 diary.content 按行拆分为块 ==============
+async function migrateLegacyContent(content: string) {
+  if (!props.diaryId || !content || !content.trim()) {
+    console.log('[migrateLegacyContent] 跳过：无 diaryId 或内容为空', {
+      diaryId: props.diaryId,
+      contentLength: (content || '').length,
+    });
+    return;
+  }
+  const lines = content.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean);
+  if (lines.length === 0) {
+    console.log('[migrateLegacyContent] 跳过：拆分后无有效行');
+    return;
+  }
+  console.log('[migrateLegacyContent] 开始迁移', {
+    diaryId: props.diaryId,
+    totalLines: lines.length,
+    preview: lines.slice(0, 3),
+  });
+  let successCount = 0;
+  let failCount = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    try {
+      const saved = await props.api.diaryBlocks.create({
+        diaryId: props.diaryId,
+        content: line,
+        sortOrder: i,
+      });
+      blocks.value.push(normalizeBlock(saved));
+      successCount++;
+    } catch (e: any) {
+      console.error('[migrateLegacyContent] 第' + (i + 1) + '行创建失败:', e?.message || e, { line });
+      failCount++;
+    }
+  }
+  emit('blocks-changed', blocks.value);
+  console.log('[migrateLegacyContent] 迁移完成', { successCount, failCount, totalBlocks: blocks.value.length });
+  if (successCount > 0) {
+    ElMessage.success(`已迁移 ${successCount} 条历史记录${failCount > 0 ? `（${failCount} 条失败）` : ''}`);
+  } else if (failCount > 0) {
+    ElMessage.error('迁移失败，旧内容仍保留显示');
+  }
+}
+
+// 用户点击"迁移为条目"按钮
+async function doMigrateLegacy() {
+  if (props.legacyContent && props.legacyContent.trim()) {
+    await migrateLegacyContent(props.legacyContent);
+  }
+}
+
 // ============== 生命周期 ==============
 onMounted(() => {
   document.addEventListener('click', onDocClick);
   loadBlocks();
+});
+
+// diaryId 变化时自动重新加载块（父组件切换日期后 diaryId 会更新）
+watch(() => props.diaryId, (newId, oldId) => {
+  if (newId !== oldId) {
+    console.log('[DiaryBlockEditor] diaryId 变化', { old: oldId, new: newId });
+    loadBlocks();
+  }
 });
 
 onBeforeUnmount(() => {
@@ -649,7 +757,9 @@ onBeforeUnmount(() => {
 
 defineExpose({
   loadBlocks,
+  reloadBlocks,
   insertBlock,
+  migrateLegacyContent,
   getBlocks: () => blocks.value,
 });
 </script>
@@ -661,12 +771,21 @@ defineExpose({
   border-radius: 10px;
   padding: 12px;
   margin-top: 8px;
+  /* 填满父容器，块列表可滚动 */
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 .block-list {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  /* 块过多时滚动 */
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .block-item {
@@ -787,8 +906,49 @@ defineExpose({
   color: #909399;
   font-size: 13px;
   padding: 20px 0;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .empty-tip p { margin: 0; }
+.empty-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 旧内容保底显示 */
+.legacy-content {
+  width: 100%;
+  text-align: left;
+  background: #fffbe6;
+  border: 1px dashed #e6d56b;
+  border-radius: 8px;
+  padding: 12px 16px;
+  max-height: 100%;
+  overflow-y: auto;
+}
+.legacy-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #b8860b;
+}
+.legacy-text {
+  margin: 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #303133;
+  font-family: inherit;
+}
 
 .add-bar {
   display: flex;
@@ -797,6 +957,7 @@ defineExpose({
   margin-top: 12px;
   padding-top: 10px;
   border-top: 1px dashed #e6e1d3;
+  flex-shrink: 0;
 }
 
 /* 右键菜单 */

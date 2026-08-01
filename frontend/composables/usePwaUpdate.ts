@@ -32,12 +32,12 @@ export function usePwaUpdate() {
   const applyUpdate = () => {
     if (typeof window === 'undefined') return
     isUpdating.value = true
-    // 清理旧缓存
+    // 清理旧缓存（保留当前 v11 版本，删除历史版本）
     if ('caches' in window) {
       caches.keys().then(names => {
         names.forEach(name => {
-          // 保留 v2 版本的缓存，清理旧版本
-          if (!name.includes('-v2')) {
+          // 保留当前 v11 版本的缓存，清理旧版本
+          if (!name.includes('-v11')) {
             caches.delete(name)
           }
         })

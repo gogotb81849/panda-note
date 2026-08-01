@@ -120,6 +120,11 @@ export class VersionService {
       updateType = 'optional';
       needsUpdate = true;
       updateMessage = `可选更新 v${serverVersion} 已发布`;
+    } else if (comparison.build) {
+      // 补丁号（第4段）变化也视为可选更新，确保前端资源修复能推送
+      updateType = 'optional';
+      needsUpdate = true;
+      updateMessage = `资源更新 v${serverVersion} 已发布`;
     } else {
       updateMessage = '当前已是最新版本';
     }

@@ -2,6 +2,18 @@ import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Request, Qu
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { StaffAssignmentService } from './staff-assignment.service';
 import { CreateStaffAssignmentDto, UpdateStaffAssignmentDto, CheckOutDto, LeaveDto } from './dto';
+import { UserRole } from '@prisma/client';
+
+/** 拥有管理权限的岸基角色 */
+const SHORE_MANAGEMENT_ROLES: UserRole[] = [
+  UserRole.shore_crew_supervisor,
+  UserRole.shore_marine_supervisor,
+  UserRole.shore_engineer_supervisor,
+  UserRole.shore_electric_supervisor,
+  UserRole.general_manager,
+  UserRole.company_admin,
+  UserRole.admin,
+];
 
 @Controller('staff-assignments')
 export class StaffAssignmentController {
@@ -32,6 +44,13 @@ export class StaffAssignmentController {
   @Get()
   @UseGuards(JwtAuthGuard)
   async findAll(@Request() req: any) {
+    const userRole = req.user.role;
+    const roles: UserRole[] = Array.isArray(userRole) ? userRole : [userRole];
+    const isShoreManager = roles.some((r: UserRole) => SHORE_MANAGEMENT_ROLES.includes(r));
+    // 岸基主管看全团队，普通政委只看自己
+    if (isShoreManager) {
+      return this.staffAssignmentService.getAllByTeamCode(req.user.teamCode);
+    }
     return this.staffAssignmentService.getHistoryAssignments(req.user.id, req.user.teamCode);
   }
 

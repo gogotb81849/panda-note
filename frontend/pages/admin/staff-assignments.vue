@@ -1,5 +1,37 @@
 <template>
   <div class="staff-assignments-page">
+    <!-- 政委更换操作指引 -->
+    <el-alert
+      title="政委更换操作流程说明"
+      type="info"
+      :closable="true"
+      show-icon
+      class="guide-alert"
+    >
+      <template #default>
+        <div class="guide-content">
+          <p>📌 <strong>场景</strong>：7月31日要给"三英座"更换政委（旧政委001下船，新政委002上船）</p>
+          <ol class="guide-steps">
+            <li>
+              <strong>第一步：旧政委下船</strong>
+              找到旧派任记录 → 点击"下船"按钮 → 填写下船日期（如 2026-07-31）和原因 → 确认
+            </li>
+            <li>
+              <strong>第二步：新政委上船</strong>
+              点击右上角"上船登记" → 选择新政委002 + 船舶三英座 → 填写上船日期（如 2026-07-31）→ 保存
+            </li>
+          </ol>
+          <p class="guide-warn">
+            ⚠️ <strong>注意</strong>：不要用"编辑"按钮去修改派任里的人/船！编辑只用于修改备注、编号等字段。
+            换人必须走【下船→上船】流程，这样历史数据才会完整保留。
+          </p>
+          <el-button type="success" size="small" @click="showQuickReplaceDialog" class="mt-2">
+            🚀 使用快捷通道：一键更换政委
+          </el-button>
+        </div>
+      </template>
+    </el-alert>
+
     <div class="toolbar">
       <div class="flex items-center justify-between">
         <el-select 
@@ -27,7 +59,12 @@
           <el-option label="休假" value="leave" />
           <el-option label="已结束" value="ended" />
         </el-select>
-        <el-button type="primary" @click="showCreateDialog">上船登记</el-button>
+        <div class="toolbar-right">
+          <el-button @click="showQuickReplaceDialog" type="warning">
+            更换政委
+          </el-button>
+          <el-button type="primary" @click="showCreateDialog">上船登记</el-button>
+        </div>
       </div>
     </div>
 
@@ -230,6 +267,95 @@
         <el-button type="warning" @click="submitLeave">确认休假</el-button>
       </template>
     </el-dialog>
+
+    <!-- 一键更换政委对话框 -->
+    <el-dialog v-model="showReplaceDialog" title="🚀 一键更换政委" width="560px" @closed="resetReplaceForm">
+      <el-alert
+        title="此操作将自动完成：旧政委下船 → 新政委上船（两条独立派任记录）"
+        type="warning"
+        :closable="false"
+        show-icon
+        class="mb-4"
+      />
+      <el-form :model="replaceForm" label-width="110px">
+        <el-form-item label="选择船舶" required>
+          <el-select v-model="replaceForm.shipId" placeholder="请选择要更换政委的船舶" class="w-full" @change="onReplaceShipChange">
+            <el-option 
+              v-for="ship in ships" 
+              :key="ship.id" 
+              :label="ship.cnShipName" 
+              :value="ship.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="当前在任政委" v-if="replaceForm.currentAssignment">
+          <el-tag type="success" size="large">
+            {{ replaceForm.currentAssignment.user?.realName || '未知' }}
+          </el-tag>
+          <span class="text-gray-400 ml-2 text-sm">
+            上船日期：{{ formatDate(replaceForm.currentAssignment.startDate) }}
+          </span>
+        </el-form-item>
+        <el-form-item v-else-if="replaceForm.shipId">
+          <el-tag type="info" size="large">该船舶当前无在任政委，只需执行新政委上船</el-tag>
+        </el-form-item>
+        <el-divider content-position="left">旧政委下船</el-divider>
+        <el-form-item label="下船日期" required>
+          <el-date-picker 
+            v-model="replaceForm.checkoutDate" 
+            type="date" 
+            placeholder="选择下船日期（如：2026-07-31）" 
+            class="w-full"
+            value-format="YYYY-MM-DD"
+          />
+        </el-form-item>
+        <el-form-item label="下船原因">
+          <el-input v-model="replaceForm.checkoutReason" type="textarea" :rows="2" placeholder="如：休假换班、公休" />
+        </el-form-item>
+        <el-divider content-position="left">新政委上船</el-divider>
+        <el-form-item label="新政委" required>
+          <el-select v-model="replaceForm.newUserId" placeholder="选择新政委" class="w-full" filterable>
+            <el-option 
+              v-for="user in availableNewUsers" 
+              :key="user.id" 
+              :label="user.realName" 
+              :value="user.id"
+            >
+              <span>{{ user.realName }}</span>
+              <span v-if="userCurrentShipMap[user.id]" class="text-gray-400 ml-2 text-xs">
+                当前在：{{ userCurrentShipMap[user.id] }}
+              </span>
+              <span v-else class="text-green-500 ml-2 text-xs">（待派）</span>
+            </el-option>
+          </el-select>
+        </el-form-item>
+        <el-form-item label="上船日期" required>
+          <el-date-picker 
+            v-model="replaceForm.boardDate" 
+            type="date" 
+            placeholder="选择上船日期（一般同下船日期）" 
+            class="w-full"
+            value-format="YYYY-MM-DD"
+          />
+        </el-form-item>
+        <el-form-item label="派任编号">
+          <el-input v-model="replaceForm.assignmentNo" placeholder="请输入派任编号（可选）" />
+        </el-form-item>
+        <el-form-item label="公司名称">
+          <el-select v-model="replaceForm.sourceCompany" placeholder="选择公司" class="w-full" clearable>
+            <el-option label="上海" value="上海" />
+            <el-option label="大连" value="大连" />
+            <el-option label="广州" value="广州" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showReplaceDialog = false">取消</el-button>
+        <el-button type="primary" :loading="replacing" @click="submitReplace">
+          确认更换
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -277,6 +403,150 @@ const checkoutForm = ref({ id: 0, endDate: '', reason: '' });
 
 const showLeaveDialog = ref(false);
 const leaveForm = ref({ id: 0, startDate: '', endDate: '', reason: '' });
+
+// 一键更换政委
+const showReplaceDialog = ref(false);
+const replacing = ref(false);
+const replaceForm = ref({
+  shipId: undefined as number | undefined,
+  currentAssignment: null as StaffAssignment | null,
+  checkoutDate: '',
+  checkoutReason: '',
+  newUserId: undefined as number | undefined,
+  boardDate: '',
+  assignmentNo: '',
+  sourceCompany: '',
+});
+
+// 计算每个用户当前在哪个船（给下拉提示用）
+const userCurrentShipMap = computed<Record<number, string>>(() => {
+  const map: Record<number, string> = {};
+  assignments.value.forEach(a => {
+    if (a.status === 'active' && !a.endDate && a.userId) {
+      map[a.userId] = a.ship?.cnShipName || '';
+    }
+  });
+  return map;
+});
+
+// 可选的新政委列表（排除当前船舶正在任的，但允许其他在船的——会先下船再上新）
+const availableNewUsers = computed(() => {
+  return users.value.filter(u => {
+    // 如果该用户正在我们选中的这艘船上，就不允许选（提示用户）
+    if (replaceForm.value.currentAssignment && replaceForm.value.currentAssignment.userId === u.id) {
+      return false;
+    }
+    return true;
+  });
+});
+
+const onReplaceShipChange = async (shipId: number) => {
+  replaceForm.value.currentAssignment = null;
+  if (!shipId) return;
+  try {
+    const staffList = await api.staffAssignments.getCurrentShipStaff(shipId) as StaffAssignment[];
+    if (staffList && staffList.length > 0) {
+      const activeOne = staffList.find((a: StaffAssignment) => a.status === 'active' && !a.endDate) || staffList[0];
+      replaceForm.value.currentAssignment = activeOne;
+    }
+  } catch (e) {
+    console.warn('获取船舶当前政委失败', e);
+  }
+};
+
+const showQuickReplaceDialog = () => {
+  // 如果选中了某艘船，自动带入
+  if (selectedShipId.value) {
+    replaceForm.value.shipId = selectedShipId.value;
+    onReplaceShipChange(selectedShipId.value);
+  }
+  showReplaceDialog.value = true;
+};
+
+const resetReplaceForm = () => {
+  replaceForm.value = {
+    shipId: undefined,
+    currentAssignment: null,
+    checkoutDate: '',
+    checkoutReason: '',
+    newUserId: undefined,
+    boardDate: '',
+    assignmentNo: '',
+    sourceCompany: '',
+  };
+};
+
+const submitReplace = async () => {
+  const { shipId, currentAssignment, checkoutDate, checkoutReason, newUserId, boardDate, assignmentNo, sourceCompany } = replaceForm.value;
+
+  if (!shipId) {
+    ElMessage.warning('请选择船舶');
+    return;
+  }
+  if (!newUserId) {
+    ElMessage.warning('请选择新政委');
+    return;
+  }
+  if (!boardDate) {
+    ElMessage.warning('请填写上船日期');
+    return;
+  }
+  if (currentAssignment && !checkoutDate) {
+    ElMessage.warning('有当前在任政委，请填写下船日期');
+    return;
+  }
+  // 新政委是否已经在其他船？如果是，给出确认
+  const currentShipOfNew = userCurrentShipMap.value[newUserId];
+  if (currentShipOfNew) {
+    try {
+      await ElMessageBox.confirm(
+        `新政委当前正任职于【${currentShipOfNew}】，是否先将其从该船下船，再派到所选船舶？`,
+        '需要先从原船下船',
+        { type: 'warning', confirmButtonText: '继续', cancelButtonText: '取消' }
+      );
+    } catch {
+      return;
+    }
+  }
+
+  replacing.value = true;
+  try {
+    // 1) 新政委如果当前在其他船，先下船
+    if (currentShipOfNew) {
+      const newUserAssignments = assignments.value.filter(
+        a => a.userId === newUserId && a.status === 'active' && !a.endDate
+      );
+      for (const a of newUserAssignments) {
+        await api.staffAssignments.checkOut(a.id, { endDate: checkoutDate || boardDate, reason: '换船派任' });
+      }
+    }
+
+    // 2) 旧政委从所选船下船（如果有）
+    if (currentAssignment) {
+      await api.staffAssignments.checkOut(currentAssignment.id, {
+        endDate: checkoutDate,
+        reason: checkoutReason || '换班',
+      });
+    }
+
+    // 3) 新政委上船
+    await createAssignment({
+      userId: newUserId,
+      shipId,
+      startDate: boardDate,
+      sourceCompany: sourceCompany || undefined,
+      assignmentNo: assignmentNo || undefined,
+    });
+
+    ElMessage.success('✅ 政委更换完成！已生成两条独立派任记录');
+    showReplaceDialog.value = false;
+    await loadCurrentInfo();
+  } catch (e: any) {
+    ElMessage.error(e?.message || '操作失败');
+  } finally {
+    replacing.value = false;
+  }
+};
 
 const filteredAssignments = computed(() => {
   let result = assignments.value;
@@ -500,5 +770,65 @@ onMounted(async () => {
 
 .text-gray-400 {
   color: #9ca3af;
+}
+
+.mt-2 {
+  margin-top: 8px;
+}
+
+.mb-4 {
+  margin-bottom: 16px;
+}
+
+.ml-2 {
+  margin-left: 8px;
+}
+
+/* 操作指引样式 */
+.guide-alert {
+  margin-bottom: 16px;
+}
+
+.guide-content {
+  margin-top: 8px;
+}
+
+.guide-content p {
+  margin: 4px 0 8px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.guide-steps {
+  padding-left: 20px;
+  margin: 8px 0;
+}
+
+.guide-steps li {
+  margin: 8px 0;
+  line-height: 1.6;
+}
+
+.guide-warn {
+  background: #fdf6ec;
+  border-left: 3px solid #e6a23c;
+  padding: 8px 12px;
+  border-radius: 4px;
+  color: #8a5a00;
+  margin-top: 10px;
+}
+
+.toolbar-right {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.text-sm {
+  font-size: 12px;
+}
+
+.text-green-500 {
+  color: #67c23a;
 }
 </style>

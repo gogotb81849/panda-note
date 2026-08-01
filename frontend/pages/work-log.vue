@@ -5,7 +5,7 @@
       ref="viewSwitcherRef"
       :available-ships="availableShips"
       :current-ship-id="currentShipId"
-      :current-user-id="authStore.user?.id"
+      :current-user-id="authStore.user && authStore.user.id"
       @view-change="handleViewChange"
       @ship-change="handleShipChange"
     />
@@ -228,21 +228,15 @@
         </template>
 
         <!-- 条目化块编辑器（日记 + 待办 + 备忘 混排，统一入口） -->
-        <div v-if="currentDiaryId > 0" class="blocks-section">
+        <div class="blocks-section">
           <DiaryBlockEditor
             ref="blockEditorRef"
             :diary-id="currentDiaryId"
             :api="api"
+            :legacy-content="diaryForm.content"
+            @need-create-diary="handleNeedCreateDiary"
           />
         </div>
-        <el-alert
-          v-else
-          type="info"
-          :closable="false"
-          show-icon
-          title="提示：先保存日记，即可开启条目化记录（日记、待办、备忘、图片、文件等）"
-          class="blocks-empty-tip"
-        />
 
         <!-- 保存按钮 -->
         <div class="diary-actions">
@@ -267,15 +261,15 @@ definePageMeta({
   middleware: ['auth'],
 })
 
+const api = useApi()
+const authStore = useAuthStore()
+const { getLunarDate } = useLunar()
+
 const pageHead = computed(() => ({
   title: `${authStore.diaryTypeName} - 熊猫笔记`,
 }))
 
 useHead(pageHead)
-
-const api = useApi()
-const authStore = useAuthStore()
-const { getLunarDate } = useLunar()
 
 const selectedDate = ref(new Date())
 const tempDate = ref(new Date())
@@ -446,11 +440,6 @@ const isValidDateStr = (val: any) => {
 }
 
 const saveDiary = async () => {
-  if (!diaryForm.value.content.trim() && diaryForm.value.relatedScheduleIds.length === 0) {
-    ElMessage.warning('请输入日记内容或关联日程')
-    return
-  }
-
   diarySaving.value = true
   try {
     const content = diaryForm.value.content || ''
@@ -523,6 +512,39 @@ const saveDiary = async () => {
   }
 }
 
+// 当用户在块编辑器中点击「+ 日记/待办/备忘...」但还没有今日日记时，
+// 自动创建一份空日记，获得 diaryId 后再插入对应块
+const handleNeedCreateDiary = async (payload: { type: string; afterIdx?: number; initialContent?: string }) => {
+  if (currentDiaryId.value) {
+    // 已有日记，直接插入块
+    blockEditorRef.value?.insertBlock(payload.type as any, payload.afterIdx, payload.initialContent || '')
+    return
+  }
+  diarySaving.value = true
+  try {
+    const diaryData: any = {
+      content: '',
+      date: selectedDateStr.value,
+    }
+    const result = await api.diary.create(diaryData)
+    if (result?.id !== undefined) {
+      currentDiaryId.value = result.id
+    }
+    ElMessage.success('已创建今日日记')
+    // 等待 DiaryBlockEditor 接收新的 diaryId prop
+    await nextTick()
+    await nextTick()
+    if (currentDiaryId.value) {
+      blockEditorRef.value?.insertBlock(payload.type as any, payload.afterIdx, payload.initialContent || '')
+    }
+  } catch (error: any) {
+    const msg = error?.data?.message || error?.message || '创建日记失败'
+    ElMessage.error(typeof msg === 'string' ? msg : '创建日记失败')
+  } finally {
+    diarySaving.value = false
+  }
+}
+
 const loadSchedules = async () => {
   try {
     const response = await api.get('/schedule', {
@@ -570,6 +592,14 @@ const loadDiary = async () => {
         shipPosition: diary.shipPosition || '',
         shipName: diary.shipName || '',
       }
+      // 诊断日志：便于排查"有内容但显示暂无内容"的问题
+      console.log('[loadDiary] 已加载日记', {
+        diaryId: diary.id,
+        date: selectedDateStr.value,
+        contentLength: (diary.content || '').length,
+        hasShipName: !!(diary.shipName),
+        shipName: diary.shipName || '',
+      })
     } else {
       currentDiaryId.value = null
       diaryForm.value = {
@@ -591,9 +621,23 @@ const loadDiary = async () => {
     // 加载条目化块编辑器
     if (currentDiaryId.value) {
       await nextTick()
-      blockEditorRef.value?.loadBlocks()
+      await blockEditorRef.value?.loadBlocks()
+      // 旧内容迁移：若块列表为空但 diary.content 有值，自动按行拆分为块
+      const existingBlocks = blockEditorRef.value?.getBlocks() || []
+      const legacyContent = diaryForm.value.content || ''
+      console.log('[loadDiary] 迁移检查', {
+        diaryId: currentDiaryId.value,
+        blocksCount: existingBlocks.length,
+        legacyContentLength: legacyContent.length,
+        shouldMigrate: existingBlocks.length === 0 && !!legacyContent.trim(),
+      })
+      if (existingBlocks.length === 0 && legacyContent.trim()) {
+        console.log('[loadDiary] 触发自动迁移 legacyContent -> blocks')
+        await blockEditorRef.value?.migrateLegacyContent(legacyContent)
+      }
     }
   } catch (error) {
+    console.error('[loadDiary] 加载日记失败', selectedDateStr.value, error)
     currentDiaryId.value = null
     diaryForm.value = {
       content: '',
@@ -835,6 +879,12 @@ onMounted(async () => {
   width: 100%;
   max-width: 100%;
   margin: 0 auto;
+  /* 填满 main-content 的可用高度，使编辑器区域自适应 */
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  /* min-height:0 允许 flex 子项收缩，但不强制高度为0，兼容性更好 */
+  min-height: 0;
 }
 
 /* 弹出日历面板 */
@@ -994,6 +1044,7 @@ onMounted(async () => {
   border-radius: 12px;
   color: white;
   margin-bottom: 12px;
+  flex-shrink: 0;
 }
 
 .nav-btn {
@@ -1098,6 +1149,7 @@ onMounted(async () => {
 /* ===== 紧凑信息栏（天气/今日动态/船舶 一行） ===== */
 .compact-info-bar {
   padding: 6px 12px !important;
+  flex-shrink: 0;
 }
 
 .compact-row {
@@ -1118,7 +1170,7 @@ onMounted(async () => {
   gap: 6px;
   flex: 1;
   min-width: 0;
-  height: 32px;
+  /* 不设固定高度，靠 compact-row 的 align-items: center 自然垂直居中 */
 }
 
 .compact-ship-label {
@@ -1127,6 +1179,8 @@ onMounted(async () => {
   color: #303133;
   white-space: nowrap;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
 }
 
 .diary-section {
@@ -1134,6 +1188,11 @@ onMounted(async () => {
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
   overflow: hidden;
+  /* 撑满剩余高度 */
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .section-header {
@@ -1142,6 +1201,7 @@ onMounted(async () => {
   justify-content: space-between;
   padding: 14px 16px;
   background: #f8f9fa;
+  flex-shrink: 0;
 }
 
 .section-title {
@@ -1152,6 +1212,12 @@ onMounted(async () => {
 
 .diary-content {
   padding: 16px;
+  /* flex 布局：让 blocks-section 撑满，保存按钮沉底 */
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
 }
 
 .info-bar {
@@ -1159,6 +1225,7 @@ onMounted(async () => {
   padding: 16px;
   background: #f8fafc;
   border-radius: 8px;
+  flex-shrink: 0;
 }
 
 .info-row {
@@ -1252,6 +1319,11 @@ onMounted(async () => {
 
 .blocks-section {
   margin-bottom: 16px;
+  /* 撑满剩余空间，让编辑器区域自适应页面高度 */
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .blocks-header {
@@ -1263,11 +1335,13 @@ onMounted(async () => {
 
 .blocks-empty-tip {
   margin: 8px 0 16px;
+  flex-shrink: 0;
 }
 
 .diary-actions {
   display: flex;
   justify-content: flex-end;
+  flex-shrink: 0;
 }
 
 @media (max-width: 767px) {
@@ -1336,12 +1410,12 @@ onMounted(async () => {
   }
 
   .work-log-page {
-    /* 给手机底部固定导航栏留足够空间，避免保存按钮被遮挡 */
-    padding-bottom: calc(120px + env(safe-area-inset-bottom, 0px));
+    /* 布局已有 layout-body padding-bottom: 60px 给底部导航留空间，这里仅需少量额外间距 */
+    padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
   }
 
   .diary-actions {
-    padding-bottom: 12px;
+    padding-bottom: 8px;
   }
 
   .mini-cal-day {
@@ -1357,8 +1431,8 @@ onMounted(async () => {
   .work-log-page {
     padding: 12px;
     max-width: 100%;
-    /* 给平板竖屏底部固定导航栏留足够空间 */
-    padding-bottom: calc(140px + env(safe-area-inset-bottom, 0px));
+    /* 布局已有底部导航留空间，这里仅需少量额外间距 */
+    padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
   }
 
   .date-selector {
@@ -1401,7 +1475,7 @@ onMounted(async () => {
   }
 
   .diary-actions {
-    padding-bottom: 12px;
+    padding-bottom: 8px;
   }
 }
 </style>

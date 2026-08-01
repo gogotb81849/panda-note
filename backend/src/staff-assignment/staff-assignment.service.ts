@@ -62,10 +62,13 @@ export class StaffAssignmentService {
         },
       });
 
+      // 上船登记：同步更新 Ship 表的当前政委字段（三个字段保持一致）
       await tx.ship.update({
         where: { id: createDto.shipId },
         data: {
           politicalInstructor: user.realName,
+          politicalInstructorId: user.id,
+          politicalInstructorName: user.realName,
         },
       });
 
@@ -82,10 +85,12 @@ export class StaffAssignmentService {
 
   /**
    * 更新派任记录（下船/休假）
+   * 注意：如果设置了 endDate 且该派任是船舶当前的活跃派任，会同步清空 Ship 表的当前政委
    */
   async update(teamCode: string, id: number, updateDto: UpdateStaffAssignmentDto, userId: number = 0) {
     const existing = await this.prisma.staffAssignment.findFirst({
       where: { id, teamCode: teamCode as any },
+      include: { user: { select: { id: true, realName: true, username: true } } },
     });
     if (!existing) {
       throw new NotFoundException('派任记录不存在');
@@ -109,13 +114,38 @@ export class StaffAssignmentService {
       data.assignmentNo = updateDto.assignmentNo;
     }
 
-    const result = await this.prisma.staffAssignment.update({
-      where: { id },
-      data,
-      include: {
-        user: { select: { id: true, realName: true, username: true } },
-        ship: { select: { id: true, cnShipName: true } },
-      },
+    // 判断更新后，这条派任是否还"在船活跃"
+    const willBeActive = (
+      (data.status === undefined ? existing.status : data.status) === 'active' &&
+      (data.endDate === undefined ? existing.endDate : data.endDate) === null
+    );
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.staffAssignment.update({
+        where: { id },
+        data,
+        include: {
+          user: { select: { id: true, realName: true, username: true } },
+          ship: { select: { id: true, cnShipName: true } },
+        },
+      });
+
+      // 如果这条派任被设置为已结束，且 Ship 表当前的政委正好是这个人，则清空 Ship 表的政委字段
+      if (!willBeActive && existing.shipId) {
+        const ship = await tx.ship.findFirst({ where: { id: existing.shipId } });
+        if (ship && ship.politicalInstructorId === existing.userId) {
+          await tx.ship.update({
+            where: { id: existing.shipId },
+            data: {
+              politicalInstructorId: null,
+              politicalInstructorName: null,
+              politicalInstructor: null,
+            },
+          });
+        }
+      }
+
+      return updated;
     });
 
     await this.operationLogService.create({
@@ -126,6 +156,20 @@ export class StaffAssignmentService {
     });
 
     return result;
+  }
+
+  /**
+   * 获取全团队所有派任记录（供岸基主管使用）
+   */
+  async getAllByTeamCode(teamCode: string) {
+    return this.prisma.staffAssignment.findMany({
+      where: { teamCode: teamCode as any },
+      include: {
+        ship: { select: { id: true, cnShipName: true } },
+        user: { select: { id: true, realName: true, username: true, role: true } },
+      },
+      orderBy: [{ startDate: 'desc' }, { id: 'desc' }],
+    });
   }
 
   /**
@@ -291,6 +335,8 @@ export class StaffAssignmentService {
         where: { id: existing.shipId },
         data: {
           politicalInstructor: null,
+          politicalInstructorId: null,
+          politicalInstructorName: null,
         },
       });
 
