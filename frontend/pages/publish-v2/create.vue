@@ -386,6 +386,10 @@
           </div>
         </div>
         <div class="phone-content">
+          <!-- 封面图片 -->
+          <div v-if="formData.coverImage" class="preview-cover-wrap">
+            <img :src="formData.coverImage" class="preview-cover-img" />
+          </div>
           <!-- 表单标题 -->
           <div class="preview-form-header">
             <h2 class="preview-form-title">{{ formData.templateName || '未命名表单' }}</h2>
@@ -1409,8 +1413,8 @@ async function handleCoverUpload(options: any) {
         Authorization: useAuthStore().token ? `Bearer ${useAuthStore().token}` : undefined,
       },
     })
-    if (result && result.id) {
-      formData.coverImage = `/api/files/${result.id}/stream`
+    if (result && result.filePath) {
+      formData.coverImage = '/' + result.filePath
     }
     ElMessage.success('封面上传成功')
   } catch (e: any) {
@@ -1911,6 +1915,20 @@ onMounted(() => {
 
 .cover-image-mask :deep(.el-icon) {
   font-size: 20px;
+}
+
+.preview-cover-wrap {
+  width: 100%;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.preview-cover-img {
+  width: 100%;
+  max-height: 200px;
+  object-fit: cover;
+  display: block;
 }
 
 /* ===== 标题区域 ===== */

@@ -87,6 +87,14 @@ export class FileController {
     @Request() req,
     @Headers('user-agent') userAgent: string,
   ) {
+    // 修复 multer 将 UTF-8 中文文件名按 Latin-1 解码导致的乱码
+    if (uploadedFile?.originalname) {
+      try {
+        uploadedFile.originalname = Buffer.from(uploadedFile.originalname, 'latin1').toString('utf8');
+      } catch {
+        // 转码失败则保持原样
+      }
+    }
     const isPublicBool = isPublic === 'false' ? false : true;
     return this.fileService.createFromFileUpload(
       uploadedFile,

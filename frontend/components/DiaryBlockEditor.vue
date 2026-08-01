@@ -69,11 +69,14 @@
 
         <!-- 图片块 -->
         <div v-if="block.blockType === 'image'" class="block-content block-image">
-          <img
+          <DraggableImage
             v-if="imageUrl(block)"
             :src="imageUrl(block)"
-            class="inline-image"
-            @click="previewImage(imageUrl(block))"
+            :initial-x="imageTransform(block).x"
+            :initial-y="imageTransform(block).y"
+            :initial-scale="imageTransform(block).scale"
+            :initial-rotation="imageTransform(block).rotation"
+            @update:transform="(data) => onImageTransformUpdate(block, data)"
           />
           <div v-else class="upload-zone" @click="triggerFileInput(block)">
             <el-icon size="20"><Picture /></el-icon>
@@ -488,6 +491,27 @@ function placeholderFor(block: DiaryBlock): string {
 
 function previewImage(url: string) {
   window.open(url, '_blank');
+}
+
+// ============== 图片变换（拖拽/缩放/旋转） ==============
+function imageTransform(block: DiaryBlock): { x: number; y: number; scale: number; rotation: number } {
+  const m = parseMeta(block)
+  if (m.transform) {
+    return { x: m.transform.x || 0, y: m.transform.y || 0, scale: m.transform.scale || 1, rotation: m.transform.rotation || 0 }
+  }
+  return { x: 0, y: 0, scale: 1, rotation: 0 }
+}
+
+function onImageTransformUpdate(block: DiaryBlock, data: { x: number; y: number; scale: number; rotation: number }) {
+  const m = parseMeta(block)
+  m.transform = data
+  block.metaJson = JSON.stringify(m)
+  block.$dirty = true
+  // 防抖保存
+  if ((block as any)._transformTimer) clearTimeout((block as any)._transformTimer)
+  ;(block as any)._transformTimer = setTimeout(() => {
+    commitBlock(block)
+  }, 800)
 }
 
 // ============== 文件上传：粘贴 / 拖拽 / 点击 ==============
@@ -1089,12 +1113,9 @@ defineExpose({
 .block-image input:focus, .block-file input:focus, .block-link input:focus {
   border-color: #409eff;
 }
-.inline-image {
-  max-width: 100%;
-  max-height: 260px;
-  border-radius: 6px;
-  cursor: zoom-in;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+.block-image {
+  position: relative;
+  overflow: visible;
 }
 
 /* 上传区域 */
