@@ -1,157 +1,198 @@
 <template>
   <div class="staff-assignments-page">
-    <!-- 政委更换操作指引 -->
-    <el-alert
-      title="政委更换操作流程说明"
-      type="info"
-      :closable="true"
-      show-icon
-      class="guide-alert"
-    >
-      <template #default>
-        <div class="guide-content">
-          <p>📌 <strong>场景</strong>：7月31日要给"三英座"更换政委（旧政委001下船，新政委002上船）</p>
-          <ol class="guide-steps">
-            <li>
-              <strong>第一步：旧政委下船</strong>
-              找到旧派任记录 → 点击"下船"按钮 → 填写下船日期（如 2026-07-31）和原因 → 确认
-            </li>
-            <li>
-              <strong>第二步：新政委上船</strong>
-              点击右上角"上船登记" → 选择新政委002 + 船舶三英座 → 填写上船日期（如 2026-07-31）→ 保存
-            </li>
-          </ol>
-          <p class="guide-warn">
-            ⚠️ <strong>注意</strong>：不要用"编辑"按钮去修改派任里的人/船！编辑只用于修改备注、编号等字段。
-            换人必须走【下船→上船】流程，这样历史数据才会完整保留。
-          </p>
-          <el-button type="success" size="small" @click="showQuickReplaceDialog" class="mt-2">
-            🚀 使用快捷通道：一键更换政委
-          </el-button>
-        </div>
-      </template>
-    </el-alert>
-
+    <!-- 工具栏 -->
     <div class="toolbar">
       <div class="flex items-center justify-between">
-        <el-select 
-          v-model="selectedShipId" 
-          placeholder="选择船舶" 
-          clearable
-          class="w-64"
-          @change="filterByShip"
-        >
-          <el-option 
-            v-for="ship in ships" 
-            :key="ship.id" 
-            :label="ship.cnShipName" 
-            :value="ship.id"
-          />
-        </el-select>
-        <el-select 
-          v-model="filterStatus" 
-          placeholder="状态筛选" 
-          clearable
-          class="w-40 ml-2"
-          @change="filterByShip"
-        >
-          <el-option label="在船" value="active" />
-          <el-option label="休假" value="leave" />
-          <el-option label="已结束" value="ended" />
-        </el-select>
+        <div class="flex items-center gap-2">
+          <el-select
+            v-model="selectedShipId"
+            placeholder="选择船舶"
+            clearable
+            class="w-48"
+            @change="filterByShip"
+          >
+            <el-option
+              v-for="ship in ships"
+              :key="ship.id"
+              :label="ship.cnShipName"
+              :value="ship.id"
+            />
+          </el-select>
+          <el-select
+            v-if="activeTab === 'list'"
+            v-model="filterStatus"
+            placeholder="状态筛选"
+            clearable
+            class="w-36"
+            @change="filterByShip"
+          >
+            <el-option label="在船" value="active" />
+            <el-option label="休假" value="leave" />
+            <el-option label="已结束" value="ended" />
+          </el-select>
+        </div>
         <div class="toolbar-right">
-          <el-button @click="showQuickReplaceDialog" type="warning">
+          <el-button v-if="activeTab !== 'history'" type="warning" @click="showQuickReplaceDialog">
             更换政委
           </el-button>
-          <el-button type="primary" @click="showCreateDialog">上船登记</el-button>
+          <el-button v-if="activeTab === 'list'" type="primary" @click="showCreateDialog">上船登记</el-button>
+          <el-button v-if="activeTab === 'history'" type="primary" @click="showHistoryCreate = true">添加履历</el-button>
         </div>
       </div>
     </div>
 
-    <!-- 当前派任状态卡片 -->
-    <div class="status-cards" v-if="currentAssignment || permissionInfo">
-      <el-card class="status-card" shadow="hover">
-        <template #header>
-          <div class="card-header">
-            <span>我的当前状态</span>
-            <el-tag :type="statusType(permissionInfo?.isOnLeave ? 'leave' : permissionInfo?.isOnBoard ? 'active' : 'ended')">
-              {{ statusLabel(permissionInfo?.isOnLeave ? 'leave' : permissionInfo?.isOnBoard ? 'active' : 'ended') }}
-            </el-tag>
-          </div>
-        </template>
-        <div v-if="currentAssignment">
-          <el-descriptions :column="2" size="small">
-            <el-descriptions-item label="船舶">{{ currentAssignment.ship?.cnShipName }}</el-descriptions-item>
-            <el-descriptions-item label="上船日期">{{ formatDate(currentAssignment.startDate) }}</el-descriptions-item>
-            <el-descriptions-item label="派任编号">{{ currentAssignment.assignmentNo || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="公司名称">{{ currentAssignment.sourceCompany || '-' }}</el-descriptions-item>
-          </el-descriptions>
+    <!-- Tab 切换 -->
+    <el-tabs v-model="activeTab" class="staff-tabs" @tab-change="onTabChange">
+      <el-tab-pane label="甘特图视图" name="gantt">
+        <!-- 甘特图颜色图例 -->
+        <div class="gantt-legend">
+          <span class="legend-item"><span class="legend-color" style="background:#67c23a"></span>≤6月 正常</span>
+          <span class="legend-item"><span class="legend-color" style="background:#e6a23c"></span>6-8月 关注</span>
+          <span class="legend-item"><span class="legend-color" style="background:#f89a3c"></span>8-10月 预警</span>
+          <span class="legend-item"><span class="legend-color" style="background:#f56c6c"></span>10-11月 极限</span>
+          <span class="legend-item"><span class="legend-color" style="background:#ad0606"></span>>11月 违规</span>
+          <span class="legend-item"><span class="legend-color" style="background:#b0b0b0"></span>已下船</span>
+          <span class="legend-item"><span class="legend-color" style="background:#e6a23c;background-image:repeating-linear-gradient(45deg,#fff 0,#fff 2px,transparent 2px,transparent 6px)"></span>休假</span>
         </div>
-        <div v-else class="text-gray-400">当前无派任记录</div>
-      </el-card>
+        <!-- 甘特图组件 -->
+        <StaffGanttChart
+          :ships="ships"
+          :assignments="filteredAssignments as any"
+          :loading="loading"
+          @bar-click="onBarClick"
+        />
+      </el-tab-pane>
 
-      <el-card class="status-card" shadow="hover">
-        <template #header>
-          <span>日记可见范围</span>
-        </template>
-        <div v-if="permissionInfo">
-          <el-descriptions :column="1" size="small">
-            <el-descriptions-item label="当前船舶日记">
-              {{ permissionInfo.currentShipId ? '可见' : '无' }}
-            </el-descriptions-item>
-            <el-descriptions-item label="历史船舶日记">
-              仅自己撰写的日记（{{ permissionInfo.historyShipIds.length }} 艘船舶）
-            </el-descriptions-item>
-            <el-descriptions-item label="自己的日记">
-              所有船舶可见
-            </el-descriptions-item>
-          </el-descriptions>
+      <el-tab-pane label="派任列表视图" name="list">
+        <!-- 派任记录表格 -->
+        <div class="table-container">
+          <el-table :data="filteredAssignments" stripe class="w-full" v-loading="loading">
+            <el-table-column prop="user.realName" label="政委姓名" />
+            <el-table-column prop="ship.cnShipName" label="船舶" />
+            <el-table-column prop="assignmentNo" label="派任编号" width="120" />
+            <el-table-column prop="startDate" label="上船日期" width="120">
+              <template #default="{ row }">{{ formatDate(row.startDate) }}</template>
+            </el-table-column>
+            <el-table-column prop="endDate" label="下船日期" width="120">
+              <template #default="{ row }">{{ row.endDate ? formatDate(row.endDate) : '-' }}</template>
+            </el-table-column>
+            <el-table-column prop="sourceCompany" label="公司名称" width="100" />
+            <el-table-column prop="status" label="状态" width="100">
+              <template #default="{ row }">
+                <el-tag :type="statusType(row.status)" size="small">
+                  {{ statusLabel(row.status) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="remark" label="备注" show-overflow-tooltip />
+            <el-table-column label="操作" width="220" fixed="right">
+              <template #default="{ row }">
+                <el-button size="small" @click="handleCheckout(row)" v-if="row.status === 'active' && !row.endDate">
+                  下船
+                </el-button>
+                <el-button size="small" type="warning" @click="handleLeave(row)" v-if="row.status === 'active'">
+                  休假
+                </el-button>
+                <el-button size="small" type="success" @click="handleEndLeave(row)" v-if="row.status === 'leave'">
+                  销假
+                </el-button>
+                <el-button size="small" @click="handleEdit(row)">编辑</el-button>
+                <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
         </div>
-      </el-card>
+      </el-tab-pane>
+
+      <el-tab-pane label="任职履历视图" name="history">
+        <!-- 任职履历表格 -->
+        <div class="table-container">
+          <el-table :data="staffHistoryList" stripe class="w-full" v-loading="historyLoading">
+            <el-table-column prop="postName" label="岗位" />
+            <el-table-column prop="staffName" label="人员姓名" />
+            <el-table-column prop="startDate" label="开始日期">
+              <template #default="{ row }">{{ formatDate(row.startDate) }}</template>
+            </el-table-column>
+            <el-table-column prop="endDate" label="结束日期">
+              <template #default="{ row }">{{ row.endDate ? formatDate(row.endDate) : '-' }}</template>
+            </el-table-column>
+            <el-table-column prop="handoverNote" label="交接备注" show-overflow-tooltip />
+            <el-table-column label="操作" width="200">
+              <template #default="{ row }">
+                <el-button size="small" @click="handleHistoryEdit(row)">编辑</el-button>
+                <el-button size="small" type="danger" @click="handleHistoryDelete(row)">删除</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+      </el-tab-pane>
+    </el-tabs>
+
+    <!-- ====== Popover 编辑菜单（甘特图点击色条后弹出）====== -->
+    <div
+      v-if="popoverVisible"
+      class="gantt-popover-overlay"
+      @click="closePopover"
+    >
+      <div
+        class="gantt-popover"
+        :style="{ top: popoverY + 'px', left: popoverX + 'px' }"
+        @click.stop
+      >
+        <div class="popover-header">
+          <span class="popover-title">{{ popoverAssignment?.user?.realName || '未指派' }}</span>
+          <span class="popover-ship">{{ popoverAssignment?.ship?.cnShipName }}</span>
+        </div>
+        <div class="popover-info">
+          <div>上船日期：{{ formatDate(popoverAssignment?.startDate) }}</div>
+          <div v-if="popoverAssignment?.endDate">下船日期：{{ formatDate(popoverAssignment?.endDate) }}</div>
+          <div v-else>在船天数：{{ getDaysOnBoard(popoverAssignment) }} 天</div>
+          <div>状态：{{ statusLabel(popoverAssignment?.status) }}</div>
+        </div>
+        <div class="popover-actions">
+          <el-button size="small" @click="handleEdit(popoverAssignment!)">编辑</el-button>
+          <el-button
+            v-if="popoverAssignment?.status === 'active' && !popoverAssignment?.endDate"
+            size="small"
+            type="primary"
+            @click="handleCheckout(popoverAssignment!)"
+          >下船</el-button>
+          <el-button
+            v-if="popoverAssignment?.status === 'active'"
+            size="small"
+            type="warning"
+            @click="handleLeave(popoverAssignment!)"
+          >休假</el-button>
+          <el-button
+            v-if="popoverAssignment?.status === 'leave'"
+            size="small"
+            type="success"
+            @click="handleEndLeave(popoverAssignment!)"
+          >销假</el-button>
+          <el-button size="small" type="info" @click="showProfileCard">个人卡片</el-button>
+          <el-button size="small" type="danger" @click="handleDelete(popoverAssignment!)">删除</el-button>
+        </div>
+      </div>
     </div>
 
-    <!-- 派任记录列表 -->
-    <div class="table-container">
-      <el-table :data="filteredAssignments" stripe class="w-full" v-loading="loading">
-        <el-table-column prop="user.realName" label="政委姓名" />
-        <el-table-column prop="ship.cnShipName" label="船舶" />
-        <el-table-column prop="assignmentNo" label="派任编号" width="120" />
-        <el-table-column prop="startDate" label="上船日期" width="120">
-          <template #default="{ row }">{{ formatDate(row.startDate) }}</template>
-        </el-table-column>
-        <el-table-column prop="endDate" label="下船日期" width="120">
-          <template #default="{ row }">{{ row.endDate ? formatDate(row.endDate) : '-' }}</template>
-        </el-table-column>
-        <el-table-column prop="sourceCompany" label="公司名称" width="100" />
-        <el-table-column prop="status" label="状态" width="100">
-          <template #default="{ row }">
-            <el-tag :type="statusType(row.status)" size="small">
-              {{ statusLabel(row.status) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="remark" label="备注" show-overflow-tooltip />
-        <el-table-column label="操作" width="220" fixed="right">
-          <template #default="{ row }">
-            <el-button size="small" @click="handleCheckout(row)" v-if="row.status === 'active' && !row.endDate">
-              下船
-            </el-button>
-            <el-button size="small" type="warning" @click="handleLeave(row)" v-if="row.status === 'active'">
-              休假
-            </el-button>
-            <el-button size="small" type="success" @click="handleEndLeave(row)" v-if="row.status === 'leave'">
-              销假
-            </el-button>
-            <el-button size="small" @click="handleEdit(row)">编辑</el-button>
-            <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </div>
+    <!-- ====== 个人卡片（建设中）====== -->
+    <el-dialog v-model="profileCardVisible" title="政委个人卡片" width="480px">
+      <div class="profile-card-building">
+        <el-avatar :size="64" icon="UserFilled" />
+        <div class="profile-name">{{ popoverAssignment?.user?.realName || '未知' }}</div>
+        <div class="profile-info">
+          <p>船舶：{{ popoverAssignment?.ship?.cnShipName || '-' }}</p>
+          <p>上船日期：{{ formatDate(popoverAssignment?.startDate) }}</p>
+          <p>来源公司：{{ popoverAssignment?.sourceCompany || '-' }}</p>
+          <p>派任编号：{{ popoverAssignment?.assignmentNo || '-' }}</p>
+        </div>
+        <el-alert title="建设中" description="政委个人卡片功能正在开发中，后续将完善履职档案、考核记录、传帮带等信息。" type="info" :closable="false" show-icon class="mt-4" />
+      </div>
+    </el-dialog>
 
-    <!-- 创建/编辑对话框 -->
-    <el-dialog 
-      v-model="showDialog" 
+    <!-- ====== 创建/编辑派任对话框 ====== -->
+    <el-dialog
+      v-model="showDialog"
       :title="dialogTitle"
       width="550px"
       @closed="resetForm"
@@ -159,38 +200,38 @@
       <el-form :model="formData" label-width="100px">
         <el-form-item label="选择政委">
           <el-select v-model="formData.userId" placeholder="选择政委" class="w-full" :disabled="!!editingId">
-            <el-option 
-              v-for="user in users" 
-              :key="user.id" 
-              :label="user.realName" 
+            <el-option
+              v-for="user in users"
+              :key="user.id"
+              :label="user.realName"
               :value="user.id"
             />
           </el-select>
         </el-form-item>
         <el-form-item label="选择船舶">
           <el-select v-model="formData.shipId" placeholder="选择船舶" class="w-full">
-            <el-option 
-              v-for="ship in ships" 
-              :key="ship.id" 
-              :label="ship.cnShipName" 
+            <el-option
+              v-for="ship in ships"
+              :key="ship.id"
+              :label="ship.cnShipName"
               :value="ship.id"
             />
           </el-select>
         </el-form-item>
         <el-form-item label="上船日期">
-          <el-date-picker 
-            v-model="formData.startDate" 
-            type="date" 
-            placeholder="选择日期" 
+          <el-date-picker
+            v-model="formData.startDate"
+            type="date"
+            placeholder="选择日期"
             class="w-full"
             value-format="YYYY-MM-DD"
           />
         </el-form-item>
         <el-form-item label="下船日期">
-          <el-date-picker 
-            v-model="formData.endDate" 
-            type="date" 
-            placeholder="选择日期（可选）" 
+          <el-date-picker
+            v-model="formData.endDate"
+            type="date"
+            placeholder="选择日期（可选）"
             class="w-full"
             value-format="YYYY-MM-DD"
           />
@@ -215,14 +256,14 @@
       </template>
     </el-dialog>
 
-    <!-- 下船对话框 -->
+    <!-- ====== 下船对话框 ====== -->
     <el-dialog v-model="showCheckoutDialog" title="下船登记" width="450px">
       <el-form :model="checkoutForm" label-width="80px">
         <el-form-item label="下船日期">
-          <el-date-picker 
-            v-model="checkoutForm.endDate" 
-            type="date" 
-            placeholder="选择日期" 
+          <el-date-picker
+            v-model="checkoutForm.endDate"
+            type="date"
+            placeholder="选择日期"
             class="w-full"
             value-format="YYYY-MM-DD"
           />
@@ -237,23 +278,23 @@
       </template>
     </el-dialog>
 
-    <!-- 休假对话框 -->
+    <!-- ====== 休假对话框 ====== -->
     <el-dialog v-model="showLeaveDialog" title="休假登记" width="450px">
       <el-form :model="leaveForm" label-width="80px">
         <el-form-item label="开始日期">
-          <el-date-picker 
-            v-model="leaveForm.startDate" 
-            type="date" 
-            placeholder="选择日期" 
+          <el-date-picker
+            v-model="leaveForm.startDate"
+            type="date"
+            placeholder="选择日期"
             class="w-full"
             value-format="YYYY-MM-DD"
           />
         </el-form-item>
         <el-form-item label="结束日期">
-          <el-date-picker 
-            v-model="leaveForm.endDate" 
-            type="date" 
-            placeholder="选择日期（可选）" 
+          <el-date-picker
+            v-model="leaveForm.endDate"
+            type="date"
+            placeholder="选择日期（可选）"
             class="w-full"
             value-format="YYYY-MM-DD"
           />
@@ -268,8 +309,8 @@
       </template>
     </el-dialog>
 
-    <!-- 一键更换政委对话框 -->
-    <el-dialog v-model="showReplaceDialog" title="🚀 一键更换政委" width="560px" @closed="resetReplaceForm">
+    <!-- ====== 一键更换政委对话框 ====== -->
+    <el-dialog v-model="showReplaceDialog" title="一键更换政委" width="560px" @closed="resetReplaceForm">
       <el-alert
         title="此操作将自动完成：旧政委下船 → 新政委上船（两条独立派任记录）"
         type="warning"
@@ -280,10 +321,10 @@
       <el-form :model="replaceForm" label-width="110px">
         <el-form-item label="选择船舶" required>
           <el-select v-model="replaceForm.shipId" placeholder="请选择要更换政委的船舶" class="w-full" @change="onReplaceShipChange">
-            <el-option 
-              v-for="ship in ships" 
-              :key="ship.id" 
-              :label="ship.cnShipName" 
+            <el-option
+              v-for="ship in ships"
+              :key="ship.id"
+              :label="ship.cnShipName"
               :value="ship.id"
             />
           </el-select>
@@ -301,10 +342,10 @@
         </el-form-item>
         <el-divider content-position="left">旧政委下船</el-divider>
         <el-form-item label="下船日期" required>
-          <el-date-picker 
-            v-model="replaceForm.checkoutDate" 
-            type="date" 
-            placeholder="选择下船日期（如：2026-07-31）" 
+          <el-date-picker
+            v-model="replaceForm.checkoutDate"
+            type="date"
+            placeholder="选择下船日期"
             class="w-full"
             value-format="YYYY-MM-DD"
           />
@@ -315,10 +356,10 @@
         <el-divider content-position="left">新政委上船</el-divider>
         <el-form-item label="新政委" required>
           <el-select v-model="replaceForm.newUserId" placeholder="选择新政委" class="w-full" filterable>
-            <el-option 
-              v-for="user in availableNewUsers" 
-              :key="user.id" 
-              :label="user.realName" 
+            <el-option
+              v-for="user in availableNewUsers"
+              :key="user.id"
+              :label="user.realName"
               :value="user.id"
             >
               <span>{{ user.realName }}</span>
@@ -330,10 +371,10 @@
           </el-select>
         </el-form-item>
         <el-form-item label="上船日期" required>
-          <el-date-picker 
-            v-model="replaceForm.boardDate" 
-            type="date" 
-            placeholder="选择上船日期（一般同下船日期）" 
+          <el-date-picker
+            v-model="replaceForm.boardDate"
+            type="date"
+            placeholder="选择上船日期"
             class="w-full"
             value-format="YYYY-MM-DD"
           />
@@ -351,9 +392,58 @@
       </el-form>
       <template #footer>
         <el-button @click="showReplaceDialog = false">取消</el-button>
-        <el-button type="primary" :loading="replacing" @click="submitReplace">
-          确认更换
-        </el-button>
+        <el-button type="primary" :loading="replacing" @click="submitReplace">确认更换</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- ====== 任职履历创建/编辑对话框 ====== -->
+    <el-dialog
+      v-model="showHistoryCreate"
+      :title="historyEditingId ? '编辑履历' : '添加履历'"
+      width="500px"
+    >
+      <el-form :model="historyFormData" label-width="100px">
+        <el-form-item label="船舶">
+          <el-select v-model="historyFormData.shipId" placeholder="选择船舶" class="w-full">
+            <el-option
+              v-for="ship in ships"
+              :key="ship.id"
+              :label="ship.cnShipName"
+              :value="ship.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="岗位">
+          <el-input v-model="historyFormData.postName" placeholder="请输入岗位" />
+        </el-form-item>
+        <el-form-item label="人员姓名">
+          <el-input v-model="historyFormData.staffName" placeholder="请输入姓名" />
+        </el-form-item>
+        <el-form-item label="开始日期">
+          <el-date-picker
+            v-model="historyFormData.startDate"
+            type="date"
+            placeholder="选择日期"
+            class="w-full"
+            value-format="YYYY-MM-DD"
+          />
+        </el-form-item>
+        <el-form-item label="结束日期">
+          <el-date-picker
+            v-model="historyFormData.endDate"
+            type="date"
+            placeholder="选择日期（可选）"
+            class="w-full"
+            value-format="YYYY-MM-DD"
+          />
+        </el-form-item>
+        <el-form-item label="交接备注">
+          <el-input v-model="historyFormData.handoverNote" type="textarea" :rows="3" placeholder="请输入备注" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showHistoryCreate = false">取消</el-button>
+        <el-button type="primary" @click="handleHistorySave">保存</el-button>
       </template>
     </el-dialog>
   </div>
@@ -363,7 +453,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useApi } from '~/composables/useApi';
 import { useStaffAssignment } from '~/composables/useStaffAssignment';
-import type { StaffAssignment, Ship, User } from '~/types';
+import type { StaffAssignment, Ship, User, StaffHistory, CreateStaffHistoryRequest } from '~/types';
 import { ElMessage, ElMessageBox } from 'element-plus';
 
 definePageMeta({
@@ -371,23 +461,39 @@ definePageMeta({
 })
 
 const api = useApi();
-const { 
-  assignments, loading, loadAll, 
+const {
+  assignments, loading, loadAll,
   createAssignment, checkOut, startLeave, endLeave, deleteAssignment,
   statusLabel, statusType
 } = useStaffAssignment();
 
+// ====== Tab 切换 ======
+const activeTab = ref('gantt');
+
+// ====== 船舶 + 用户 + 派任数据 ======
 const ships = ref<Ship[]>([]);
 const users = ref<User[]>([]);
-const currentAssignment = ref<StaffAssignment | null>(null);
-const permissionInfo = ref<any>(null);
 const selectedShipId = ref<number | null>(null);
 const filterStatus = ref<string>('');
 
+// ====== 任职履历数据 ======
+const staffHistoryList = ref<StaffHistory[]>([]);
+const historyLoading = ref(false);
+const showHistoryCreate = ref(false);
+const historyEditingId = ref<number | null>(null);
+const historyFormData = ref<Partial<CreateStaffHistoryRequest>>({
+  shipId: undefined,
+  postName: '',
+  staffName: '',
+  startDate: '',
+  endDate: undefined,
+  handoverNote: '',
+});
+
+// ====== 创建/编辑派任对话框 ======
 const showDialog = ref(false);
 const editingId = ref<number | null>(null);
 const dialogTitle = computed(() => editingId.value ? '编辑派任记录' : '上船登记');
-
 const formData = ref({
   userId: undefined as number | undefined,
   shipId: undefined as number | undefined,
@@ -398,13 +504,15 @@ const formData = ref({
   remark: '',
 });
 
+// ====== 下船对话框 ======
 const showCheckoutDialog = ref(false);
 const checkoutForm = ref({ id: 0, endDate: '', reason: '' });
 
+// ====== 休假对话框 ======
 const showLeaveDialog = ref(false);
 const leaveForm = ref({ id: 0, startDate: '', endDate: '', reason: '' });
 
-// 一键更换政委
+// ====== 一键更换政委 ======
 const showReplaceDialog = ref(false);
 const replacing = ref(false);
 const replaceForm = ref({
@@ -418,7 +526,16 @@ const replaceForm = ref({
   sourceCompany: '',
 });
 
-// 计算每个用户当前在哪个船（给下拉提示用）
+// ====== Popover 编辑菜单 ======
+const popoverVisible = ref(false);
+const popoverX = ref(0);
+const popoverY = ref(0);
+const popoverAssignment = ref<StaffAssignment | null>(null);
+
+// ====== 个人卡片 ======
+const profileCardVisible = ref(false);
+
+// ====== 计算属性 ======
 const userCurrentShipMap = computed<Record<number, string>>(() => {
   const map: Record<number, string> = {};
   assignments.value.forEach(a => {
@@ -429,124 +546,14 @@ const userCurrentShipMap = computed<Record<number, string>>(() => {
   return map;
 });
 
-// 可选的新政委列表（排除当前船舶正在任的，但允许其他在船的——会先下船再上新）
 const availableNewUsers = computed(() => {
   return users.value.filter(u => {
-    // 如果该用户正在我们选中的这艘船上，就不允许选（提示用户）
     if (replaceForm.value.currentAssignment && replaceForm.value.currentAssignment.userId === u.id) {
       return false;
     }
     return true;
   });
 });
-
-const onReplaceShipChange = async (shipId: number) => {
-  replaceForm.value.currentAssignment = null;
-  if (!shipId) return;
-  try {
-    const staffList = await api.staffAssignments.getCurrentShipStaff(shipId) as StaffAssignment[];
-    if (staffList && staffList.length > 0) {
-      const activeOne = staffList.find((a: StaffAssignment) => a.status === 'active' && !a.endDate) || staffList[0];
-      replaceForm.value.currentAssignment = activeOne;
-    }
-  } catch (e) {
-    console.warn('获取船舶当前政委失败', e);
-  }
-};
-
-const showQuickReplaceDialog = () => {
-  // 如果选中了某艘船，自动带入
-  if (selectedShipId.value) {
-    replaceForm.value.shipId = selectedShipId.value;
-    onReplaceShipChange(selectedShipId.value);
-  }
-  showReplaceDialog.value = true;
-};
-
-const resetReplaceForm = () => {
-  replaceForm.value = {
-    shipId: undefined,
-    currentAssignment: null,
-    checkoutDate: '',
-    checkoutReason: '',
-    newUserId: undefined,
-    boardDate: '',
-    assignmentNo: '',
-    sourceCompany: '',
-  };
-};
-
-const submitReplace = async () => {
-  const { shipId, currentAssignment, checkoutDate, checkoutReason, newUserId, boardDate, assignmentNo, sourceCompany } = replaceForm.value;
-
-  if (!shipId) {
-    ElMessage.warning('请选择船舶');
-    return;
-  }
-  if (!newUserId) {
-    ElMessage.warning('请选择新政委');
-    return;
-  }
-  if (!boardDate) {
-    ElMessage.warning('请填写上船日期');
-    return;
-  }
-  if (currentAssignment && !checkoutDate) {
-    ElMessage.warning('有当前在任政委，请填写下船日期');
-    return;
-  }
-  // 新政委是否已经在其他船？如果是，给出确认
-  const currentShipOfNew = userCurrentShipMap.value[newUserId];
-  if (currentShipOfNew) {
-    try {
-      await ElMessageBox.confirm(
-        `新政委当前正任职于【${currentShipOfNew}】，是否先将其从该船下船，再派到所选船舶？`,
-        '需要先从原船下船',
-        { type: 'warning', confirmButtonText: '继续', cancelButtonText: '取消' }
-      );
-    } catch {
-      return;
-    }
-  }
-
-  replacing.value = true;
-  try {
-    // 1) 新政委如果当前在其他船，先下船
-    if (currentShipOfNew) {
-      const newUserAssignments = assignments.value.filter(
-        a => a.userId === newUserId && a.status === 'active' && !a.endDate
-      );
-      for (const a of newUserAssignments) {
-        await api.staffAssignments.checkOut(a.id, { endDate: checkoutDate || boardDate, reason: '换船派任' });
-      }
-    }
-
-    // 2) 旧政委从所选船下船（如果有）
-    if (currentAssignment) {
-      await api.staffAssignments.checkOut(currentAssignment.id, {
-        endDate: checkoutDate,
-        reason: checkoutReason || '换班',
-      });
-    }
-
-    // 3) 新政委上船
-    await createAssignment({
-      userId: newUserId,
-      shipId,
-      startDate: boardDate,
-      sourceCompany: sourceCompany || undefined,
-      assignmentNo: assignmentNo || undefined,
-    });
-
-    ElMessage.success('✅ 政委更换完成！已生成两条独立派任记录');
-    showReplaceDialog.value = false;
-    await loadCurrentInfo();
-  } catch (e: any) {
-    ElMessage.error(e?.message || '操作失败');
-  } finally {
-    replacing.value = false;
-  }
-};
 
 const filteredAssignments = computed(() => {
   let result = assignments.value;
@@ -559,11 +566,20 @@ const filteredAssignments = computed(() => {
   return result;
 });
 
-const formatDate = (date: string) => {
+// ====== 工具函数 ======
+const formatDate = (date?: string | null) => {
   if (!date) return '-';
   return new Date(date).toLocaleDateString('zh-CN');
 };
 
+function getDaysOnBoard(assignment?: StaffAssignment | null): number {
+  if (!assignment?.startDate) return 0;
+  const start = new Date(assignment.startDate).getTime();
+  const end = assignment.endDate ? new Date(assignment.endDate).getTime() : Date.now();
+  return Math.floor((end - start) / (1000 * 60 * 60 * 24));
+}
+
+// ====== 数据加载 ======
 const loadShips = async () => {
   try {
     ships.value = await api.ships.getAll() as Ship[];
@@ -583,22 +599,56 @@ const loadUsers = async () => {
   }
 };
 
-const loadCurrentInfo = async () => {
-  const authStore = useAuthStore();
+const loadStaffHistory = async () => {
+  historyLoading.value = true;
   try {
-    currentAssignment.value = await api.staffAssignments.getCurrent(authStore.user?.id) as StaffAssignment | null;
-    permissionInfo.value = await api.staffAssignments.getDiaryPermission(authStore.user?.id);
+    if (selectedShipId.value) {
+      staffHistoryList.value = await api.staffHistory.getByShipId(selectedShipId.value) as StaffHistory[];
+    } else {
+      staffHistoryList.value = await api.staffHistory.getAll() as StaffHistory[];
+    }
   } catch (e) {
-    console.error('加载当前状态失败', e);
+    console.error('加载任职履历失败', e);
+  } finally {
+    historyLoading.value = false;
   }
 };
 
+// ====== Tab 切换处理 ======
+const onTabChange = (name: string | number) => {
+  if (name === 'history') {
+    loadStaffHistory();
+  }
+};
+
+// ====== 甘特图点击色条 ======
+const onBarClick = (payload: { assignment: StaffAssignment; event: MouseEvent }) => {
+  popoverAssignment.value = payload.assignment;
+  // 定位 Popover
+  const x = Math.min(payload.event.clientX - 120, window.innerWidth - 280);
+  const y = Math.min(payload.event.clientY + 10, window.innerHeight - 320);
+  popoverX.value = Math.max(10, x);
+  popoverY.value = Math.max(10, y);
+  popoverVisible.value = true;
+};
+
+const closePopover = () => {
+  popoverVisible.value = false;
+};
+
+const showProfileCard = () => {
+  popoverVisible.value = false;
+  profileCardVisible.value = true;
+};
+
+// ====== 派任操作（复用原有逻辑）======
 const showCreateDialog = () => {
   editingId.value = null;
   showDialog.value = true;
 };
 
 const handleEdit = (row: StaffAssignment) => {
+  popoverVisible.value = false;
   editingId.value = row.id;
   formData.value = {
     userId: row.userId,
@@ -613,6 +663,7 @@ const handleEdit = (row: StaffAssignment) => {
 };
 
 const handleDelete = async (row: StaffAssignment) => {
+  popoverVisible.value = false;
   try {
     await ElMessageBox.confirm('确定删除该派任记录吗？', '提示', { type: 'warning' });
     await deleteAssignment(row.id);
@@ -622,16 +673,19 @@ const handleDelete = async (row: StaffAssignment) => {
 };
 
 const handleCheckout = (row: StaffAssignment) => {
+  popoverVisible.value = false;
   checkoutForm.value = { id: row.id, endDate: '', reason: '' };
   showCheckoutDialog.value = true;
 };
 
 const handleLeave = (row: StaffAssignment) => {
+  popoverVisible.value = false;
   leaveForm.value = { id: row.id, startDate: '', endDate: '', reason: '' };
   showLeaveDialog.value = true;
 };
 
 const handleEndLeave = async (row: StaffAssignment) => {
+  popoverVisible.value = false;
   try {
     await ElMessageBox.confirm('确认销假？', '提示', { type: 'info' });
     await endLeave(row.id);
@@ -648,7 +702,6 @@ const submitCheckout = async () => {
   try {
     await checkOut(checkoutForm.value.id, checkoutForm.value.endDate, checkoutForm.value.reason);
     showCheckoutDialog.value = false;
-    await loadCurrentInfo();
   } catch (e) {
     // Error handled in composable
   }
@@ -661,13 +714,12 @@ const submitLeave = async () => {
   }
   try {
     await startLeave(
-      leaveForm.value.id, 
-      leaveForm.value.startDate, 
+      leaveForm.value.id,
+      leaveForm.value.startDate,
       leaveForm.value.endDate || undefined,
       leaveForm.value.reason
     );
     showLeaveDialog.value = false;
-    await loadCurrentInfo();
   } catch (e) {
     // Error handled in composable
   }
@@ -691,7 +743,6 @@ const handleSave = async () => {
       await createAssignment(formData.value as any);
     }
     showDialog.value = false;
-    await loadCurrentInfo();
   } catch (e) {
     // Error handled in composable
   }
@@ -712,14 +763,151 @@ const resetForm = () => {
 
 const filterByShip = () => {
   // Computed property handles filtering
+  if (activeTab.value === 'history') {
+    loadStaffHistory();
+  }
 };
 
+// ====== 一键更换政委 ======
+const onReplaceShipChange = async (shipId: number) => {
+  replaceForm.value.currentAssignment = null;
+  if (!shipId) return;
+  try {
+    const staffList = await api.staffAssignments.getCurrentShipStaff(shipId) as StaffAssignment[];
+    if (staffList && staffList.length > 0) {
+      const activeOne = staffList.find((a: StaffAssignment) => a.status === 'active' && !a.endDate) || staffList[0];
+      replaceForm.value.currentAssignment = activeOne;
+    }
+  } catch (e) {
+    console.warn('获取船舶当前政委失败', e);
+  }
+};
+
+const showQuickReplaceDialog = () => {
+  if (selectedShipId.value) {
+    replaceForm.value.shipId = selectedShipId.value;
+    onReplaceShipChange(selectedShipId.value);
+  }
+  showReplaceDialog.value = true;
+};
+
+const resetReplaceForm = () => {
+  replaceForm.value = {
+    shipId: undefined,
+    currentAssignment: null,
+    checkoutDate: '',
+    checkoutReason: '',
+    newUserId: undefined,
+    boardDate: '',
+    assignmentNo: '',
+    sourceCompany: '',
+  };
+};
+
+const submitReplace = async () => {
+  const { shipId, currentAssignment, checkoutDate, checkoutReason, newUserId, boardDate, assignmentNo, sourceCompany } = replaceForm.value;
+
+  if (!shipId) { ElMessage.warning('请选择船舶'); return; }
+  if (!newUserId) { ElMessage.warning('请选择新政委'); return; }
+  if (!boardDate) { ElMessage.warning('请填写上船日期'); return; }
+  if (currentAssignment && !checkoutDate) { ElMessage.warning('有当前在任政委，请填写下船日期'); return; }
+
+  const currentShipOfNew = userCurrentShipMap.value[newUserId];
+  if (currentShipOfNew) {
+    try {
+      await ElMessageBox.confirm(
+        `新政委当前正任职于【${currentShipOfNew}】，是否先将其从该船下船，再派到所选船舶？`,
+        '需要先从原船下船',
+        { type: 'warning', confirmButtonText: '继续', cancelButtonText: '取消' }
+      );
+    } catch { return; }
+  }
+
+  replacing.value = true;
+  try {
+    if (currentShipOfNew) {
+      const newUserAssignments = assignments.value.filter(
+        a => a.userId === newUserId && a.status === 'active' && !a.endDate
+      );
+      for (const a of newUserAssignments) {
+        await api.staffAssignments.checkOut(a.id, { endDate: checkoutDate || boardDate, reason: '换船派任' });
+      }
+    }
+    if (currentAssignment) {
+      await api.staffAssignments.checkOut(currentAssignment.id, {
+        endDate: checkoutDate,
+        reason: checkoutReason || '换班',
+      });
+    }
+    await createAssignment({
+      userId: newUserId,
+      shipId,
+      startDate: boardDate,
+      sourceCompany: sourceCompany || undefined,
+      assignmentNo: assignmentNo || undefined,
+    });
+    ElMessage.success('政委更换完成！已生成两条独立派任记录');
+    showReplaceDialog.value = false;
+  } catch (e: any) {
+    ElMessage.error(e?.message || '操作失败');
+  } finally {
+    replacing.value = false;
+  }
+};
+
+// ====== 任职履历操作 ======
+const handleHistoryEdit = (row: StaffHistory) => {
+  historyEditingId.value = row.id;
+  historyFormData.value = {
+    shipId: row.shipId,
+    postName: row.postName,
+    staffName: row.staffName,
+    startDate: row.startDate.split('T')[0],
+    endDate: row.endDate ? row.endDate.split('T')[0] : undefined,
+    handoverNote: row.handoverNote,
+  };
+  showHistoryCreate.value = true;
+};
+
+const handleHistoryDelete = async (row: StaffHistory) => {
+  try {
+    await ElMessageBox.confirm('确定删除该履历记录吗？', '提示', { type: 'warning' });
+    await api.staffHistory.delete(row.id);
+    await loadStaffHistory();
+  } catch (e) {
+    // cancelled or error
+  }
+};
+
+const handleHistorySave = async () => {
+  try {
+    if (historyEditingId.value) {
+      await api.staffHistory.update(historyEditingId.value, historyFormData.value as any);
+    } else {
+      await api.staffHistory.create(historyFormData.value as CreateStaffHistoryRequest);
+    }
+    showHistoryCreate.value = false;
+    historyEditingId.value = null;
+    historyFormData.value = {
+      shipId: undefined,
+      postName: '',
+      staffName: '',
+      startDate: '',
+      endDate: undefined,
+      handoverNote: '',
+    };
+    await loadStaffHistory();
+  } catch (e) {
+    console.error('保存失败', e);
+  }
+};
+
+// ====== 初始化 ======
 onMounted(async () => {
   await Promise.all([
     loadAll(),
     loadShips(),
     loadUsers(),
-    loadCurrentInfo(),
   ]);
 });
 </script>
@@ -741,26 +929,18 @@ onMounted(async () => {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
-.status-cards {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
-  margin-bottom: 16px;
-}
-
-.status-card {
-  background-color: white;
-  border-radius: 8px;
-}
-
-.card-header {
+.staff-tabs {
+  flex: 1;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+}
+
+.staff-tabs :deep(.el-tabs__content) {
+  flex: 1;
+  overflow: auto;
 }
 
 .table-container {
-  flex: 1;
   background-color: white;
   border-radius: 8px;
   padding: 20px;
@@ -772,50 +952,12 @@ onMounted(async () => {
   color: #9ca3af;
 }
 
-.mt-2 {
-  margin-top: 8px;
-}
-
 .mb-4 {
   margin-bottom: 16px;
 }
 
 .ml-2 {
   margin-left: 8px;
-}
-
-/* 操作指引样式 */
-.guide-alert {
-  margin-bottom: 16px;
-}
-
-.guide-content {
-  margin-top: 8px;
-}
-
-.guide-content p {
-  margin: 4px 0 8px;
-  font-size: 14px;
-  line-height: 1.6;
-}
-
-.guide-steps {
-  padding-left: 20px;
-  margin: 8px 0;
-}
-
-.guide-steps li {
-  margin: 8px 0;
-  line-height: 1.6;
-}
-
-.guide-warn {
-  background: #fdf6ec;
-  border-left: 3px solid #e6a23c;
-  padding: 8px 12px;
-  border-radius: 4px;
-  color: #8a5a00;
-  margin-top: 10px;
 }
 
 .toolbar-right {
@@ -830,5 +972,115 @@ onMounted(async () => {
 
 .text-green-500 {
   color: #67c23a;
+}
+
+.gap-2 {
+  gap: 8px;
+}
+
+/* 甘特图图例 */
+.gantt-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 8px 12px;
+  background: white;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #606266;
+}
+
+.legend-color {
+  display: inline-block;
+  width: 16px;
+  height: 12px;
+  border-radius: 2px;
+  border: 1px solid #dcdfe6;
+}
+
+/* Popover 编辑菜单 */
+.gantt-popover-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2000;
+}
+
+.gantt-popover {
+  position: fixed;
+  width: 240px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  padding: 12px;
+  z-index: 2001;
+}
+
+.popover-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.popover-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.popover-ship {
+  font-size: 12px;
+  color: #909399;
+}
+
+.popover-info {
+  font-size: 13px;
+  color: #606266;
+  line-height: 1.8;
+  margin-bottom: 10px;
+}
+
+.popover-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* 个人卡片（建设中） */
+.profile-card-building {
+  text-align: center;
+  padding: 16px;
+}
+
+.profile-name {
+  font-size: 18px;
+  font-weight: 600;
+  margin-top: 12px;
+  color: #303133;
+}
+
+.profile-info {
+  text-align: left;
+  margin-top: 16px;
+  font-size: 14px;
+  color: #606266;
+  line-height: 2;
+}
+
+.mt-4 {
+  margin-top: 16px;
 }
 </style>
