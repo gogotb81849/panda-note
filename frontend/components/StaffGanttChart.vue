@@ -65,11 +65,13 @@ type AssignmentItem = {
 interface Props {
   ships: ShipItem[]
   assignments: AssignmentItem[]
+  vacantShipIds?: number[]
   loading?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
   loading: false,
+  vacantShipIds: () => [],
 })
 
 const emit = defineEmits<{
@@ -162,6 +164,31 @@ const shipIdToYIndex = computed(() => {
     map.set(s.id, props.ships.length - 1 - i)
   })
   return map
+})
+
+// Y 轴类目索引 -> shipId（给 formatter / splitArea 用）
+const yIndexToShipId = computed(() => {
+  const arr: number[] = new Array(props.ships.length)
+  props.ships.forEach((s, i) => {
+    arr[props.ships.length - 1 - i] = s.id
+  })
+  return arr
+})
+
+const vacantIdSet = computed(() => new Set(props.vacantShipIds || []))
+
+// splitArea 行背景色：空缺行高亮为淡红
+const splitAreaStyles = computed(() => {
+  const arr: any[] = []
+  for (let i = 0; i < props.ships.length; i++) {
+    const shipId = yIndexToShipId.value[i]
+    if (vacantIdSet.value.has(shipId)) {
+      arr.push({ color: 'rgba(245, 108, 108, 0.08)' })
+    } else {
+      arr.push({ color: i % 2 === 0 ? 'rgba(0,0,0,0.00)' : 'rgba(0,0,0,0.015)' })
+    }
+  }
+  return arr
 })
 
 // assignmentId -> assignment，供 tooltip / 点击事件查找
@@ -355,8 +382,36 @@ const chartOption = computed(() => {
       data: yCategories.value,
       axisLine: { lineStyle: { color: '#dcdfe6' } },
       axisTick: { show: false },
-      axisLabel: { color: '#303133', fontSize: 12 },
+      axisLabel: {
+        color: '#303133',
+        fontSize: 12,
+        formatter: (val: string, idx: number) => {
+          const shipId = yIndexToShipId.value[idx]
+          if (vacantIdSet.value.has(shipId)) {
+            return `{name|${val}}{vacant|空缺}`
+          }
+          return `{name|${val}}`
+        },
+        rich: {
+          name: { color: '#303133', fontSize: 12, padding: [0, 6, 0, 0], lineHeight: 20 },
+          vacant: {
+            backgroundColor: 'rgba(245, 108, 108, 0.15)',
+            borderColor: '#f56c6c',
+            borderWidth: 1,
+            color: '#c0392b',
+            fontSize: 10,
+            padding: [1, 5],
+            borderRadius: 8,
+            lineHeight: 20,
+          },
+        },
+      },
       splitLine: { show: true, lineStyle: { color: '#f5f5f5' } },
+      splitArea: {
+        show: true,
+        interval: 0,
+        areaStyle: splitAreaStyles.value,
+      },
     },
     dataZoom: [
       {

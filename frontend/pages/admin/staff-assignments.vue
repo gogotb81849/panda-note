@@ -41,6 +41,81 @@
       </div>
     </div>
 
+    <!-- O4: 轮换预警看板 -->
+    <div v-if="activeTab !== 'history'" class="warning-dashboard">
+      <el-card
+        class="warning-card card-danger"
+        shadow="hover"
+        @click="onWarningClick('overdue')"
+      >
+        <div class="card-left">
+          <div class="card-icon">🚨</div>
+        </div>
+        <div class="card-body">
+          <div class="card-count">{{ warningStats.overdue.length }}</div>
+          <div class="card-title">超期 / 违规</div>
+          <div class="card-sub">在船超过10个月（极限/违规）</div>
+          <div v-if="warningStats.overdue.length" class="card-names">
+            {{ warningStats.overdue.slice(0,3).map(a => a.user?.realName).join('、') }}{{ warningStats.overdue.length > 3 ? ' 等' : '' }}
+          </div>
+        </div>
+      </el-card>
+
+      <el-card
+        class="warning-card card-warn"
+        shadow="hover"
+        @click="onWarningClick('expiring30')"
+      >
+        <div class="card-left">
+          <div class="card-icon">⚠️</div>
+        </div>
+        <div class="card-body">
+          <div class="card-count">{{ warningStats.expiring30.length }}</div>
+          <div class="card-title">30天内到预警</div>
+          <div class="card-sub">距满8个月不足30天，需尽快安排换班</div>
+          <div v-if="warningStats.expiring30.length" class="card-names">
+            {{ warningStats.expiring30.slice(0,3).map(a => a.user?.realName).join('、') }}{{ warningStats.expiring30.length > 3 ? ' 等' : '' }}
+          </div>
+        </div>
+      </el-card>
+
+      <el-card
+        class="warning-card card-notice"
+        shadow="hover"
+        @click="onWarningClick('expiring60')"
+      >
+        <div class="card-left">
+          <div class="card-icon">📌</div>
+        </div>
+        <div class="card-body">
+          <div class="card-count">{{ warningStats.expiring60.length }}</div>
+          <div class="card-title">60天内到期</div>
+          <div class="card-sub">距关注期/预警期还有60天内</div>
+          <div v-if="warningStats.expiring60.length" class="card-names">
+            {{ warningStats.expiring60.slice(0,3).map(a => a.user?.realName).join('、') }}{{ warningStats.expiring60.length > 3 ? ' 等' : '' }}
+          </div>
+        </div>
+      </el-card>
+
+      <el-card
+        class="warning-card card-vacant"
+        shadow="hover"
+        @click="onWarningClick('vacant')"
+      >
+        <div class="card-left">
+          <div class="card-icon">🆘</div>
+        </div>
+        <div class="card-body">
+          <div class="card-count">{{ warningStats.vacantShipIds.length }}</div>
+          <div class="card-title">政委空缺船舶</div>
+          <div class="card-sub">当前无活跃在任政委的船舶</div>
+          <div v-if="warningStats.vacantShipIds.length" class="card-names">
+            {{ vacantShipNames.slice(0,3).join('、') }}{{ vacantShipNames.length > 3 ? ' 等' : '' }}
+          </div>
+        </div>
+      </el-card>
+    </div>
+
     <!-- Tab 切换 -->
     <el-tabs v-model="activeTab" class="staff-tabs" @tab-change="onTabChange">
       <el-tab-pane label="甘特图视图" name="gantt">
@@ -58,6 +133,7 @@
         <StaffGanttChart
           :ships="ships"
           :assignments="filteredAssignments as any"
+          :vacant-ship-ids="warningStats.vacantShipIds"
           :loading="loading"
           @bar-click="onBarClick"
         />
@@ -199,13 +275,40 @@
     >
       <el-form :model="formData" label-width="100px">
         <el-form-item label="选择政委">
-          <el-select v-model="formData.userId" placeholder="选择政委" class="w-full" :disabled="!!editingId">
+          <el-select v-model="formData.userId" placeholder="选择政委" class="w-full" :disabled="!!editingId" filterable>
             <el-option
               v-for="user in users"
               :key="user.id"
               :label="user.realName"
               :value="user.id"
-            />
+            >
+              <div class="user-option">
+                <span class="user-name">{{ user.realName }}</span>
+                <el-tag
+                  v-if="userMetaMap[user.id]"
+                  :type="userMetaMap[user.id].currentStatus === 'on_board' ? 'danger' : userMetaMap[user.id].currentStatus === 'on_leave' ? 'warning' : 'success'"
+                  size="small"
+                  effect="plain"
+                >
+                  {{ userMetaMap[user.id].statusLabel }}
+                  <span v-if="userMetaMap[user.id].currentStatus === 'on_board' && userMetaMap[user.id].currentShipName">
+                    · {{ userMetaMap[user.id].currentShipName }}
+                  </span>
+                </el-tag>
+                <span v-if="userMetaMap[user.id]?.totalAssignments > 0" class="user-meta-chip">
+                  派任{{ userMetaMap[user.id].totalAssignments }}次
+                </span>
+                <span v-if="userMetaMap[user.id]?.avgDaysOnBoard > 0" class="user-meta-chip">
+                  平均{{ userMetaMap[user.id].avgDaysOnBoard }}天
+                </span>
+                <span v-if="userMetaMap[user.id] && userMetaMap[user.id].lastOffDays > 0" class="user-meta-chip">
+                  下船{{ userMetaMap[user.id].lastOffDays }}天
+                </span>
+                <span v-else-if="userMetaMap[user.id] && userMetaMap[user.id].lastOffDays === -2" class="user-meta-chip">
+                  新人
+                </span>
+              </div>
+            </el-option>
           </el-select>
         </el-form-item>
         <el-form-item label="选择船舶">
@@ -215,7 +318,13 @@
               :key="ship.id"
               :label="ship.cnShipName"
               :value="ship.id"
-            />
+            >
+              <div class="ship-option">
+                <span class="ship-name">{{ ship.cnShipName }}</span>
+                <el-tag v-if="warningStats.vacantShipIds.includes(ship.id)" type="danger" size="small" effect="plain">空缺</el-tag>
+                <el-tag v-else type="success" size="small" effect="plain">在任</el-tag>
+              </div>
+            </el-option>
           </el-select>
         </el-form-item>
         <el-form-item label="上船日期">
@@ -226,6 +335,19 @@
             class="w-full"
             value-format="YYYY-MM-DD"
           />
+          <!-- O5: 里程碑日期提示 -->
+          <div v-if="milestoneDates" class="milestone-hint">
+            <div class="milestone-title">📅 派任里程碑预估（以上船日期起算）：</div>
+            <div class="milestone-row">
+              <span class="ms-dot ms-normal"></span><span class="ms-label">满6个月关注起：</span><b>{{ milestoneDates.m6 }}</b>
+            </div>
+            <div class="milestone-row">
+              <span class="ms-dot ms-warn"></span><span class="ms-label">满8个月预警起：</span><b>{{ milestoneDates.m8 }}</b>
+            </div>
+            <div class="milestone-row">
+              <span class="ms-dot ms-limit"></span><span class="ms-label">满10个月极限点：</span><b>{{ milestoneDates.m10 }}</b>
+            </div>
+          </div>
         </el-form-item>
         <el-form-item label="下船日期">
           <el-date-picker
@@ -362,11 +484,32 @@
               :label="user.realName"
               :value="user.id"
             >
-              <span>{{ user.realName }}</span>
-              <span v-if="userCurrentShipMap[user.id]" class="text-gray-400 ml-2 text-xs">
-                当前在：{{ userCurrentShipMap[user.id] }}
-              </span>
-              <span v-else class="text-green-500 ml-2 text-xs">（待派）</span>
+              <div class="user-option">
+                <span class="user-name">{{ user.realName }}</span>
+                <el-tag
+                  v-if="userMetaMap[user.id]"
+                  :type="userMetaMap[user.id].currentStatus === 'on_board' ? 'danger' : userMetaMap[user.id].currentStatus === 'on_leave' ? 'warning' : 'success'"
+                  size="small"
+                  effect="plain"
+                >
+                  {{ userMetaMap[user.id].statusLabel }}
+                  <span v-if="userMetaMap[user.id].currentStatus === 'on_board' && userMetaMap[user.id].currentShipName">
+                    · {{ userMetaMap[user.id].currentShipName }}
+                  </span>
+                </el-tag>
+                <span v-if="userMetaMap[user.id]?.totalAssignments > 0" class="user-meta-chip">
+                  派任{{ userMetaMap[user.id].totalAssignments }}次
+                </span>
+                <span v-if="userMetaMap[user.id]?.avgDaysOnBoard > 0" class="user-meta-chip">
+                  平均{{ userMetaMap[user.id].avgDaysOnBoard }}天
+                </span>
+                <span v-if="userMetaMap[user.id] && userMetaMap[user.id].lastOffDays > 0" class="user-meta-chip">
+                  下船{{ userMetaMap[user.id].lastOffDays }}天
+                </span>
+                <span v-else-if="userMetaMap[user.id] && userMetaMap[user.id].lastOffDays === -2" class="user-meta-chip">
+                  新人
+                </span>
+              </div>
             </el-option>
           </el-select>
         </el-form-item>
@@ -378,6 +521,14 @@
             class="w-full"
             value-format="YYYY-MM-DD"
           />
+          <div v-if="replaceForm.boardDate" class="milestone-hint">
+            <div class="milestone-title">📅 里程碑预估：</div>
+            <div class="milestone-row">
+              <span class="ms-dot ms-normal"></span> 关注 {{ addMonths(replaceForm.boardDate, 6) }} ·
+              <span class="ms-dot ms-warn"></span> 预警 {{ addMonths(replaceForm.boardDate, 8) }} ·
+              <span class="ms-dot ms-limit"></span> 极限 {{ addMonths(replaceForm.boardDate, 10) }}
+            </div>
+          </div>
         </el-form-item>
         <el-form-item label="派任编号">
           <el-input v-model="replaceForm.assignmentNo" placeholder="请输入派任编号（可选）" />
@@ -572,12 +723,157 @@ const formatDate = (date?: string | null) => {
   return new Date(date).toLocaleDateString('zh-CN');
 };
 
+// 给模板用的月份偏移工具（replace dialog 里程碑）
+function addMonths(dateStr: string, m: number): string {
+  const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return '-'
+  d.setMonth(d.getMonth() + m)
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+}
+
 function getDaysOnBoard(assignment?: StaffAssignment | null): number {
   if (!assignment?.startDate) return 0;
   const start = new Date(assignment.startDate).getTime();
   const end = assignment.endDate ? new Date(assignment.endDate).getTime() : Date.now();
   return Math.floor((end - start) / (1000 * 60 * 60 * 24));
 }
+
+// ====== 轮换预警看板 O4 ======
+interface WarningStats {
+  overdue: StaffAssignment[]  // >300天 极限/违规
+  expiring30: StaffAssignment[] // 距今天<=30天满8个月（180+30*8？还是距endDate<30? 我们按startDate + 240天(8个月)在30天内算30天内到期）
+  expiring60: StaffAssignment[] // startDate + 210天(7个月)在60天内，即未来60天内进入关注/预警期
+  vacantShipIds: number[] // 船舶无active政委
+}
+
+const DAY = 1000 * 60 * 60 * 24
+
+const warningStats = computed<WarningStats>(() => {
+  const now = Date.now()
+  const activeOnBoard: StaffAssignment[] = []
+  assignments.value.forEach(a => {
+    if (a.status === 'active' && !a.endDate) activeOnBoard.push(a)
+  })
+
+  const overdue: StaffAssignment[] = []
+  const expiring30: StaffAssignment[] = []
+  const expiring60: StaffAssignment[] = []
+
+  activeOnBoard.forEach(a => {
+    const days = getDaysOnBoard(a)
+    if (days > 300) overdue.push(a)
+    // 6个月=180天 关注期开始，距离满8个月(240天) <30天 → 30天内进入预警期 → 30天内到期
+    const daysTo240 = 240 - days
+    if (daysTo240 > 0 && daysTo240 <= 30) expiring30.push(a)
+    // 距离满6个月(180天) <60天且>30天 → 60天内进入关注期
+    const daysTo180 = 180 - days
+    if ((daysTo180 > 0 && daysTo180 <= 60) || (daysTo240 > 30 && daysTo240 <= 60)) {
+      if (!expiring30.includes(a)) expiring60.push(a)
+    }
+  })
+
+  const occupiedShipIds = new Set<number>()
+  activeOnBoard.forEach(a => occupiedShipIds.add(a.shipId))
+  const vacantShipIds = ships.value
+    .filter(s => !occupiedShipIds.has(s.id))
+    .map(s => s.id)
+
+  return { overdue, expiring30, expiring60, vacantShipIds }
+})
+
+const vacantShipNames = computed(() =>
+  ships.value
+    .filter(s => warningStats.value.vacantShipIds.includes(s.id))
+    .map(s => s.teamDisplayName || s.cnShipName)
+)
+
+// 点击预警卡片：一键筛选到对应船舶/人员
+const onWarningClick = (type: 'overdue' | 'expiring30' | 'expiring60' | 'vacant') => {
+  activeTab.value = 'gantt'
+  const stats = warningStats.value
+  if (type === 'vacant') {
+    // 不筛选船舶，保持全部显示以让用户扫空缺
+    selectedShipId.value = null
+    filterStatus.value = ''
+    return
+  }
+  const list = stats[type]
+  if (list.length === 1) {
+    selectedShipId.value = list[0].shipId
+  } else {
+    selectedShipId.value = null
+  }
+}
+
+// ====== 里程碑日期提示 (O5): 根据startDate计算6/8/10个月节点 ======
+const milestoneDates = computed(() => {
+  const sd = formData.value.startDate
+  if (!sd) return null
+  const d = new Date(sd)
+  if (isNaN(d.getTime())) return null
+  function addMonths(base: Date, m: number): string {
+    const x = new Date(base)
+    x.setMonth(x.getMonth() + m)
+    return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`
+  }
+  return {
+    m6: addMonths(d, 6),
+    m8: addMonths(d, 8),
+    m10: addMonths(d, 10),
+  }
+})
+
+// ====== 人才池富状态 (O6): 每位用户的历史派任统计 ======
+interface UserPoolMeta {
+  currentStatus: 'on_board' | 'on_leave' | 'idle'
+  statusLabel: string
+  lastOffDays: number // 上次下船距今天数，-1表示仍在船或无记录
+  totalAssignments: number
+  avgDaysOnBoard: number
+  currentShipName?: string
+}
+
+const userMetaMap = computed<Record<number, UserPoolMeta>>(() => {
+  const result: Record<number, UserPoolMeta> = {}
+  const now = Date.now()
+  users.value.forEach(u => {
+    const userAssignments = assignments.value
+      .filter(a => a.userId === u.id)
+      .sort((a, b) => (b.startDate || '').localeCompare(a.startDate || ''))
+
+    let currentStatus: UserPoolMeta['currentStatus'] = 'idle'
+    let statusLabel = '待派'
+    let currentShipName: string | undefined
+    let lastOffDays = -1
+
+    const active = userAssignments.find(a => a.status === 'active' && !a.endDate)
+    const onLeave = userAssignments.find(a => a.status === 'leave')
+    if (active) {
+      currentStatus = 'on_board'
+      statusLabel = '在船'
+      currentShipName = active.ship?.cnShipName
+    } else if (onLeave) {
+      currentStatus = 'on_leave'
+      statusLabel = '休假中'
+    } else {
+      // 取最后一个ended记录计算lastOffDays
+      const lastEnded = userAssignments.find(a => a.status === 'ended' || a.endDate)
+      if (lastEnded?.endDate) {
+        lastOffDays = Math.floor((now - new Date(lastEnded.endDate).getTime()) / DAY)
+      } else {
+        lastOffDays = -2 // 从未派任
+      }
+    }
+
+    const totalAssignments = userAssignments.length
+    let totalDays = 0
+    userAssignments.forEach(a => { totalDays += getDaysOnBoard(a as any) })
+    const avgDaysOnBoard = totalAssignments > 0 ? Math.floor(totalDays / totalAssignments) : 0
+
+    result[u.id] = { currentStatus, statusLabel, lastOffDays, totalAssignments, avgDaysOnBoard, currentShipName }
+  })
+  return result
+})
 
 // ====== 数据加载 ======
 const loadShips = async () => {
@@ -730,6 +1026,13 @@ const handleSave = async () => {
     ElMessage.warning('请填写必填项');
     return;
   }
+  // === O1: 前端日期先后校验 ===
+  if (formData.value.startDate && formData.value.endDate) {
+    const s = new Date(formData.value.startDate).getTime();
+    const e = new Date(formData.value.endDate).getTime();
+    if (isNaN(s) || isNaN(e)) { ElMessage.warning('日期格式不正确'); return; }
+    if (s > e) { ElMessage.warning('上船日期不能晚于下船日期，请检查后重试'); return; }
+  }
   try {
     if (editingId.value) {
       await api.staffAssignments.update(editingId.value, {
@@ -811,6 +1114,22 @@ const submitReplace = async () => {
   if (!newUserId) { ElMessage.warning('请选择新政委'); return; }
   if (!boardDate) { ElMessage.warning('请填写上船日期'); return; }
   if (currentAssignment && !checkoutDate) { ElMessage.warning('有当前在任政委，请填写下船日期'); return; }
+
+  // === O2: 换班窗口校验 - 新政委上船日期 >= 旧政委下船日期 ===
+  if (currentAssignment && checkoutDate && boardDate) {
+    const out = new Date(checkoutDate).getTime();
+    const b = new Date(boardDate).getTime();
+    if (isNaN(out) || isNaN(b)) { ElMessage.warning('日期格式不正确'); return; }
+    if (b < out) {
+      try {
+        await ElMessageBox.confirm(
+          `新政委上船日期（${boardDate}）早于旧政委下船日期（${checkoutDate}），该时段内可能同时出现两位在船政委。是否仍继续？`,
+          '存在派任时间重叠',
+          { type: 'warning', confirmButtonText: '仍继续', cancelButtonText: '取消' }
+        );
+      } catch { return; }
+    }
+  }
 
   const currentShipOfNew = userCurrentShipMap.value[newUserId];
   if (currentShipOfNew) {
@@ -1082,5 +1401,155 @@ onMounted(async () => {
 
 .mt-4 {
   margin-top: 16px;
+}
+
+/* === O4: 轮换预警看板 === */
+.warning-dashboard {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.warning-card {
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 4px 8px;
+  position: relative;
+  overflow: hidden;
+}
+
+.warning-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.1);
+}
+
+.warning-card :deep(.el-card__body) {
+  display: flex;
+  padding: 14px 12px;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.card-left {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  font-size: 24px;
+}
+
+.card-danger .card-left { background: rgba(245,108,108,0.12); }
+.card-warn .card-left { background: rgba(230,162,60,0.12); }
+.card-notice .card-left { background: rgba(64,158,255,0.12); }
+.card-vacant .card-left { background: rgba(217,119,6,0.12); }
+
+.card-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.card-count {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.1;
+  margin-bottom: 2px;
+}
+.card-danger .card-count { color: #ad0606; }
+.card-warn .card-count { color: #e6a23c; }
+.card-notice .card-count { color: #409eff; }
+.card-vacant .card-count { color: #d97706; }
+
+.card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 2px;
+}
+
+.card-sub {
+  font-size: 11px;
+  color: #909399;
+  line-height: 1.4;
+  margin-bottom: 4px;
+}
+
+.card-names {
+  font-size: 11px;
+  color: #606266;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* === O5: 里程碑日期提示 === */
+.milestone-hint {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: #ecf5ff;
+  border: 1px solid #d9ecff;
+  border-radius: 6px;
+}
+
+.milestone-title {
+  font-size: 12px;
+  color: #409eff;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.milestone-row {
+  font-size: 12px;
+  color: #606266;
+  line-height: 1.9;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ms-label {
+  color: #606266;
+}
+
+.ms-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.ms-normal { background: #67c23a; }
+.ms-warn { background: #f89a3c; }
+.ms-limit { background: #f56c6c; }
+
+/* === O6: 人才池富状态 === */
+.user-option, .ship-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 2px 0;
+}
+
+.user-name, .ship-name {
+  font-size: 13px;
+  color: #303133;
+  font-weight: 500;
+  margin-right: 4px;
+}
+
+.user-meta-chip {
+  display: inline-block;
+  padding: 0 6px;
+  height: 18px;
+  line-height: 18px;
+  background: #f4f4f5;
+  color: #909399;
+  font-size: 10px;
+  border-radius: 9px;
+  white-space: nowrap;
 }
 </style>

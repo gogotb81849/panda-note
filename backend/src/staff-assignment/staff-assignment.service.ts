@@ -14,6 +14,18 @@ export class StaffAssignmentService {
    * 创建派任记录（上船）
    */
   async create(teamCode: string, createDto: CreateStaffAssignmentDto, userId: number = 0) {
+    // === P0: 日期先后校验 (O1) ===
+    if (createDto.endDate) {
+      const s = new Date(createDto.startDate).getTime();
+      const e = new Date(createDto.endDate).getTime();
+      if (isNaN(s) || isNaN(e)) {
+        throw new BadRequestException('日期格式不正确');
+      }
+      if (s > e) {
+        throw new BadRequestException('上船日期不能晚于下船日期');
+      }
+    }
+
     // 检查用户是否已有活跃的派任记录
     const activeAssignment = await this.prisma.staffAssignment.findFirst({
       where: {
@@ -25,6 +37,18 @@ export class StaffAssignmentService {
 
     if (activeAssignment) {
       throw new BadRequestException('该政委当前已有在船记录，请先下船登记');
+    }
+
+    // === P0: 同一船舶不能同时有两个活跃在任政委 (O3) ===
+    const shipActive = await this.prisma.staffAssignment.findFirst({
+      where: {
+        shipId: createDto.shipId,
+        status: 'active',
+        endDate: null,
+      },
+    });
+    if (shipActive && shipActive.userId !== createDto.userId) {
+      throw new BadRequestException('该船舶当前已有在任政委，请先将其下船后再派任新政委');
     }
 
     // 验证船舶是否存在
@@ -94,6 +118,18 @@ export class StaffAssignmentService {
     });
     if (!existing) {
       throw new NotFoundException('派任记录不存在');
+    }
+
+    // === P0: 更新时若设置了endDate，校验日期先后 (O1) ===
+    if (updateDto.endDate !== undefined && updateDto.endDate !== null) {
+      const existingStart = new Date(existing.startDate).getTime();
+      const newEnd = new Date(updateDto.endDate).getTime();
+      if (isNaN(newEnd)) {
+        throw new BadRequestException('下船日期格式不正确');
+      }
+      if (newEnd < existingStart) {
+        throw new BadRequestException('下船日期不能早于上船日期');
+      }
     }
 
     const data: any = {};

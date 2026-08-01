@@ -328,4 +328,160 @@
 
 ---
 
+## 八、政委派任管理全面检查与行业对标优化方案（2026-08-01 新增）
+
+### 8.1 现状全面检查报告
+
+#### 8.1.1 前端按钮与功能完整性
+
+| 位置 | 按钮/功能 | 数据来源 | API调用链路 | 状态 | 备注 |
+|------|----------|---------|------------|------|------|
+| **工具栏** | 船舶下拉筛选 | `api.ships.getAll` → `/ships` | composable `loadShips()` | ✅ 正常 | 过滤 `selectedShipId` → `filteredAssignments` 计算属性 |
+| 工具栏 | 状态筛选（列表Tab） | 前端计算属性 `filteredAssignments` | 本地过滤 | ✅ 正常 | 仅列表Tab显示 |
+| 工具栏 | 更换政委 | `api.staffAssignments.getCurrentShipStaff` → `/staff-assignments/ship/:id/current-staff` → `checkOut` + `createAssignment` | `submitReplace()` 事务链 | ✅ 正常 | 含新政委跨船自动先下船逻辑 |
+| 工具栏 | 上船登记（列表Tab） | `createAssignment` → `api.staffAssignments.create` → POST `/staff-assignments` | `handleSave()` | ✅ 正常 | 表单校验：userId/shipId/startDate 必填 |
+| 工具栏 | 添加履历（履历Tab） | `api.staffHistory.create` → POST `/staff-history` | `handleHistorySave()` | ✅ 正常 | |
+| **甘特图色条点击Popover** | 编辑 | `api.staffAssignments.update` → PUT `/staff-assignments/:id` | `handleEdit()` → `handleSave()` | ✅ 正常 | 编辑模式下禁用政委选择 |
+| Popover | 下船（active状态） | `api.staffAssignments.checkOut` → POST `/staff-assignments/:id/checkout` | `handleCheckout()` → `submitCheckout()` | ✅ 正常 | 后端自动同步清空 Ship.politicalInstructorId |
+| Popover | 休假（active状态） | `api.staffAssignments.startLeave` → POST `/staff-assignments/:id/leave` | `handleLeave()` → `submitLeave()` | ✅ 正常 | 休假用斜线图案渲染 |
+| Popover | 销假（leave状态） | `api.staffAssignments.endLeave` → POST `/staff-assignments/:id/end-leave` | `handleEndLeave()` | ✅ 正常 | |
+| Popover | 个人卡片 | 前端占位，关联 `popoverAssignment` | 本地状态 | ⚠️ 建设中 | Phase 2完善：接入OfficerProfile/Evaluation/Mentorship |
+| Popover | 删除 | `api.staffAssignments.delete` → DELETE `/staff-assignments/:id` | `handleDelete()` | ✅ 正常 | 含确认弹窗 |
+| **派任列表操作列** | 下船/休假/销假/编辑/删除 | 同上Popover对应API | 复用同一composable | ✅ 正常 | 与Popover共用逻辑 |
+| **履历列表操作列** | 编辑 | `api.staffHistory.update` → PUT `/staff-history/:id` | `handleHistoryEdit()` | ✅ 正常 | |
+| 履历操作列 | 删除 | `api.staffHistory.delete` → DELETE `/staff-history/:id` | `handleHistoryDelete()` | ✅ 正常 | |
+| **甘特图图例** | 7种颜色分级说明 | 硬编码（与StaffGanttChart中getBarColor一致） | 无API | ⚠️ 可优化 | 应从常量统一管理，避免前后不一致 |
+| **甘特图tooltip** | 派任详情hover提示 | 前端 computed `assignmentMap` 按id查找 | 本地 | ✅ 正常 | 显示姓名/船舶/上下船/天数/状态/公司/派任编号/备注 |
+| 甘特图今天标线 | markLine 蓝竖线 | 客户端 `Date.now()` | 本地 | ✅ 正常 | |
+| 甘特图dataZoom | 底部滑动条 + 鼠标滚轮 | 客户端ECharts | 本地 | ✅ 正常 | 默认显示540天前~60天后 |
+| 甘特图违规闪烁 | >330天派任深红↔亮红 800ms闪烁 | 前端 `setInterval` + `blink` ref | 本地 | ✅ 正常 | 仅违规派任触发 |
+
+#### 8.1.2 后端数据模型与业务校验
+
+| 维度 | 现有逻辑 | 状态 | 备注 |
+|------|---------|------|------|
+| **StaffAssignment表** | 字段：id/userId/shipId/teamCode/startDate/endDate/status/sourceCompany/assignmentNo/remark/createdAt/updatedAt | ✅ 完整 | 索引：userId/shipId/(userId,startDate)/teamCode/status |
+| 上船创建校验 | 同一userId不能同时存在 `active + endDate=null` 派任 | ✅ 已有 | BadRequestException |
+| 上船创建校验 | shipId和userId必须存在（跨teamCode隔离） | ✅ 已有 | NotFoundException |
+| 下船/checkOut | 自动同步清空 Ship.politicalInstructorId/Name（仅当这条派任是该船当前活跃的） | ✅ 已有 | 事务 + 判断 ship.politicalInstructorId === userId |
+| 上船/create | 自动设置 Ship.politicalInstructorId/Name/Instructor | ✅ 已有 | 事务内完成 |
+| update更新 | 如endDate从null→有值或status非active，触发Ship字段清空逻辑 | ✅ 已有 | willBeActive 智能判断 |
+| **权限控制** | SHORE_MANAGEMENT_ROLES(岸基主管/总经理/admin)看全团队；普通政委只看自己的历史 | ✅ 已有 | Controller 中findAll 按角色分流 |
+| 操作日志 | create/update/delete 均写入 OperationLog（含操作人+内容+teamCode） | ✅ 已有 | Service层调用 |
+
+#### 8.1.3 已发现的问题（检查项）
+
+| # | 问题 | 严重度 | 说明 |
+|---|------|--------|------|
+| C1 | 创建派任表单缺少业务校验：上船日期 > 下船日期 可提交 | P1 | 前端仅校验必填，未校验日期先后 |
+| C2 | 更换政委对话框未校验：新政委上船日期 < 旧政委下船日期 会造成同一船active重叠 | P1 | 后端create时仅按userId查重，未按shipId查重重叠窗口 |
+| C3 | 创建派任对话框未提示"预计到期日期"（如6个月、8个月、10个月节点） | P2 | 用户无法一眼看到合同期里程碑 |
+| C4 | 甘特图上方缺少"即将轮换统计"（30天内到期、60天内到期、空缺船舶数） | P1 | 行业标配：轮换预警看板 |
+| C5 | 人员池无状态标识：选择新政委时无法判断该人是否"刚下船休假期/已超期未派/在船中" | P1 | 行业标配：人才池 + 可用状态标签 |
+| C6 | StaffAssignment 缺少 expectedEndDate / plannedRotationDate 规划字段 | P2 | 当前只能靠startDate+6个月推算，无法记录与实际不一致的计划 |
+| C7 | 个人卡片建设中，缺少履职档案/考核/传帮带/培训记录聚合 | P2 | 已建表OfficerProfile/Evaluation/Mentorship/PartyActivity，均未接入 |
+| C8 | 甘特图无法显示"待派船舶（无active政委）"的空行提示 | P2 | 用户扫一眼发现不了哪艘船缺政委 |
+| C9 | 无审批流：船工主管直接修改/删除派任记录无审批留痕（仅操作日志） | P3 | 对比：HR SaaS标配审批流 |
+| C10 | 一键换班未考虑交接期重叠（1-3天旧新政委同时在船交接） | P2 | 对比：互海通/海员管理系统标配交接期 |
+| C11 | 休假仅登记start/end/reason，未关联"替换政委临时上" | P3 | 部分政委休假期间需临时调人顶班 |
+| C12 | 无证书/合同到期预警（政委适任证、健康证、合同期限） | P2 | 行业核心功能，MLC公约强制要求 |
+
+---
+
+### 8.2 行业对标分析（海员轮换 + 通用HR轮岗）
+
+#### 8.2.1 海员人事轮换管理系统核心能力对比（互海通 / CrewVector / 海e通 等）
+
+| 能力维度 | 行业标配 | 熊猫笔记现状 | 差距评级 |
+|---------|---------|------------|---------|
+| **可视化视图** | 甘特图 + 日历视图 + 花名册矩阵三视角，支持按船/按人双维度切换 | ✅ 甘特图 + 列表 + 履历 三Tab；单按船维度（Y轴船舶） | B+ |
+| **轮换计划前瞻** | 未来3/6/12个月排班计划（plannedRotation），未到日期虚色显示 | ❌ 仅展示历史和当前，无"未来已计划派任"概念 | C- |
+| **轮换到期预警** | 三级预警（30天/60天/90天）自动推送通知（邮件/钉钉/飞书）+ 看板顶部统计卡 | ❌ 仅有色条分色，无顶部预警看板、无主动通知 | C |
+| **交接期管理** | 1-3天交接重叠期，旧新政委同时在船，系统自动生成交接清单 | ❌ 下船=上船硬切，无重叠概念 | D+ |
+| **人才池与可用状态** | 人才池视图（在船/休假中/待派/培训中/不可用五色），拖拽派任 | ⚠️ 更换政委下拉中简单标注（待派/当前在XX船） | C |
+| **证书合规** | 20+类证书有效期管理，证书到期提前30/60/90天预警，轮换时自动校验证书是否在窗口内有效 | ❌ 无证书表/无校验 | D |
+| **智能配员推荐** | 证-岗-班三维评分：证书合规40%+轮换时机30%+绩效经验20%+健康疲劳10% | ❌ 纯人工选择 | D |
+| **差旅与交接成本** | 上下船差旅安排、交通天数自动计入总轮换周期窗口 | ❌ 未涉及 | D |
+| **回流率统计** | 政委下船后多少天重新派任、离职率、休假时长分布 | ❌ 无统计报表 | D |
+| **冲突自动检测** | 同一人同时两船、同一船两活跃、轮换窗口内证书过期、超期未下船 四类冲突实时标红 | ⚠️ 后端仅防一人两active，前端无冲突检测弹窗 | C- |
+| **审批流** | 派任申请→主管审核→合规校验→生效四级流程 | ❌ 主管直接生效（有操作日志） | D+ |
+| **移动端自助** | 政委App端查看排班、申请休假换班、确认上船通知 | ❌ 仅后台管理端 | D |
+
+#### 8.2.2 通用HR SaaS轮岗管理核心能力对比（薪人薪事/i人事/东宝DHG）
+
+| 能力维度 | 通用HR标配 | 熊猫笔记现状 | 可借鉴点 |
+|---------|-----------|------------|---------|
+| **轮岗规划与编制** | 年度轮岗计划、关键岗位继任计划九宫格 | ❌ 无 | 未来考虑政委队伍继任储备管理 |
+| **流程引擎** | 转岗申请→部门出→部门入→HR→法务 多方审批 | ❌ 无审批流 | P3级别，暂非紧急 |
+| **薪酬联动** | 轮岗后自动按新岗位调整薪资结构 | ❌ 无薪资模块 | 政委薪资一般按岸基标准，暂不紧急 |
+| **效果评估** | 轮岗后3个月/6个月绩效对比、胜任力评估、上级打分 | ⚠️ 有OfficerEvaluation但未联动 | 建议接入履职考核后自动关联派任 |
+| **培训衔接** | 新岗位必修培训自动生成、导师自动分配 | ⚠️ 有Mentorship（传帮带）但未联动 | 更换政委时自动建立传帮带关系 |
+| **交接三维机制** | 表单+审批+看板 三类交接确保业务不中断 | ⚠️ 有StaffHistory.handoverNote但单一备注 | 建议交接清单结构化 |
+| **数据分析** | 轮岗完成率、平均周期、成本、离职率、人才保留率 | ❌ 仅颜色分色无定量报表 | 轮换看板KPI卡片 |
+
+---
+
+### 8.3 差距分析与优化建议清单（按优先级排序）
+
+#### P0 - 立即修复（影响数据正确性）
+
+| 编号 | 建议 | 实施方式 | 工作量 | 状态 |
+|------|------|---------|--------|------|
+| O1 | 创建/编辑派任表单增加日期先后校验 | 前端 handleSave + 后端 Service.create/update 双重校验（startDate≤endDate） | 0.5天 | ✅ 已完成 |
+| O2 | 更换政委对话框增加：新政委上船日期 ≥ 旧政委下船日期校验 | 前端 submitReplace 增加 ElMessageBox 重叠期二次确认；后端未阻断但前端友好提示 | 0.5天 | ✅ 已完成 |
+| O3 | 后端 createAssignment 增加同一shipId不能同时有两个active派任（不含已结束）的跨窗口校验 | Service层create前查询shipId下是否已有 status=active AND endDate=null 的其他记录，有则抛BadRequestException | 0.5天 | ✅ 已完成 |
+
+#### P1 - 本周内落地（提升管理效率，行业标配能力）
+
+| 编号 | 建议 | 实施方式 | 工作量 | 状态 |
+|------|------|---------|--------|------|
+| O4 | 甘特图顶部增加"轮换预警看板"统计卡片：在船超期>300天、30天内到期、60天内到期、船舶空缺数四类，点击可筛选定位 | 新增 warningStats computed + 4张 ElCard 卡片网格，点击卡片筛选对应船舶或切换Tab | 1天 | ✅ 已完成 |
+| O5 | 创建派任对话框增加"预计到期里程碑"提示：输入上船日期后自动展示"满6个月=YYYY-MM-DD、满8个月=…、满10个月=…"，用el-timeline或el-alert展示 | milestoneDates computed → 三行彩色圆点+日期提示块（含 replace dialog 简版） | 0.5天 | ✅ 已完成 |
+| O6 | 人才池状态增强：选择新政委时，下拉选项增加富标签：上次下船距今天数、历史派任次数、当前状态（在船/休假/待派） | userMetaMap computed + option slot：在船/休假/待派彩色Tag + 派任次数/平均天数/下船X天/新人 灰色Chip | 0.5天 | ✅ 已完成 |
+| O7 | 甘特图"空缺船舶"高亮：船舶无active政委时，该行Y轴标签旁显示红色"空缺"标签 + 该行增加淡红色底背景 | StaffGanttChart 新增 vacantShipIds prop，yAxis splitArea.areaStyle 空缺行淡红背景，axisLabel rich formatter 追加"空缺"徽标 | 1天 | ✅ 已完成 |
+
+#### P2 - 近期完善（2-4周迭代）
+
+| 编号 | 建议 | 实施方式 | 工作量 |
+|------|------|---------|--------|
+| O8 | 完善政委个人卡片：接入OfficerProfile（评级/是否新/弱点项）、OfficerEvaluation（考核历史）、Mentorship（传帮带）、PartyActivity统计（活动参与数）、ThoughtReport（思想动态条数）、IntegrityRecord（廉洁记录条数） | 新组件 OfficerProfileCard.vue，从6张表聚合数据 | 3天 |
+| O9 | StaffAssignment表增加 plannedRotationDate 字段（规划下船日期，可选），创建派任时可填或默认6个月，用于甘特图显示"计划下船点"虚线标记，与实际endDate区分 | Prisma migrate + 后端DTO + 前端表单字段 + StaffGanttChart renderItem 叠加虚线markPoint | 2天 |
+| O10 | 一键更换政委对话框增加"交接重叠天数"选项（0/1/2/3天），勾选后旧政委下船日期自动后移重叠天，新政委正常上船日期，中间重叠期两派任同时exist | 前端replaceForm.handoverDays字段 + 后端checkOut日期 - handoverDays或分别记录 | 1天 |
+| O11 | 结构化交接清单：StaffAssignment增加 handoverChecklist JSON字段或建HandoverItem表，更换政委时默认模板（党建台账交接、钥匙、密码、在办事项、重点关注人员等） | DTO扩展 + 对话框新增手风琴面板 | 2天 |
+
+#### P3 - 中长期演进（1-3个月）
+
+| 编号 | 建议 | 说明 |
+|------|------|------|
+| O12 | 证书管理模块 | 新建 CrewCertificate 表（证书类型/颁发日/到期日/持有人ID/扫描件），轮换创建/更换时自动校验证书在轮换窗口内不过期，到期30/60/90天预警看板 |
+| O13 | 派任审批流 | 引入基于状态机的审批流：draft→pending_approval→approved→active / rejected，主管发起后走总经理或指定人审批，审批通过才生效（保留现有直接生效模式作为快捷模式） |
+| O14 | 轮换通知与推送 | 新建/变更派任后通过飞书/钉钉机器人给对应政委发送通知，到期前自动提醒 |
+| O15 | 数据统计看板 | 新建 dashboard/staff-rotation.vue：平均在船时长分布柱状图、来源公司饼图、月度下船人数折线图、超期率趋势、回流率（下船→再派天数） |
+| O16 | 未来派任规划 | 支持创建status=planned的派任记录（未来某月某日上船），甘特图虚色显示，到日期或手动转为active |
+| O17 | 政委画像与智能推荐 | 基于历史考核/在船平均时长/党建活动参与数/投诉/廉洁记录生成综合评分，换班时按评分+可用状态TOP5推荐 |
+
+---
+
+### 8.4 优化实施路线图（Phase 1A ~ Phase 1C）
+
+| 阶段 | 内容 | 关联建议编号 | 计划完成 |
+|------|------|------------|---------|
+| **Phase 1A（本次立即执行）** | P0日期校验+冲突检测 + P1预警看板+里程碑提示+人才池增强+空缺船舶高亮 | O1~O7 | 本次提交完成 |
+| **Phase 1B（下次迭代）** | 个人卡片完善 + plannedRotationDate 规划字段 + 交接重叠期 + 结构化交接清单 | O8~O11 | 下次1~2周内 |
+| **Phase 1C（中后期）** | 证书模块 + 审批流 + 通知推送 + 统计看板 + 规划派任 + 智能推荐 | O12~O17 | 按季度迭代 |
+
+---
+
+## 九、当前进度总览（2026-08-01 修订）
+
+> **修订说明**：补充甘特图功能完成、行业对标报告、Phase 1A优化全部落地完成。
+
+### 8.2章节完成情况
+
+- ✅ 第六章：政委派任甘特图管理功能（d56c317 提交已部署）
+- ✅ 第八章：政委派任管理全面检查与行业对标优化方案（本文档新章节）
+- ✅ **Phase 1A（本次）**：P0 日期校验/冲突检测 + P1 预警看板/里程碑提示/人才池增强/空缺船舶高亮（O1~O7 全部7项已代码实现）
+- 🔜 Phase 1B：个人卡片完善 + plannedRotationDate 规划字段 + 交接重叠期 + 结构化交接清单（O8~O11，下次1~2周内）
+- 🔜 Phase 1C：证书模块 + 审批流 + 通知推送 + 统计看板 + 规划派任 + 智能推荐（O12~O17，按季度迭代）
+
 **文档结束**
