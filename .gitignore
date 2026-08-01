@@ -10,6 +10,10 @@
 .env.*.local
 # 注意：.env.example 是模板文件，不含真实密码，可以提交
 
+# ---------- Git 凭据（安全红线）----------
+.git-credentials
+.github-pat
+
 # ---------- Node.js ----------
 node_modules/
 npm-debug.log*
