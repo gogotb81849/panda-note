@@ -1,7 +1,6 @@
 <template>
   <div class="admin-page">
-    <template v-if="isRootAdmin">
-    <div class="page-header">
+    <div v-if="isRootAdmin" class="page-header">
       <el-button text @click="navigateTo('/')">
         <el-icon><ArrowLeft /></el-icon>
       </el-button>
@@ -59,7 +58,7 @@
         </el-popconfirm>
       </div>
     </div>
-    <div class="modules-grid">
+    <div v-if="isRootAdmin" class="modules-grid">
       <div class="module-card" @click="navCard('/ships')">
         <div class="module-icon">
           <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -197,8 +196,8 @@
         </div>
       </div>
     </div>
-    </template>
-    <NuxtPage v-else />
+    <!-- ⚠️ NuxtPage 必须永远存在（不能用 v-if 包裹）——这是 Nuxt 嵌套路由子页面挂载点 -->
+    <NuxtPage />
   </div>
 </template>
 
