@@ -59,7 +59,7 @@
       </div>
     </div>
     <div class="modules-grid">
-      <NuxtLink to="/ships" class="module-card">
+      <div class="module-card" @click="navCard('/ships')">
         <div class="module-icon">
           <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
@@ -72,9 +72,9 @@
         <div class="module-action">
           <span class="enter-btn">进入</span>
         </div>
-      </NuxtLink>
+      </div>
       
-      <NuxtLink to="/dict" class="module-card">
+      <div class="module-card" @click="navCard('/dict')">
         <div class="module-icon">
           <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
@@ -87,9 +87,9 @@
         <div class="module-action">
           <span class="enter-btn">进入</span>
         </div>
-      </NuxtLink>
+      </div>
       
-      <NuxtLink to="/operation-log" class="module-card">
+      <div class="module-card" @click="navCard('/operation-log')">
         <div class="module-icon">
           <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -102,10 +102,10 @@
         <div class="module-action">
           <span class="enter-btn">进入</span>
         </div>
-      </NuxtLink>
+      </div>
       
       <!-- 仅管理员可见：用户管理 -->
-      <NuxtLink v-if="isAdmin" to="/accounts" class="module-card">
+      <div v-if="isAdmin" class="module-card" @click="navCard('/accounts')">
         <div class="module-icon" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
           <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
@@ -118,9 +118,9 @@
         <div class="module-action">
           <span class="enter-btn">进入</span>
         </div>
-      </NuxtLink>
+      </div>
 
-      <NuxtLink to="/admin/export" class="module-card">
+      <div class="module-card" @click="navCard('/admin/export')">
         <div class="module-icon" style="background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);">
           <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -133,9 +133,9 @@
         <div class="module-action">
           <span class="enter-btn">进入</span>
         </div>
-      </NuxtLink>
+      </div>
 
-      <NuxtLink to="/admin/monitor" class="module-card">
+      <div class="module-card" @click="navCard('/admin/monitor')">
         <div class="module-icon" style="background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);">
           <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 001.066-2.573c-1.543.94-3.31-.826-2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -149,9 +149,9 @@
         <div class="module-action">
           <span class="enter-btn">进入</span>
         </div>
-      </NuxtLink>
+      </div>
 
-      <NuxtLink to="/settings/shortcuts" class="module-card">
+      <div class="module-card" @click="navCard('/settings/shortcuts')">
         <div class="module-icon" style="background: linear-gradient(135deg, #9f7aea 0%, #805ad5 100%);">
           <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
@@ -164,9 +164,9 @@
         <div class="module-action">
           <span class="enter-btn">进入</span>
         </div>
-      </NuxtLink>
+      </div>
       
-      <NuxtLink to="/admin/staff-assignments" class="module-card">
+      <div class="module-card" @click="navCard('/admin/staff-assignments')">
         <div class="module-icon" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
           <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
@@ -179,7 +179,7 @@
         <div class="module-action">
           <span class="enter-btn">进入</span>
         </div>
-      </NuxtLink>
+      </div>
 
       <div class="module-card disabled">
         <div class="module-icon">
@@ -277,6 +277,18 @@ const handleSwitchAccount = async (cmd: string) => {
 const handleLogout = () => {
   authStore.logout()
 }
+
+// 卡片导航：兼容平板/移动端点击，避免 NuxtLink + span 拦截问题
+const _navLock = ref(false)
+const navCard = (path: string) => {
+  if (_navLock.value) return
+  _navLock.value = true
+  try {
+    navigateTo(path)
+  } finally {
+    setTimeout(() => { _navLock.value = false }, 500)
+  }
+}
 </script>
 
 <style scoped>
@@ -347,11 +359,24 @@ const handleLogout = () => {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   cursor: pointer;
   transition: all 0.2s;
+  position: relative;
+  z-index: 1;
+  /* 移动端触摸友好 */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .module-card:hover:not(.disabled) {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* 平板/移动端触摸时的视觉反馈 */
+.module-card:active:not(.disabled) {
+  transform: translateY(0) scale(0.98);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
 }
 
 .module-card.disabled {
@@ -403,7 +428,9 @@ const handleLogout = () => {
   background: #409eff;
   color: white;
   border: none;
-  cursor: pointer;
+  /* 子元素不拦截点击，让事件冒泡到卡片父级 */
+  pointer-events: none;
+  cursor: inherit;
   white-space: nowrap;
   transition: all 0.2s;
 }

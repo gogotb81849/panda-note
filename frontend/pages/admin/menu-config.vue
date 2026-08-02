@@ -171,7 +171,7 @@ const getMenuDescription = (menuKey: string): string => {
     '/tasks': '工作任务管理',
     '/gantt': '任务甘特图视图',
     '/crew-list': '船员信息管理',
-    '/staff-assignments': '人员派任管理',
+    '/admin/staff-assignments': '人员派任管理',
     '/sop-flow': '标准操作流程',
     '/public-case': '公共案例知识库',
     '/experiences': '经验分享社区',

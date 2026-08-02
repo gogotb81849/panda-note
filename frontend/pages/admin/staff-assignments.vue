@@ -612,7 +612,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, nextTick } from 'vue';
+import { useRoute } from 'vue-router';
 import { useApi } from '~/composables/useApi';
 import { useStaffAssignment } from '~/composables/useStaffAssignment';
 import type { StaffAssignment, Ship, User, StaffHistory, CreateStaffHistoryRequest } from '~/types';
@@ -621,6 +622,8 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 definePageMeta({
   middleware: ['auth'],
 })
+
+const route = useRoute();
 
 const api = useApi();
 const {
@@ -1273,6 +1276,21 @@ onMounted(async () => {
     loadShips(),
     loadUsers(),
   ]);
+  // 从URL读取shipId参数并自动筛选（从船舶管理页面跳转过来时使用）
+  const urlShipId = route.query.shipId;
+  if (urlShipId) {
+    const numId = Number(urlShipId);
+    if (!isNaN(numId)) {
+      await nextTick();
+      selectedShipId.value = numId;
+      filterByShip();
+      const ship = ships.value.find((s: Ship) => s.id === numId);
+      if (ship) {
+        const activeInTab = (activeTab.value !== 'history');
+        ElMessage.info(`已定位到船舶：${ship.cnShipName}${activeInTab ? '，可点击上方"上船登记"按钮指派政委' : ''}`);
+      }
+    }
+  }
 });
 </script>
 

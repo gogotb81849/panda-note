@@ -386,19 +386,29 @@
           <el-table-column
             prop="politicalInstructor"
             label="船舶政委"
-            min-width="120"
+            min-width="140"
             v-if="visibleColumns.includes('politicalInstructor')"
           >
             <template #default="{ row }">
               <div class="instructor-cell">
-                <span
-                  v-if="isEditing"
-                  contenteditable="true"
-                  @blur="onCellEdit(row, 'politicalInstructor', $event)"
-                  class="editable-cell"
-                >{{ row.politicalInstructor || '-' }}</span>
-                <span v-else>{{ row.politicalInstructor || '-' }}</span>
-                <el-button size="small" link type="primary" @click="showInstructorHistory(row)">历史</el-button>
+                <el-link
+                  v-if="row.politicalInstructor"
+                  type="primary"
+                  :underline="false"
+                  @click="goToStaffAssignment(row)"
+                  class="instructor-link"
+                >
+                  <span class="instructor-name">{{ row.politicalInstructor }}</span>
+                  <el-icon class="link-icon"><Edit /></el-icon>
+                </el-link>
+                <el-button
+                  v-else
+                  size="small"
+                  type="success"
+                  plain
+                  @click="goToStaffAssignment(row)"
+                >+ 指派政委</el-button>
+                <el-button size="small" link type="info" @click="showInstructorHistory(row)">历史</el-button>
               </div>
             </template>
           </el-table-column>
@@ -597,7 +607,7 @@ const editableFields = [
   'cnShipName', 'enShipName', 'flagCountry', 'portRegistry', 'shipType',
   'deadweightTonnage', 'factoryDate', 'teamDisplayName', 'marineSupervisor',
   'engineerSupervisor', 'electricSupervisor', 'crewSupervisor',
-  'politicalInstructor', 'instructorIdNumber', 'onBoardDate', 'sendCompany',
+  'instructorIdNumber', 'onBoardDate', 'sendCompany',
 ];
 
 const columnOptions = [
@@ -851,6 +861,14 @@ const showInstructorHistory = async (row: any) => {
   }
 };
 
+// 跳转到人员派任页面（自动筛选当前船舶）
+const goToStaffAssignment = (row: any) => {
+  router.push({
+    path: '/admin/staff-assignments',
+    query: { shipId: String(row.id) },
+  });
+};
+
 const getUniqueValues = (prop: string) => {
   const values = new Set<string>();
   ships.value.forEach(ship => {
@@ -916,7 +934,6 @@ const saveAllRows = async () => {
   
   let successCount = 0;
   let failCount = 0;
-  const instructorErrors: string[] = [];
   
   for (const row of changedRows) {
     try {
@@ -959,57 +976,6 @@ const saveAllRows = async () => {
         row.onBoardDate = onBoardDateNormalized;
       }
       
-      // 检测政委信息变更
-      const originalInstructor = (row as any)['original_politicalInstructor'];
-      const originalOnBoardDate = (row as any)['original_onBoardDate'];
-      if (originalInstructor !== undefined && (originalInstructor !== row.politicalInstructor || originalOnBoardDate !== row.onBoardDate)) {
-        const newInstructor = row.politicalInstructor;
-        const newOnBoardDate = row.onBoardDate;
-        const oldInstructor = originalInstructor;
-        const oldOnBoardDate = originalOnBoardDate;
-        
-        // SQ5: 收集政委历史操作错误，而非仅 console.error
-        // 如果之前有政委，记录其下船
-        if (oldInstructor && oldInstructor !== newInstructor) {
-          try {
-            const changeDate = newOnBoardDate || new Date().toISOString().split('T')[0];
-            const currentRecords = await api.staffHistory.getCurrentStaff(row.id, changeDate);
-            const oldInstructorRecord = (currentRecords as any[]).find((r: any) => r.postName === '政委' && r.staffName === oldInstructor && !r.endDate);
-            
-            if (oldInstructorRecord) {
-              await api.staffHistory.update(oldInstructorRecord.id, { endDate: changeDate });
-            } else {
-              await api.staffHistory.create({
-                shipId: row.id,
-                postName: '政委',
-                staffName: oldInstructor,
-                startDate: oldOnBoardDate || changeDate,
-                endDate: changeDate,
-              });
-            }
-          } catch (e) {
-            console.error('记录旧政委下船失败', e);
-            instructorErrors.push(`${row.cnShipName}: 旧政委下船记录失败`);
-          }
-        }
-        
-        // 创建新政委的任职记录
-        if (newInstructor) {
-          try {
-            const startDate = newOnBoardDate || new Date().toISOString().split('T')[0];
-            await api.staffHistory.create({
-              shipId: row.id,
-              postName: '政委',
-              staffName: newInstructor,
-              startDate,
-            });
-          } catch (e) {
-            console.error('创建新政委任职记录失败', e);
-            instructorErrors.push(`${row.cnShipName}: 新政委任职记录创建失败`);
-          }
-        }
-      }
-      
       await api.ships.update(row.id, updateData);
       
       // 更新原始数据
@@ -1029,13 +995,6 @@ const saveAllRows = async () => {
   }
   if (failCount > 0) {
     ElMessage.error(`${failCount} 条记录保存失败`);
-  }
-  // SQ5: 提示政委历史操作失败详情
-  if (instructorErrors.length > 0) {
-    ElMessage.warning({
-      message: `政委历史操作失败 (${instructorErrors.length} 条): ${instructorErrors.join('; ')}`,
-      duration: 6000,
-    });
   }
   
   hasChanges.value = false;
@@ -1618,6 +1577,29 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+.instructor-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-weight: 500;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+.instructor-link:hover {
+  background-color: #ecf5ff;
+}
+.instructor-link .instructor-name {
+  line-height: 1;
+}
+.instructor-link .link-icon {
+  font-size: 14px;
+  opacity: 0.6;
+}
+.instructor-link:hover .link-icon {
+  opacity: 1;
 }
 
 /* 鼠标悬停样式 */

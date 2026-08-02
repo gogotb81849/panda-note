@@ -11,7 +11,7 @@ export const ALL_MENU_ITEMS = [
   { menuKey: '/tasks', label: '工作任务', icon: 'log' },
   { menuKey: '/gantt', label: '甘特图', icon: 'gantt' },
   { menuKey: '/crew-list', label: '船员管理', icon: 'crew' },
-  { menuKey: '/staff-assignments', label: '人员派任', icon: 'user' },
+  { menuKey: '/admin/staff-assignments', label: '人员派任', icon: 'user' },
   { menuKey: '/sop-flow', label: 'SOP流程', icon: 'flow' },
   { menuKey: '/public-case', label: '案例库', icon: 'case' },
   { menuKey: '/experiences', label: '经验分享', icon: 'ai' },
@@ -31,49 +31,49 @@ export const ALL_MENU_ITEMS = [
 const DEFAULT_ROLE_MENUS: Record<string, string[]> = {
   admin: [
     '/', '/publish-v2', '/schedule', '/tasks', '/gantt',
-    '/crew-list', '/staff-assignments', '/sop-flow', '/public-case',
+    '/crew-list', '/admin/staff-assignments', '/sop-flow', '/public-case',
     '/experiences', '/files', '/ai-report', '/toolbox', '/admin',
   ],
   shore_crew_supervisor: [
     '/', '/publish-v2', '/dashboard', '/schedule',
-    '/tasks', '/gantt', '/crew-list', '/staff-assignments',
+    '/tasks', '/gantt', '/crew-list', '/admin/staff-assignments',
     '/port-check', '/staff-history', '/sop-flow', '/public-case',
     '/experiences', '/files', '/toolbox', '/admin',
   ],
   ship_political_instructor: [
     '/', '/crew-list', '/schedule', '/tasks',
-    '/gantt', '/staff-assignments',
+    '/gantt', '/admin/staff-assignments',
     '/party-activities', '/thought-reports', '/integrity-records',
     '/officer-profiles', '/staff-history',
     '/experiences', '/files', '/ai-report', '/toolbox',
   ],
   shore_marine_supervisor: [
     '/', '/schedule', '/tasks', '/gantt',
-    '/crew-list', '/staff-assignments', '/port-check',
+    '/crew-list', '/admin/staff-assignments', '/port-check',
     '/staff-history', '/sop-flow', '/public-case',
     '/experiences', '/files', '/toolbox',
   ],
   shore_engineer_supervisor: [
     '/', '/schedule', '/tasks', '/gantt',
-    '/crew-list', '/staff-assignments', '/port-check',
+    '/crew-list', '/admin/staff-assignments', '/port-check',
     '/staff-history', '/sop-flow', '/public-case',
     '/experiences', '/files', '/toolbox',
   ],
   shore_electric_supervisor: [
     '/', '/schedule', '/tasks', '/gantt',
-    '/crew-list', '/staff-assignments', '/port-check',
+    '/crew-list', '/admin/staff-assignments', '/port-check',
     '/staff-history', '/sop-flow', '/public-case',
     '/experiences', '/files', '/toolbox',
   ],
   general_manager: [
     '/', '/schedule', '/tasks', '/gantt',
-    '/crew-list', '/staff-assignments', '/port-check',
+    '/crew-list', '/admin/staff-assignments', '/port-check',
     '/staff-history', '/sop-flow', '/public-case',
     '/experiences', '/files', '/toolbox',
   ],
   company_admin: [
     '/', '/schedule', '/tasks', '/gantt',
-    '/crew-list', '/staff-assignments', '/port-check',
+    '/crew-list', '/admin/staff-assignments', '/port-check',
     '/staff-history', '/sop-flow', '/public-case',
     '/experiences', '/files', '/toolbox',
   ],
@@ -88,6 +88,7 @@ export class RoleMenuConfigService {
   /**
    * 获取指定角色的菜单配置（从数据库读取，返回排序后的菜单列表）
    * 如果数据库中缺少新添加的菜单项，自动补充
+   * 兼容旧路径：/staff-assignments 已迁移到 /admin/staff-assignments
    */
   async getRoleMenus(teamCode: TeamCode, role: UserRole): Promise<{ menuKey: string; label: string; icon: string | null; enabled: boolean; sortOrder: number }[]> {
     const configs = await this.prisma.roleMenuConfig.findMany({
@@ -100,15 +101,28 @@ export class RoleMenuConfigService {
       return this.getDefaultMenus(role);
     }
 
+    // 归一化：将已迁移的旧路径统一映射到新路径
+    // 注意：如果数据库同时存在新旧两个 key，则使用新 key 的设置；旧 key 的值先保留用于回滚
+    const normalize = (k: string) => (k === '/staff-assignments' ? '/admin/staff-assignments' : k);
+    const byKey = new Map<string, typeof configs[0]>();
+    for (const cfg of configs) {
+      const nk = normalize(cfg.menuKey);
+      // 优先保留新 key（/admin/staff-assignments）
+      const existing = byKey.get(nk);
+      if (!existing || (existing.menuKey === '/staff-assignments' && cfg.menuKey === nk)) {
+        byKey.set(nk, cfg);
+      }
+    }
+
     // 检查是否有缺失的菜单项，如果有则自动补充
-    const existingKeys = new Set(configs.map(c => c.menuKey));
+    const existingKeys = new Set(byKey.keys());
     const missingItems = ALL_MENU_ITEMS.filter(item => !existingKeys.has(item.menuKey));
-    
+
     if (missingItems.length > 0) {
       this.logger.log(`检测到 ${missingItems.length} 个新菜单项，正在补充到 ${teamCode}/${role} 的菜单配置中`);
       const defaultMenus = this.getDefaultMenus(role);
       const maxSortOrder = Math.max(...configs.map(c => c.sortOrder), 0);
-      
+
       for (let i = 0; i < missingItems.length; i++) {
         const item = missingItems[i];
         const defaultItem = defaultMenus.find(d => d.menuKey === item.menuKey);
@@ -124,29 +138,50 @@ export class RoleMenuConfigService {
           },
         });
       }
-      
+
       // 重新读取
       const updatedConfigs = await this.prisma.roleMenuConfig.findMany({
         where: { teamCode, role },
         orderBy: { sortOrder: 'asc' },
       });
-      
-      return updatedConfigs.map(c => ({
-        menuKey: c.menuKey,
-        label: c.label,
+
+      // 同样做归一化处理
+      const upByKey = new Map<string, typeof updatedConfigs[0]>();
+      for (const cfg of updatedConfigs) {
+        const nk = normalize(cfg.menuKey);
+        const existing = upByKey.get(nk);
+        if (!existing || (existing.menuKey === '/staff-assignments' && cfg.menuKey === nk)) {
+          upByKey.set(nk, cfg);
+        }
+      }
+      const out: any[] = [];
+      const entries = Array.from(upByKey.entries());
+      for (let i = 0; i < entries.length; i++) {
+        const [k, c] = entries[i];
+        out.push({
+          menuKey: k,
+          label: c.label || (ALL_MENU_ITEMS.find(m => m.menuKey === k)?.label) || k,
+          icon: c.icon,
+          enabled: c.enabled,
+          sortOrder: c.sortOrder,
+        });
+      }
+      return out.sort((a, b) => a.sortOrder - b.sortOrder);
+    }
+
+    const out: any[] = [];
+    const byEntries = Array.from(byKey.entries());
+    for (let i = 0; i < byEntries.length; i++) {
+      const [k, c] = byEntries[i];
+      out.push({
+        menuKey: k,
+        label: c.label || (ALL_MENU_ITEMS.find(m => m.menuKey === k)?.label) || k,
         icon: c.icon,
         enabled: c.enabled,
         sortOrder: c.sortOrder,
-      }));
+      });
     }
-
-    return configs.map(c => ({
-      menuKey: c.menuKey,
-      label: c.label,
-      icon: c.icon,
-      enabled: c.enabled,
-      sortOrder: c.sortOrder,
-    }));
+    return out.sort((a, b) => a.sortOrder - b.sortOrder);
   }
 
   /**
@@ -155,9 +190,18 @@ export class RoleMenuConfigService {
    */
   async getMyMenus(teamCode: TeamCode, role: UserRole): Promise<{ path: string; label: string; icon: string }[]> {
     const configs = await this.getRoleMenus(teamCode, role);
-    return configs
-      .filter(c => c.enabled && c.menuKey !== '/magazine' && c.menuKey !== '/diary')
-      .map(c => ({ path: c.menuKey, label: c.label, icon: c.icon || '' }));
+    // 兼容旧路径映射：/staff-assignments → /admin/staff-assignments（已迁移路径）
+    const SEEN_PATHS = new Set<string>();
+    const out: { path: string; label: string; icon: string }[] = [];
+    for (const c of configs) {
+      if (!c.enabled || c.menuKey === '/magazine' || c.menuKey === '/diary') continue;
+      let path = c.menuKey;
+      if (path === '/staff-assignments') path = '/admin/staff-assignments';
+      if (SEEN_PATHS.has(path)) continue;
+      SEEN_PATHS.add(path);
+      out.push({ path, label: c.label, icon: c.icon || '' });
+    }
+    return out;
   }
 
   /**
