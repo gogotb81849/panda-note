@@ -165,6 +165,7 @@ function generateOptions(correctAnswer: string, pool: string[]): string[] {
 
 // ====== Composable ======
 export function useShipQuiz() {
+  const api = useApi()  // 在 setup 顶层调用，保持 Nuxt context 有效
   const ships = ref<Ship[]>([])
   const cards = ref<ShipKnowledgeCard[]>([])
   const stats = ref<TrainingStats>({
@@ -222,8 +223,7 @@ export function useShipQuiz() {
   // 初始化：加载船舶数据 + 卡片状态
   async function init() {
     try {
-      // 加载船舶列表（useApi 在顶层调用以保持 Nuxt context）
-      const api = useApi()
+      // 加载船舶列表（useApi 已在 setup 顶层调用）
       ships.value = await api.ships.getAll() as Ship[]
 
       // 加载卡片状态
@@ -483,6 +483,7 @@ export function useShipQuiz() {
     answered,
     lastResult,
     isFinished,
+    requeueBuffer,
     // 方法
     init,
     startSession,
