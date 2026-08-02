@@ -822,7 +822,7 @@ const warningStats = computed<WarningStats>(() => {
 const vacantShipNames = computed(() =>
   ships.value
     .filter(s => warningStats.value.vacantShipIds.includes(s.id))
-    .map(s => s.teamDisplayName || s.cnShipName)
+    .map(s => s.cnShipName)
 )
 
 // 点击预警卡片：一键筛选到对应船舶/人员

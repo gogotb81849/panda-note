@@ -25,7 +25,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import VChart from 'vue-echarts'
 import { use, graphic } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
@@ -47,7 +47,7 @@ use([
   MarkLineComponent,
 ])
 
-type ShipItem = { id: number; cnShipName: string; teamDisplayName?: string }
+type ShipItem = { id: number; cnShipName: string; teamDisplayName?: string; politicalOfficerName?: string }
 type AssignmentItem = {
   id: number
   userId: number
@@ -59,7 +59,7 @@ type AssignmentItem = {
   assignmentNo?: string
   remark?: string
   user?: { id: number; realName: string }
-  ship?: { id: number; cnShipName: string }
+  ship?: { id: number; cnShipName: string; politicalOfficerName?: string }
 }
 
 interface Props {
@@ -180,8 +180,10 @@ watch(chartHeight, () => {
 })
 
 // Y 轴类目：倒序排列，使第一艘船显示在最上面（ECharts 默认第一个类目在底部）
+// ⚠️ 必须用 cnShipName（具体船名），不能用 teamDisplayName（系列名），
+// 否则同系列姊妹船会显示为同名（如"白鹿座系列"重复多次）
 const yCategories = computed(() =>
-  props.ships.slice().reverse().map((s) => s.teamDisplayName || s.cnShipName),
+  props.ships.slice().reverse().map((s) => s.cnShipName),
 )
 
 // shipId -> Y 轴类目索引
@@ -258,7 +260,8 @@ const seriesData = computed(() => {
     const start = new Date(a.startDate).getTime()
     const end = a.endDate ? new Date(a.endDate).getTime() : Date.now()
     const color = getBarColor(a)
-    const officerName = a.user?.realName || '未指派'
+    // 政委名双数据源兜底：派任记录 user.realName → 船舶资料 politicalOfficerName → 未指派
+    const officerName = a.user?.realName || a.ship?.politicalOfficerName || '未指派'
     return [shipIndex, start, end, color, officerName, a.id]
   })
 })
@@ -330,7 +333,7 @@ const chartOption = computed(() => {
           a.ship?.cnShipName ||
           props.ships.find((s) => s.id === a.shipId)?.cnShipName ||
           '-'
-        const officer = a.user?.realName || '未指派'
+        const officer = a.user?.realName || a.ship?.politicalOfficerName || '未指派'
         const days = getDaysOnBoard(a.startDate, a.endDate)
         const startStr = formatDate(a.startDate)
         const endStr = a.endDate ? formatDate(a.endDate) : '至今'
@@ -411,6 +414,10 @@ const chartOption = computed(() => {
       {
         type: 'inside',
         xAxisIndex: 0,
+        // 移动端友好：允许单指拖动 + 双指缩放
+        moveOnMouseMove: true,
+        zoomOnMouseWheel: true,
+        // 移动端默认就支持 touch 拖动；pinch 缩放由下面的自定义 handler 增强
       },
     ],
     series: [
@@ -457,6 +464,106 @@ function handleChartClick(params: any) {
     event: nativeEvent,
   })
 }
+
+// ====== 移动端双指缩放（pinch-to-zoom）======
+// ECharts inside dataZoom 在移动端默认只支持单指横向拖动，
+// 双指缩放需要手动监听 touchstart/touchmove 并 dispatchAction。
+
+let pinchInitialDistance = 0
+let pinchInitialStartPct = 0
+let pinchInitialEndPct = 0
+
+function getTouchDistance(t1: Touch, t2: Touch): number {
+  const dx = t1.clientX - t2.clientX
+  const dy = t1.clientY - t2.clientY
+  return Math.sqrt(dx * dx + dy * dy)
+}
+
+function onTouchStart(e: TouchEvent) {
+  if (e.touches.length !== 2) return
+  e.preventDefault()
+  pinchInitialDistance = getTouchDistance(e.touches[0], e.touches[1])
+  // 读取当前 dataZoom 范围
+  const chart = chartRef.value
+  if (chart) {
+    const opt = chart.getOption() as any
+    const dz = opt?.dataZoom?.[1] // inside dataZoom
+    if (dz && typeof dz.start === 'number' && typeof dz.end === 'number') {
+      pinchInitialStartPct = dz.start
+      pinchInitialEndPct = dz.end
+    } else {
+      // 兜底：默认显示范围
+      pinchInitialStartPct = 0
+      pinchInitialEndPct = 100
+    }
+  }
+}
+
+function onTouchMove(e: TouchEvent) {
+  if (e.touches.length !== 2) return
+  e.preventDefault()
+  if (pinchInitialDistance <= 0) return
+  const currentDistance = getTouchDistance(e.touches[0], e.touches[1])
+  // 缩放比例：两指距离变大 → 缩小范围（放大）；距离变小 → 扩大范围（缩小）
+  const scale = pinchInitialDistance / currentDistance
+  const range = pinchInitialEndPct - pinchInitialStartPct
+  let newRange = range * scale
+  // 限制范围：最小 2%（最大放大），最大 100%（全览）
+  newRange = Math.max(2, Math.min(100, newRange))
+  const center = (pinchInitialStartPct + pinchInitialEndPct) / 2
+  let newStart = center - newRange / 2
+  let newEnd = center + newRange / 2
+  if (newStart < 0) {
+    newStart = 0
+    newEnd = newRange
+  }
+  if (newEnd > 100) {
+    newEnd = 100
+    newStart = 100 - newRange
+  }
+  const chart = chartRef.value
+  if (chart) {
+    chart.dispatchAction({
+      type: 'dataZoom',
+      dataZoomIndex: 1,
+      start: newStart,
+      end: newEnd,
+    })
+  }
+}
+
+function onTouchEnd(e: TouchEvent) {
+  if (e.touches.length < 2) {
+    pinchInitialDistance = 0
+  }
+}
+
+let chartDom: HTMLElement | null = null
+
+onMounted(() => {
+  // 等待 chart DOM 渲染完成后绑定 touch 事件
+  nextTick(() => {
+    const chart = chartRef.value as any
+    if (chart) {
+      // vue-echarts 的 ref 是组件实例，通过 $el 或 getDom 获取 DOM
+      chartDom = chart.getDom ? chart.getDom() : (chart.$el as HTMLElement)
+      if (chartDom) {
+        chartDom.addEventListener('touchstart', onTouchStart, { passive: false })
+        chartDom.addEventListener('touchmove', onTouchMove, { passive: false })
+        chartDom.addEventListener('touchend', onTouchEnd, { passive: false })
+      }
+    }
+  })
+})
+
+onBeforeUnmount(() => {
+  if (chartDom) {
+    chartDom.removeEventListener('touchstart', onTouchStart)
+    chartDom.removeEventListener('touchmove', onTouchMove)
+    chartDom.removeEventListener('touchend', onTouchEnd)
+    chartDom = null
+  }
+})
 
 defineExpose({ chartRef })
 </script>
