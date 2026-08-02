@@ -3,7 +3,8 @@ import { UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../prisma/prisma.service';
-import * as bcrypt from 'bcrypt';
+import { RedisService } from '../redis/redis.service';
+import * as bcrypt from 'bcryptjs';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -14,11 +15,20 @@ describe('AuthService', () => {
     user: {
       findUnique: jest.fn(),
       upsert: jest.fn(),
+      update: jest.fn(),
+      findMany: jest.fn(),
+      create: jest.fn(),
     },
   };
 
   const mockJwtService = {
     sign: jest.fn().mockReturnValue('mock-jwt-token'),
+  };
+
+  const mockRedisService = {
+    get: jest.fn().mockResolvedValue(null),
+    set: jest.fn().mockResolvedValue(undefined),
+    del: jest.fn().mockResolvedValue(undefined),
   };
 
   beforeEach(async () => {
@@ -27,6 +37,7 @@ describe('AuthService', () => {
         AuthService,
         { provide: PrismaService, useValue: mockPrismaService },
         { provide: JwtService, useValue: mockJwtService },
+        { provide: RedisService, useValue: mockRedisService },
       ],
     }).compile();
 
@@ -88,17 +99,15 @@ describe('AuthService', () => {
   });
 
   describe('createInitialUsers', () => {
-    it('应创建所有初始用户', async () => {
-      const mockUser = { id: 1, username: 'test' };
-      mockPrismaService.user.upsert.mockResolvedValue(mockUser);
+    it('应创建或更新所有初始用户', async () => {
+      // createInitialUsers 使用 findUnique + create/update 而非 upsert
+      mockPrismaService.user.findUnique.mockResolvedValue(null);
+      mockPrismaService.user.create.mockResolvedValue({ id: 1, username: 'test' });
 
       const result = await service.createInitialUsers();
 
-      expect(mockPrismaService.user.upsert).toHaveBeenCalledTimes(4);
-      expect(result).toHaveProperty('gogotb');
-      expect(result).toHaveProperty('supervisor');
-      expect(result).toHaveProperty('shoreCrewSupervisor');
-      expect(result).toHaveProperty('shipPoliticalInstructor');
+      expect(mockPrismaService.user.findUnique).toHaveBeenCalledTimes(4);
+      expect(result).toHaveProperty('message');
     });
   });
 });

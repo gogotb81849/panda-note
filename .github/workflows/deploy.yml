@@ -53,6 +53,13 @@ jobs:
           fi
           echo "Backend build OK"
 
+      - name: Run backend tests
+        working-directory: backend
+        run: |
+          npx prisma@5 generate --schema=prisma/schema.prisma
+          node node_modules/.bin/jest --ci --reporters=default 2>&1
+          echo "Backend tests passed"
+
       - name: Install frontend deps
         working-directory: frontend
         run: npm install --no-audit --no-fund --legacy-peer-deps

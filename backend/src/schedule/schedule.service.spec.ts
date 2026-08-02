@@ -21,6 +21,9 @@ describe('ScheduleService', () => {
       findFirst: jest.fn(),
       create: jest.fn(),
     },
+    diaryScheduleRelation: {
+      deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+    },
   };
 
   const mockOperationLogService = {
