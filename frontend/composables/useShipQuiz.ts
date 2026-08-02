@@ -192,6 +192,9 @@ export function useShipQuiz() {
   // 待重排的卡（答错后 10 分钟再出现）
   const requeueBuffer = ref<{ card: ShipKnowledgeCard; requeueAt: number }[]>([])
 
+  // 用户选择的题型范围（默认全选）
+  const selectedQuestionTypes = ref<QuestionType[]>([...QUESTION_TYPES])
+
   // 值池（从船舶数据提取，用于生成干扰项）
   const valuePools = computed<Record<QuestionType, string[]>>(() => {
     const pools: Record<QuestionType, string[]> = {
@@ -211,14 +214,14 @@ export function useShipQuiz() {
     return pools
   })
 
-  // 到期卡片数
+  // 到期卡片数（仅统计当前选中题型）
   const dueCount = computed(() => {
     const now = Date.now()
-    return cards.value.filter(c => c.dueDate <= now).length
+    return cards.value.filter(c => c.dueDate <= now && selectedQuestionTypes.value.includes(c.questionType)).length
   })
 
-  // 薄弱卡数（答错≥3次）
-  const weakCount = computed(() => cards.value.filter(c => c.lapses >= 3).length)
+  // 薄弱卡数（答错≥3次，仅统计当前选中题型）
+  const weakCount = computed(() => cards.value.filter(c => c.lapses >= 3 && selectedQuestionTypes.value.includes(c.questionType)).length)
 
   // 初始化：加载船舶数据 + 卡片状态
   async function init() {
@@ -280,23 +283,27 @@ export function useShipQuiz() {
   // 开始一轮训练
   function startSession(questionCount = 20) {
     const now = Date.now()
+    const activeTypes = selectedQuestionTypes.value
 
-    // 1. 优先到期卡片
+    // 1. 优先到期卡片（仅限用户选择的题型）
     const dueCards = cards.value
-      .filter(c => c.dueDate <= now)
+      .filter(c => c.dueDate <= now && activeTypes.includes(c.questionType))
       .sort(() => Math.random() - 0.5)
 
-    // 2. 补充新卡（从未学过的）
+    // 2. 补充新卡（从未学过的，仅限用户选择的题型）
     const newCards = cards.value
-      .filter(c => c.lastReview === 0 && c.dueDate > now)
+      .filter(c => c.lastReview === 0 && c.dueDate > now && activeTypes.includes(c.questionType))
       .sort(() => Math.random() - 0.5)
 
     // 3. 合并，取指定数量
     const selected = [...dueCards, ...newCards].slice(0, questionCount)
 
     if (selected.length === 0) {
-      // 没有到期卡也没有新卡，随机取一些
-      const all = [...cards.value].sort(() => Math.random() - 0.5).slice(0, questionCount)
+      // 没有到期卡也没有新卡，随机取一些（仅限用户选择的题型）
+      const all = cards.value
+        .filter(c => activeTypes.includes(c.questionType))
+        .sort(() => Math.random() - 0.5)
+        .slice(0, questionCount)
       selected.push(...all)
     }
 
@@ -484,6 +491,7 @@ export function useShipQuiz() {
     lastResult,
     isFinished,
     requeueBuffer,
+    selectedQuestionTypes,
     // 方法
     init,
     startSession,

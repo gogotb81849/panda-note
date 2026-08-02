@@ -27,17 +27,30 @@
           </div>
         </div>
 
-        <!-- 题型说明 -->
-        <div class="topic-list">
-          <div class="topic-item">海务主管</div>
-          <div class="topic-item">机务主管</div>
-          <div class="topic-item">派员公司</div>
-          <div class="topic-item">船旗国</div>
-          <div class="topic-item">现任政委</div>
+        <!-- 题型选择 -->
+        <div class="topic-select">
+          <div class="topic-select-title">选择练习题型</div>
+          <div class="topic-checkbox-group">
+            <label
+              v-for="qt in questionTypeOptions"
+              :key="qt.value"
+              class="topic-checkbox"
+              :class="{ active: selectedQuestionTypes.includes(qt.value) }"
+            >
+              <input
+                type="checkbox"
+                :value="qt.value"
+                :checked="selectedQuestionTypes.includes(qt.value)"
+                @change="toggleQuestionType(qt.value)"
+                class="topic-checkbox-input"
+              />
+              <span class="topic-checkbox-label">{{ qt.label }}</span>
+            </label>
+          </div>
         </div>
 
-        <button class="start-btn" @click="onStart">
-          {{ dueCount > 0 ? `开始复习（${dueCount}张到期）` : '开始训练' }}
+        <button class="start-btn" :disabled="selectedQuestionTypes.length === 0" @click="onStart">
+          {{ selectedQuestionTypes.length === 0 ? '请至少选择一个题型' : (dueCount > 0 ? `开始复习（${dueCount}张到期）` : '开始训练') }}
         </button>
 
         <div class="exit-link">
@@ -182,6 +195,7 @@ const {
   lastResult,
   isFinished,
   requeueBuffer,
+  selectedQuestionTypes,
   init,
   startSession,
   answer,
@@ -191,6 +205,25 @@ const {
 
 const showSummary = ref(false)
 const lastPointsEarned = ref(0)
+
+// 题型选项配置
+const questionTypeOptions = [
+  { value: 'marine' as const, label: '海务主管' },
+  { value: 'engineer' as const, label: '机务主管' },
+  { value: 'flag' as const, label: '船旗国' },
+  { value: 'company' as const, label: '派员公司' },
+  { value: 'political' as const, label: '现任政委' },
+]
+
+// 切换题型选择
+function toggleQuestionType(value: string) {
+  const idx = selectedQuestionTypes.value.indexOf(value as any)
+  if (idx >= 0) {
+    selectedQuestionTypes.value.splice(idx, 1)
+  } else {
+    selectedQuestionTypes.value.push(value as any)
+  }
+}
 
 // 监听积分变化
 watch(sessionPoints, (newVal, oldVal) => {
@@ -321,20 +354,57 @@ function getOptionClass(opt: string): string {
   margin-top: 2px;
 }
 
-.topic-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  justify-content: center;
-  margin-bottom: 28px;
+.topic-select {
+  margin-bottom: 24px;
 }
 
-.topic-item {
-  font-size: 12px;
-  padding: 4px 12px;
-  background: rgba(56, 189, 248, 0.1);
-  border: 1px solid rgba(56, 189, 248, 0.3);
+.topic-select-title {
+  font-size: 13px;
+  color: #94a3b8;
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+.topic-checkbox-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.topic-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+}
+
+.topic-checkbox:hover {
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+.topic-checkbox.active {
+  background: rgba(56, 189, 248, 0.15);
+  border-color: rgba(56, 189, 248, 0.5);
+}
+
+.topic-checkbox-input {
+  display: none;
+}
+
+.topic-checkbox-label {
+  font-size: 13px;
+  color: #94a3b8;
+  transition: color 0.2s;
+}
+
+.topic-checkbox.active .topic-checkbox-label {
   color: #7dd3fc;
 }
 
@@ -354,6 +424,13 @@ function getOptionClass(opt: string): string {
 .start-btn:hover {
   transform: translateY(-2px);
   box-shadow: 0 8px 24px rgba(56, 189, 248, 0.3);
+}
+
+.start-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 .exit-link {
