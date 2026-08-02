@@ -91,8 +91,8 @@ export class StaffAssignmentService {
         where: { id: createDto.shipId },
         data: {
           politicalInstructor: user.realName,
-          politicalInstructorId: user.id,
-          politicalInstructorName: user.realName,
+          politicalOfficerId: user.id,
+          politicalOfficerName: user.realName,
         },
       });
 
@@ -169,12 +169,12 @@ export class StaffAssignmentService {
       // 如果这条派任被设置为已结束，且 Ship 表当前的政委正好是这个人，则清空 Ship 表的政委字段
       if (!willBeActive && existing.shipId) {
         const ship = await tx.ship.findFirst({ where: { id: existing.shipId } });
-        if (ship && ship.politicalInstructorId === existing.userId) {
+        if (ship && ship.politicalOfficerId === existing.userId) {
           await tx.ship.update({
             where: { id: existing.shipId },
             data: {
-              politicalInstructorId: null,
-              politicalInstructorName: null,
+              politicalOfficerId: null,
+              politicalOfficerName: null,
               politicalInstructor: null,
             },
           });
@@ -371,8 +371,8 @@ export class StaffAssignmentService {
         where: { id: existing.shipId },
         data: {
           politicalInstructor: null,
-          politicalInstructorId: null,
-          politicalInstructorName: null,
+          politicalOfficerId: null,
+          politicalOfficerName: null,
         },
       });
 
@@ -452,5 +452,109 @@ export class StaffAssignmentService {
     });
 
     return result;
+  }
+
+  /**
+   * 从船舶数据初始化派任记录（一次性数据导入）
+   * 将船舶表中已配置的政委（politicalOfficerId）生成初始派任记录
+   * 上船日期默认1月1日，暂定下船日期5月1日（次年）
+   */
+  async initializeFromShips(teamCode: string, userId: number = 0) {
+    // 查询所有已配置政委的船舶
+    const ships = await this.prisma.ship.findMany({
+      where: {
+        teamCode: teamCode as any,
+        politicalOfficerId: { not: null },
+      },
+      select: {
+        id: true,
+        cnShipName: true,
+        politicalOfficerId: true,
+        politicalOfficerName: true,
+        sendCompany: true,
+      },
+    });
+
+    const currentYear = new Date().getFullYear();
+    const startDate = new Date(`${currentYear}-01-01T00:00:00.000Z`);
+    // 暂定下船日期：次年5月1日（未来日期，保持派任为"在船"状态）
+    const endDate = new Date(`${currentYear + 1}-05-01T00:00:00.000Z`);
+
+    let createdCount = 0;
+    let skippedCount = 0;
+    const createdRecords: any[] = [];
+    const skippedShips: string[] = [];
+
+    for (const ship of ships) {
+      if (!ship.politicalOfficerId) continue;
+
+      // 检查该船舶是否已有派任记录（避免重复初始化）
+      const existing = await this.prisma.staffAssignment.findFirst({
+        where: {
+          shipId: ship.id,
+          userId: ship.politicalOfficerId,
+          teamCode: teamCode as any,
+        },
+      });
+
+      if (existing) {
+        skippedCount++;
+        skippedShips.push(ship.cnShipName);
+        continue;
+      }
+
+      // 创建派任记录
+      const record = await this.prisma.staffAssignment.create({
+        data: {
+          userId: ship.politicalOfficerId,
+          shipId: ship.id,
+          teamCode: teamCode as any,
+          startDate,
+          endDate,
+          status: 'active',
+          sourceCompany: ship.sendCompany || null,
+          remark: `初始化导入：上船日期${currentYear}-01-01，暂定下船日期${currentYear + 1}-05-01`,
+        },
+        include: {
+          user: { select: { id: true, realName: true, username: true } },
+          ship: { select: { id: true, cnShipName: true } },
+        },
+      });
+
+      // 同步船舶表政委字段（确保一致）
+      await this.prisma.ship.update({
+        where: { id: ship.id },
+        data: {
+          politicalInstructor: ship.politicalOfficerName,
+          politicalOfficerId: ship.politicalOfficerId,
+          politicalOfficerName: ship.politicalOfficerName,
+        },
+      });
+
+      createdRecords.push({
+        shipName: ship.cnShipName,
+        instructorName: ship.politicalOfficerName,
+        startDate,
+        endDate,
+      });
+      createdCount++;
+    }
+
+    await this.operationLogService.create({
+      userId,
+      teamCode,
+      operationType: '新增',
+      operationContent: `初始化派任数据：新增${createdCount}条，跳过${skippedCount}条（已有记录）`,
+    });
+
+    return {
+      total: ships.length,
+      created: createdCount,
+      skipped: skippedCount,
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString(),
+      createdRecords,
+      skippedShips,
+    };
   }
 }
