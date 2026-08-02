@@ -1193,7 +1193,6 @@ export const useApi = () => {
       checkOut: (id: number, data: { endDate: string; reason?: string }) => apiFetch(`/staff-assignments/${id}/checkout`, { method: 'POST', body: data }),
       startLeave: (id: number, data: { startDate: string; endDate?: string; reason?: string }) => apiFetch(`/staff-assignments/${id}/leave`, { method: 'POST', body: data }),
       endLeave: (id: number) => apiFetch(`/staff-assignments/${id}/end-leave`, { method: 'POST' }),
-      initializeFromShips: () => apiFetch('/staff-assignments/initialize-from-ships', { method: 'POST' }),
     },
 
     accounts: {

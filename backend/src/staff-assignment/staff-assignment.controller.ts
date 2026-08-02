@@ -133,17 +133,4 @@ export class StaffAssignmentController {
   ) {
     return this.staffAssignmentService.endLeave(+id, req.user.id, req.user.teamCode);
   }
-
-  /**
-   * 从船舶数据初始化派任记录（一次性数据导入）
-   * 将船舶表已配置的政委生成初始派任记录：
-   * 上船日期默认1月1日，暂定下船日期次年5月1日
-   * 仅管理员/岸基主管可调用
-   */
-  @Post('initialize-from-ships')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.admin, UserRole.shore_crew_supervisor)
-  async initializeFromShips(@Request() req: any) {
-    return this.staffAssignmentService.initializeFromShips(req.user.teamCode, req.user.id);
-  }
 }

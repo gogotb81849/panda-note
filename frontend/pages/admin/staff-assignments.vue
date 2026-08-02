@@ -32,9 +32,6 @@
           </el-select>
         </div>
         <div class="toolbar-right">
-          <el-button v-if="activeTab !== 'history'" type="success" plain :loading="initializing" @click="handleInitializeFromShips">
-            初始化派任数据
-          </el-button>
           <el-button v-if="activeTab !== 'history'" type="warning" @click="showQuickReplaceDialog">
             更换政委
           </el-button>
@@ -640,30 +637,6 @@ const ships = ref<Ship[]>([]);
 const users = ref<User[]>([]);
 const selectedShipId = ref<number | null>(null);
 const filterStatus = ref<string>('');
-
-// ====== 初始化派任数据 ======
-const initializing = ref(false);
-const handleInitializeFromShips = async () => {
-  try {
-    await ElMessageBox.confirm(
-      '将根据船舶表已配置的政委，批量生成初始派任记录（上船日期1月1日，暂定下船日期次年5月1日）。已有派任记录的船舶会自动跳过。是否继续？',
-      '初始化派任数据',
-      { type: 'info', confirmButtonText: '开始初始化', cancelButtonText: '取消' }
-    );
-  } catch {
-    return;
-  }
-  initializing.value = true;
-  try {
-    const res: any = await api.staffAssignments.initializeFromShips();
-    ElMessage.success(`初始化完成：新增 ${res.created} 条，跳过 ${res.skipped} 条（已有记录）`);
-    await loadAll();
-  } catch (e: any) {
-    ElMessage.error(e?.message || '初始化失败');
-  } finally {
-    initializing.value = false;
-  }
-};
 
 // ====== 任职履历数据 ======
 const staffHistoryList = ref<StaffHistory[]>([]);

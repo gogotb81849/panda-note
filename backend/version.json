@@ -1,14 +1,10 @@
 {
-  "version": "1.1.0.0802c",
-  "previous_version": "1.1.0.0130",
-  "buildTime": "2026-08-02T06:35:00.000Z",
+  "version": "1.1.0.0802f",
+  "previous_version": "1.1.0.0802c",
+  "buildTime": "2026-08-02T07:10:00.000Z",
   "environment": "production",
   "nodeVersion": "auto",
   "changes": [
-    "【核心修复】系统管理子路由不渲染：admin.vue中NuxtPage用v-if包裹导致SSR水合子页不挂载，改为NuxtPage永远存在、卡片用div v-if控制、admin/index.vue空壳",
-    "【平板修复】MatePad等触摸端卡片NuxtLink+cursor:pointer span拦截触摸不跳转，改为div@click+navigateTo+touch-action+active反馈",
-    "【路由修正】人员派任默认菜单/staff-assignments(404)→/admin/staff-assignments，后端角色默认菜单+前端default.vue+数据库旧key兼容迁移",
-    "人员派任初始化：从Ship表politicalOfficerId字段批量生成派任记录，上船日期1月1日，下船日期5月1日，无效用户ID(7-21)过滤不创建",
-    "船舶页政委字段改为可点击跳转到派任页，URL带shipId参数，派任页自动筛选并定位"
+    "【数据流修正】移除人员派任页'初始化派任数据'按钮及后端initialize-from-ships接口：政委数据首次已从船舶资料硬复制到派任表作为初始值，后续派任表为唯一权威源，船舶表通过派任表变更自动同步。保留初始化入口会造成'船舶表→派任表→船舶表'死循环，违背权威源原则，故彻底移除前端按钮、API调用、Controller接口和Service方法"
   ]
 }
