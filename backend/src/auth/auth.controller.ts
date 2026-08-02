@@ -3,7 +3,7 @@ import { ThrottlerGuard, SkipThrottle, Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
-import { IsString, IsOptional, IsNumber } from 'class-validator';
+import { IsString, IsOptional, IsNumber, MinLength } from 'class-validator';
 
 export class RefreshTokenDto {
   @IsString()
@@ -13,9 +13,21 @@ export class RefreshTokenDto {
 export class SwitchRoleDto {
   @IsString()
   role: string;
-  
+
   @IsOptional()
   targetUserId?: number;
+}
+
+export class ChangePasswordDto {
+  @IsString()
+  username: string;
+
+  @IsString()
+  currentPassword: string;
+
+  @IsString()
+  @MinLength(6)
+  newPassword: string;
 }
 
 @Controller('auth')
@@ -27,6 +39,12 @@ export class AuthController {
   @Post('login')
   async login(@Body() loginDto: LoginDto) {
     return this.authService.login(loginDto);
+  }
+
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
+  @Post('change-password')
+  async changePassword(@Body() dto: ChangePasswordDto) {
+    return this.authService.changePassword(dto.username, dto.currentPassword, dto.newPassword);
   }
 
   @SkipThrottle()

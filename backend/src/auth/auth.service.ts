@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, ForbiddenException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ForbiddenException, BadRequestException, NotFoundException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
@@ -90,6 +90,37 @@ export class AuthService {
     }
 
     return this.generateTokens(user);
+  }
+
+  /**
+   * 公开修改密码（登录页使用，无需JWT）
+   */
+  async changePassword(username: string, currentPassword: string, newPassword: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { username },
+    });
+
+    if (!user) {
+      throw new NotFoundException('用户不存在');
+    }
+
+    const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
+    if (!isPasswordValid) {
+      throw new BadRequestException('当前密码不正确');
+    }
+
+    if (newPassword.length < 6) {
+      throw new BadRequestException('新密码至少6位');
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { password: hashedPassword, passwordChanged: true },
+    });
+
+    return { message: '密码已修改' };
   }
 
   async logout(userId: number) {

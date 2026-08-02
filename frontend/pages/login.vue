@@ -46,6 +46,8 @@
               placeholder="用户名"
               size="large"
               class="input-field"
+              @focus="showSavedAccounts = true"
+              @blur="() => setTimeout(() => showSavedAccounts = false, 200)"
             >
               <template #prefix>
                 <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -53,6 +55,27 @@
                 </svg>
               </template>
             </el-input>
+            <!-- 记住账号下拉 -->
+            <div v-if="showSavedAccounts && savedAccounts.length > 0" class="saved-accounts-dropdown">
+              <div
+                v-for="name in savedAccounts"
+                :key="name"
+                class="saved-account-item"
+                @mousedown.prevent="selectSavedAccount(name)"
+              >
+                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                </svg>
+                <span>{{ name }}</span>
+                <svg
+                  class="w-3 h-3 text-gray-300 ml-auto remove-account"
+                  fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                  @mousedown.prevent.stop="removeSavedAccount(name)"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+              </div>
+            </div>
           </el-form-item>
 
           <el-form-item prop="password">
@@ -85,6 +108,11 @@
           </el-form-item>
         </el-form>
 
+        <!-- 修改密码链接 -->
+        <div class="change-password-link">
+          <a @click="showChangePassword = true">修改密码</a>
+        </div>
+
         <!-- 离线登录入口 -->
         <div v-if="hasLocalData" class="offline-login-section">
           <el-divider>
@@ -110,6 +138,52 @@
         </div>
       </div>
     </div>
+
+    <!-- 修改密码对话框 -->
+    <el-dialog v-model="showChangePassword" title="修改密码" width="400px" :close-on-click-modal="false">
+      <el-form :model="changePasswordForm" :rules="changePasswordRules" ref="changePwdFormRef" label-width="0">
+        <el-form-item prop="username">
+          <el-input v-model="changePasswordForm.username" placeholder="用户名" size="large">
+            <template #prefix>
+              <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+              </svg>
+            </template>
+          </el-input>
+        </el-form-item>
+        <el-form-item prop="currentPassword">
+          <el-input v-model="changePasswordForm.currentPassword" type="password" placeholder="当前密码" size="large" show-password>
+            <template #prefix>
+              <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+              </svg>
+            </template>
+          </el-input>
+        </el-form-item>
+        <el-form-item prop="newPassword">
+          <el-input v-model="changePasswordForm.newPassword" type="password" placeholder="新密码（至少6位）" size="large" show-password>
+            <template #prefix>
+              <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+              </svg>
+            </template>
+          </el-input>
+        </el-form-item>
+        <el-form-item prop="confirmPassword">
+          <el-input v-model="changePasswordForm.confirmPassword" type="password" placeholder="确认新密码" size="large" show-password>
+            <template #prefix>
+              <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+            </template>
+          </el-input>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showChangePassword = false">取消</el-button>
+        <el-button type="primary" :loading="changingPassword" @click="handleChangePassword">确认修改</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -151,6 +225,7 @@ const fetchServerVersion = async () => {
 onMounted(() => {
   fetchServerVersion();
   checkLocalData();
+  loadSavedAccounts();
   
   // 监听网络状态
   isOffline.value = !navigator.onLine;
@@ -200,6 +275,105 @@ const rules: FormRules = {
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
 };
 
+// ===== 记住账号功能 =====
+const savedAccounts = ref<string[]>([]);
+const showSavedAccounts = ref(false);
+
+const loadSavedAccounts = () => {
+  try {
+    const saved = localStorage.getItem('saved_usernames');
+    if (saved) savedAccounts.value = JSON.parse(saved);
+  } catch {
+    savedAccounts.value = [];
+  }
+};
+
+const saveAccount = (username: string) => {
+  if (!username) return;
+  const list = savedAccounts.value.filter(n => n !== username);
+  list.unshift(username);
+  savedAccounts.value = list.slice(0, 15);
+  localStorage.setItem('saved_usernames', JSON.stringify(savedAccounts.value));
+};
+
+const removeSavedAccount = (name: string) => {
+  savedAccounts.value = savedAccounts.value.filter(n => n !== name);
+  localStorage.setItem('saved_usernames', JSON.stringify(savedAccounts.value));
+};
+
+const selectSavedAccount = (name: string) => {
+  form.username = name;
+  showSavedAccounts.value = false;
+};
+
+// ===== 修改密码功能 =====
+const showChangePassword = ref(false);
+const changingPassword = ref(false);
+const changePwdFormRef = ref<FormInstance>();
+
+const changePasswordForm = reactive({
+  username: '',
+  currentPassword: '',
+  newPassword: '',
+  confirmPassword: '',
+});
+
+const changePasswordRules: FormRules = {
+  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
+  currentPassword: [{ required: true, message: '请输入当前密码', trigger: 'blur' }],
+  newPassword: [
+    { required: true, message: '请输入新密码', trigger: 'blur' },
+    { min: 6, message: '密码至少6位', trigger: 'blur' },
+  ],
+  confirmPassword: [
+    { required: true, message: '请确认新密码', trigger: 'blur' },
+    {
+      validator: (_rule: any, value: string, callback: any) => {
+        if (value !== changePasswordForm.newPassword) {
+          callback(new Error('两次输入的密码不一致'));
+        } else {
+          callback();
+        }
+      },
+      trigger: 'blur',
+    },
+  ],
+};
+
+const handleChangePassword = async () => {
+  if (!changePwdFormRef.value) return;
+  try {
+    await changePwdFormRef.value.validate();
+  } catch {
+    return;
+  }
+
+  changingPassword.value = true;
+  try {
+    const apiBase = config.public.apiBase;
+    await $fetch(`${apiBase}/auth/change-password`, {
+      method: 'POST',
+      body: {
+        username: changePasswordForm.username,
+        currentPassword: changePasswordForm.currentPassword,
+        newPassword: changePasswordForm.newPassword,
+      },
+    });
+    ElMessage.success('密码修改成功，请使用新密码登录');
+    showChangePassword.value = false;
+    form.username = changePasswordForm.username;
+    form.password = '';
+    changePasswordForm.currentPassword = '';
+    changePasswordForm.newPassword = '';
+    changePasswordForm.confirmPassword = '';
+  } catch (error: any) {
+    const message = error?.data?.message || error?.message || '密码修改失败';
+    ElMessage.error(message);
+  } finally {
+    changingPassword.value = false;
+  }
+};
+
 const handleLogin = async () => {
   if (!formRef.value) {
     ElMessage.error('表单未初始化，请刷新页面重试');
@@ -217,6 +391,7 @@ const handleLogin = async () => {
   try {
     const result = await authStore.login(form);
     if (result && result.success) {
+      saveAccount(form.username);
       window.location.href = '/';
     } else {
       const status = result?.status;
@@ -379,7 +554,63 @@ const handleLogin = async () => {
 }
 
 .login-form {
-  margin-bottom: 24px;
+  margin-bottom: 16px;
+}
+
+/* 修改密码链接 */
+.change-password-link {
+  text-align: right;
+  margin-bottom: 16px;
+}
+
+.change-password-link a {
+  font-size: 13px;
+  color: #5B7FA6;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.change-password-link a:hover {
+  color: #4A6B8A;
+  text-decoration: underline;
+}
+
+/* 记住账号下拉 */
+.saved-accounts-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  z-index: 100;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.saved-account-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.saved-account-item:hover {
+  background: #f3f4f6;
+}
+
+.saved-account-item span {
+  font-size: 14px;
+  color: #374151;
+  flex: 1;
+}
+
+.saved-account-item .remove-account:hover {
+  color: #ef4444;
 }
 
 .dev-hint {

@@ -163,6 +163,7 @@ export class AccountService {
           lastLoginAt: true,
           loginFailCount: true,
           lockedUntil: true,
+          passwordChanged: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -331,6 +332,7 @@ export class AccountService {
         password: hashedPassword,
         loginFailCount: 0,
         lockedUntil: null,
+        passwordChanged: false,
       },
     });
 
@@ -545,7 +547,7 @@ export class AccountService {
 
     await this.prisma.user.update({
       where: { id: userId },
-      data: { password: hashedPassword },
+      data: { password: hashedPassword, passwordChanged: true },
     });
 
     return { message: '密码已修改' };

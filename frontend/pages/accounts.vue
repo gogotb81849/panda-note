@@ -92,6 +92,12 @@
           <el-tag v-else type="success" size="small">正常</el-tag>
         </template>
       </el-table-column>
+      <el-table-column label="密码" width="100">
+        <template #default="{ row }">
+          <el-tag v-if="row.passwordChanged" type="success" size="small">已修改</el-tag>
+          <el-tag v-else type="warning" size="small">初始密码</el-tag>
+        </template>
+      </el-table-column>
       <el-table-column label="操作" width="220" fixed="right">
         <template #default="{ row }">
           <el-button size="small" @click="showEditDialog(row)">编辑</el-button>
@@ -193,7 +199,7 @@
 
     <!-- 重置密码对话框 -->
     <el-dialog v-model="resetPasswordVisible" title="重置密码" width="400px">
-      <p class="dialog-desc">为用户 "{{ selectedAccount?.realName }}" 设置新密码</p>
+      <p class="dialog-desc">为用户 "{{ selectedAccount?.realName }}" 重置密码</p>
       <el-form :model="resetPasswordForm" ref="resetFormRef">
         <el-form-item>
           <el-input
@@ -203,6 +209,7 @@
             show-password
           />
         </el-form-item>
+        <el-button size="small" type="info" plain @click="resetPasswordForm.newPassword = '123456'">快速填充默认密码 123456</el-button>
       </el-form>
       <template #footer>
         <el-button @click="resetPasswordVisible = false">取消</el-button>

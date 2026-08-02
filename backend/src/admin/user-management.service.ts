@@ -38,6 +38,7 @@ export class UserManagementService {
           lastLoginAt: true,
           loginFailCount: true,
           lockedUntil: true,
+          passwordChanged: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -160,6 +161,7 @@ export class UserManagementService {
         password: hashedPassword,
         loginFailCount: 0,
         lockedUntil: null,
+        passwordChanged: false,
       },
     });
 
