@@ -1,5 +1,6 @@
 <template>
   <div class="admin-page">
+    <template v-if="isRootAdmin">
     <div class="page-header">
       <el-button text @click="navigateTo('/')">
         <el-icon><ArrowLeft /></el-icon>
@@ -196,6 +197,8 @@
         </div>
       </div>
     </div>
+    </template>
+    <NuxtPage v-else />
   </div>
 </template>
 
@@ -210,6 +213,9 @@ definePageMeta({
 
 const authStore = useAuthStore()
 const isAdmin = computed(() => authStore.user?.role === 'admin')
+const route = useRoute()
+// /admin 根路由显示卡片网格，/admin/* 子路由显示 NuxtPage
+const isRootAdmin = computed(() => route.path === '/admin')
 
 // 切换账号相关
 const usersByRole = ref<Record<string, Array<{ id: number; username: string; realName: string; teamCode: string }>>>({})
