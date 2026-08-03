@@ -207,15 +207,15 @@ const yIndexToShipId = computed(() => {
 
 const vacantIdSet = computed(() => new Set(props.vacantShipIds || []))
 
-// splitArea 行背景色：空缺行高亮为淡红
+// splitArea 行背景色：空缺行高亮为淡红，交替行更明显
 const splitAreaStyles = computed(() => {
   const arr: any[] = []
   for (let i = 0; i < props.ships.length; i++) {
     const shipId = yIndexToShipId.value[i]
     if (vacantIdSet.value.has(shipId)) {
-      arr.push({ color: 'rgba(245, 108, 108, 0.08)' })
+      arr.push({ color: 'rgba(245, 108, 108, 0.12)' })
     } else {
-      arr.push({ color: i % 2 === 0 ? 'rgba(0,0,0,0.00)' : 'rgba(0,0,0,0.015)' })
+      arr.push({ color: i % 2 === 0 ? 'rgba(0,0,0,0.02)' : 'rgba(0,0,0,0.05)' })
     }
   }
   return arr

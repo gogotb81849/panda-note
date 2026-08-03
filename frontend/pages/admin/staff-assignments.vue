@@ -18,31 +18,18 @@
               :value="ship.id"
             />
           </el-select>
-          <el-select
-            v-if="activeTab === 'list'"
-            v-model="filterStatus"
-            placeholder="状态筛选"
-            clearable
-            class="w-36"
-            @change="filterByShip"
-          >
-            <el-option label="在船" value="active" />
-            <el-option label="休假" value="leave" />
-            <el-option label="已结束" value="ended" />
-          </el-select>
         </div>
         <div class="toolbar-right">
-          <el-button v-if="activeTab !== 'history'" type="warning" @click="showQuickReplaceDialog">
+          <el-button type="warning" @click="showQuickReplaceDialog">
             下船交接
           </el-button>
-          <el-button v-if="activeTab === 'list'" type="primary" @click="showCreateDialog">上船登记</el-button>
-          <el-button v-if="activeTab === 'history'" type="primary" @click="showHistoryCreate = true">添加履历</el-button>
+          <el-button type="primary" @click="showCreateDialog">上船登记</el-button>
         </div>
       </div>
     </div>
 
     <!-- O4: 轮换预警看板 -->
-    <div v-if="activeTab !== 'history'" class="warning-dashboard">
+    <div class="warning-dashboard">
       <el-card
         class="warning-card card-danger"
         shadow="hover"
@@ -116,96 +103,30 @@
       </el-card>
     </div>
 
-    <!-- Tab 切换 -->
-    <el-tabs v-model="activeTab" class="staff-tabs" @tab-change="onTabChange">
-      <el-tab-pane label="甘特图视图" name="gantt">
-        <!-- 甘特图颜色图例 -->
-        <div class="gantt-legend">
-          <span class="legend-item">
-            <span class="legend-gradient" style="background:linear-gradient(to right,#67c23a 0%,#67c23a 45%,#e6a23c 65%,#f89a3c 80%,#f56c6c 92%,#ad0606 100%)"></span>
-            在船渐变（绿→红）
-          </span>
-          <span class="legend-item"><span class="legend-color" style="background:#67c23a"></span>≤6月 正常</span>
-          <span class="legend-item"><span class="legend-color" style="background:#f89a3c"></span>8月 预警</span>
-          <span class="legend-item"><span class="legend-color" style="background:#ad0606"></span>>11月 违规</span>
-          <span class="legend-item"><span class="legend-color" style="background:#b8b8b8"></span>已下船</span>
-          <span class="legend-item"><span class="legend-color" style="background:#e6a23c;background-image:repeating-linear-gradient(45deg,#fff 0,#fff 2px,transparent 2px,transparent 6px)"></span>休假</span>
-        </div>
-        <!-- 甘特图组件 -->
-        <StaffGanttChart
-          :ships="ships"
-          :assignments="filteredAssignments as any"
-          :vacant-ship-ids="warningStats.vacantShipIds"
-          :loading="loading"
-          @bar-click="onBarClick"
-          @empty-click="onEmptyClick"
-        />
-      </el-tab-pane>
-
-      <el-tab-pane label="派任列表视图" name="list">
-        <!-- 派任记录表格 -->
-        <div class="table-container">
-          <el-table :data="filteredAssignments" stripe class="w-full" v-loading="loading">
-            <el-table-column prop="user.realName" label="政委姓名" />
-            <el-table-column prop="ship.cnShipName" label="船舶" />
-            <el-table-column prop="assignmentNo" label="派任编号" width="120" />
-            <el-table-column prop="startDate" label="上船日期" width="120">
-              <template #default="{ row }">{{ formatDate(row.startDate) }}</template>
-            </el-table-column>
-            <el-table-column prop="endDate" label="下船日期" width="120">
-              <template #default="{ row }">{{ row.endDate ? formatDate(row.endDate) : '-' }}</template>
-            </el-table-column>
-            <el-table-column prop="sourceCompany" label="公司名称" width="100" />
-            <el-table-column prop="status" label="状态" width="100">
-              <template #default="{ row }">
-                <el-tag :type="statusType(row.status)" size="small">
-                  {{ statusLabel(row.status) }}
-                </el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column prop="remark" label="备注" show-overflow-tooltip />
-            <el-table-column label="操作" width="220" fixed="right">
-              <template #default="{ row }">
-                <el-button size="small" @click="handleCheckout(row)" v-if="row.status === 'active' && !row.endDate">
-                  下船
-                </el-button>
-                <el-button size="small" type="warning" @click="handleLeave(row)" v-if="row.status === 'active'">
-                  休假
-                </el-button>
-                <el-button size="small" type="success" @click="handleEndLeave(row)" v-if="row.status === 'leave'">
-                  销假
-                </el-button>
-                <el-button size="small" @click="handleEdit(row)">编辑</el-button>
-                <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-        </div>
-      </el-tab-pane>
-
-      <el-tab-pane label="任职履历视图" name="history">
-        <!-- 任职履历表格 -->
-        <div class="table-container">
-          <el-table :data="staffHistoryList" stripe class="w-full" v-loading="historyLoading">
-            <el-table-column prop="postName" label="岗位" />
-            <el-table-column prop="staffName" label="人员姓名" />
-            <el-table-column prop="startDate" label="开始日期">
-              <template #default="{ row }">{{ formatDate(row.startDate) }}</template>
-            </el-table-column>
-            <el-table-column prop="endDate" label="结束日期">
-              <template #default="{ row }">{{ row.endDate ? formatDate(row.endDate) : '-' }}</template>
-            </el-table-column>
-            <el-table-column prop="handoverNote" label="交接备注" show-overflow-tooltip />
-            <el-table-column label="操作" width="200">
-              <template #default="{ row }">
-                <el-button size="small" @click="handleHistoryEdit(row)">编辑</el-button>
-                <el-button size="small" type="danger" @click="handleHistoryDelete(row)">删除</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-        </div>
-      </el-tab-pane>
-    </el-tabs>
+    <!-- 甘特图视图 -->
+    <div class="gantt-section">
+      <!-- 甘特图颜色图例 -->
+      <div class="gantt-legend">
+        <span class="legend-item">
+          <span class="legend-gradient" style="background:linear-gradient(to right,#67c23a 0%,#67c23a 45%,#e6a23c 65%,#f89a3c 80%,#f56c6c 92%,#ad0606 100%)"></span>
+          在船渐变（绿→红）
+        </span>
+        <span class="legend-item"><span class="legend-color" style="background:#67c23a"></span>≤6月 正常</span>
+        <span class="legend-item"><span class="legend-color" style="background:#f89a3c"></span>8月 预警</span>
+        <span class="legend-item"><span class="legend-color" style="background:#ad0606"></span>>11月 违规</span>
+        <span class="legend-item"><span class="legend-color" style="background:#b8b8b8"></span>已下船</span>
+        <span class="legend-item"><span class="legend-color" style="background:#e6a23c;background-image:repeating-linear-gradient(45deg,#fff 0,#fff 2px,transparent 2px,transparent 6px)"></span>休假</span>
+      </div>
+      <!-- 甘特图组件 -->
+      <StaffGanttChart
+        :ships="ships"
+        :assignments="filteredAssignments as any"
+        :vacant-ship-ids="warningStats.vacantShipIds"
+        :loading="loading"
+        @bar-click="onBarClick"
+        @empty-click="onEmptyClick"
+      />
+    </div>
 
     <!-- ====== 政委卡片（甘特图点击色条后弹出）====== -->
     <div
@@ -631,14 +552,10 @@ const {
   statusLabel, statusType
 } = useStaffAssignment();
 
-// ====== Tab 切换 ======
-const activeTab = ref('gantt');
-
 // ====== 船舶 + 用户 + 派任数据 ======
 const ships = ref<Ship[]>([]);
 const users = ref<User[]>([]);
 const selectedShipId = ref<number | null>(null);
-const filterStatus = ref<string>('');
 
 // ====== 任职履历数据 ======
 const staffHistoryList = ref<StaffHistory[]>([]);
@@ -720,14 +637,10 @@ const availableNewUsers = computed(() => {
 });
 
 const filteredAssignments = computed(() => {
-  let result = assignments.value;
   if (selectedShipId.value) {
-    result = result.filter(a => a.shipId === selectedShipId.value);
+    return assignments.value.filter(a => a.shipId === selectedShipId.value);
   }
-  if (filterStatus.value) {
-    result = result.filter(a => a.status === filterStatus.value);
-  }
-  return result;
+  return assignments.value;
 });
 
 // ====== 工具函数 ======
@@ -802,12 +715,10 @@ const vacantShipNames = computed(() =>
 
 // 点击预警卡片：一键筛选到对应船舶/人员
 const onWarningClick = (type: 'overdue' | 'expiring30' | 'expiring60' | 'vacant') => {
-  activeTab.value = 'gantt'
   const stats = warningStats.value
   if (type === 'vacant') {
     // 不筛选船舶，保持全部显示以让用户扫空缺
     selectedShipId.value = null
-    filterStatus.value = ''
     return
   }
   const list = stats[type]
@@ -920,13 +831,6 @@ const loadStaffHistory = async () => {
     console.error('加载任职履历失败', e);
   } finally {
     historyLoading.value = false;
-  }
-};
-
-// ====== Tab 切换处理 ======
-const onTabChange = (name: string | number) => {
-  if (name === 'history') {
-    loadStaffHistory();
   }
 };
 
@@ -1093,10 +997,7 @@ const resetForm = () => {
 };
 
 const filterByShip = () => {
-  // Computed property handles filtering
-  if (activeTab.value === 'history') {
-    loadStaffHistory();
-  }
+  // 筛选由 computed 属性自动处理
 };
 
 // ====== 一键更换政委 ======
@@ -1276,8 +1177,7 @@ onMounted(async () => {
       filterByShip();
       const ship = ships.value.find((s: Ship) => s.id === numId);
       if (ship) {
-        const activeInTab = (activeTab.value !== 'history');
-        ElMessage.info(`已定位到船舶：${ship.cnShipName}${activeInTab ? '，可点击上方"上船登记"按钮指派政委' : ''}`);
+        ElMessage.info(`已定位到船舶：${ship.cnShipName}，可点击上方"上船登记"按钮指派政委`);
       }
     }
   }
