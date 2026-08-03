@@ -33,7 +33,7 @@
         </div>
         <div class="toolbar-right">
           <el-button v-if="activeTab !== 'history'" type="warning" @click="showQuickReplaceDialog">
-            更换政委
+            下船交接
           </el-button>
           <el-button v-if="activeTab === 'list'" type="primary" @click="showCreateDialog">上船登记</el-button>
           <el-button v-if="activeTab === 'history'" type="primary" @click="showHistoryCreate = true">添加履历</el-button>
@@ -138,6 +138,7 @@
           :vacant-ship-ids="warningStats.vacantShipIds"
           :loading="loading"
           @bar-click="onBarClick"
+          @empty-click="onEmptyClick"
         />
       </el-tab-pane>
 
@@ -206,7 +207,7 @@
       </el-tab-pane>
     </el-tabs>
 
-    <!-- ====== Popover 编辑菜单（甘特图点击色条后弹出）====== -->
+    <!-- ====== 政委卡片（甘特图点击色条后弹出）====== -->
     <div
       v-if="popoverVisible"
       class="gantt-popover-overlay"
@@ -217,30 +218,31 @@
         :style="{ top: popoverY + 'px', left: popoverX + 'px' }"
         @click.stop
       >
-        <div class="popover-header">
-          <span class="popover-title">{{ popoverAssignment?.user?.realName || '未指派' }}</span>
-          <span class="popover-ship">{{ popoverAssignment?.ship?.cnShipName }}</span>
+        <div class="popover-card-header">
+          <el-avatar :size="40" icon="UserFilled" class="popover-avatar" />
+          <div class="popover-card-title">
+            <span class="popover-name">{{ popoverAssignment?.user?.realName || '未指派' }}</span>
+            <span class="popover-ship">{{ popoverAssignment?.ship?.cnShipName }}</span>
+          </div>
+          <el-tag
+            :type="popoverAssignment?.status === 'active' ? 'success' : popoverAssignment?.status === 'leave' ? 'warning' : 'info'"
+            size="small"
+          >{{ statusLabel(popoverAssignment?.status) }}</el-tag>
         </div>
-        <div class="popover-info">
-          <div>上船日期：{{ formatDate(popoverAssignment?.startDate) }}</div>
-          <div v-if="popoverAssignment?.endDate">下船日期：{{ formatDate(popoverAssignment?.endDate) }}</div>
-          <div v-else>在船天数：{{ getDaysOnBoard(popoverAssignment) }} 天</div>
-          <div>状态：{{ statusLabel(popoverAssignment?.status) }}</div>
+        <div class="popover-card-info">
+          <div class="info-row"><span class="info-label">上船日期</span><span class="info-value">{{ formatDate(popoverAssignment?.startDate) }}</span></div>
+          <div v-if="popoverAssignment?.endDate" class="info-row"><span class="info-label">下船日期</span><span class="info-value">{{ formatDate(popoverAssignment?.endDate) }}</span></div>
+          <div v-else class="info-row"><span class="info-label">在船天数</span><span class="info-value">{{ getDaysOnBoard(popoverAssignment) }} 天</span></div>
         </div>
-        <div class="popover-actions">
-          <el-button size="small" @click="handleEdit(popoverAssignment!)">编辑</el-button>
+        <div class="popover-card-actions">
           <el-button
             v-if="popoverAssignment?.status === 'active' && !popoverAssignment?.endDate"
-            size="small"
-            type="warning"
-            @click="handleReplaceFromPopover"
-          >换班</el-button>
-          <el-button
-            v-if="popoverAssignment?.status === 'active' && !popoverAssignment?.endDate"
-            size="small"
             type="primary"
-            @click="handleCheckout(popoverAssignment!)"
-          >下船</el-button>
+            size="small"
+            class="action-primary"
+            @click="handleReplaceFromPopover"
+          >下船交接</el-button>
+          <el-button size="small" @click="handleEdit(popoverAssignment!)">编辑</el-button>
           <el-button
             v-if="popoverAssignment?.status === 'active'"
             size="small"
@@ -439,8 +441,8 @@
       </template>
     </el-dialog>
 
-    <!-- ====== 一键更换政委对话框 ====== -->
-    <el-dialog v-model="showReplaceDialog" title="一键更换政委" width="560px" @closed="resetReplaceForm">
+    <!-- ====== 下船交接对话框 ====== -->
+    <el-dialog v-model="showReplaceDialog" title="下船交接" width="560px" @closed="resetReplaceForm">
       <el-alert
         title="此操作将自动完成：旧政委下船 → 新政委上船（两条独立派任记录）"
         type="warning"
@@ -551,7 +553,7 @@
       </el-form>
       <template #footer>
         <el-button @click="showReplaceDialog = false">取消</el-button>
-        <el-button type="primary" :loading="replacing" @click="submitReplace">确认更换</el-button>
+        <el-button type="primary" :loading="replacing" @click="submitReplace">确认下船交接</el-button>
       </template>
     </el-dialog>
 
@@ -937,6 +939,21 @@ const onBarClick = (payload: { assignment: StaffAssignment; event: MouseEvent })
   popoverX.value = Math.max(10, x);
   popoverY.value = Math.max(10, y);
   popoverVisible.value = true;
+};
+
+// 甘特图空白区域点击 → 直接上船登记（预填船舶）
+const onEmptyClick = (payload: { shipId: number; date: string }) => {
+  editingId.value = null;
+  formData.value = {
+    userId: undefined,
+    shipId: payload.shipId,
+    startDate: payload.date,
+    endDate: '',
+    assignmentNo: '',
+    sourceCompany: '',
+    remark: '',
+  };
+  showDialog.value = true;
 };
 
 const closePopover = () => {
@@ -1381,25 +1398,38 @@ onMounted(async () => {
 
 .gantt-popover {
   position: fixed;
-  width: 240px;
+  width: 280px;
   background: white;
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-  padding: 12px;
+  border-radius: 10px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.15);
+  padding: 0;
   z-index: 2001;
+  overflow: hidden;
 }
 
-.popover-header {
+.popover-card-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
-  padding-bottom: 8px;
+  gap: 10px;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, #f0f7ff 0%, #f5f0ff 100%);
   border-bottom: 1px solid #ebeef5;
 }
 
-.popover-title {
-  font-size: 15px;
+.popover-avatar {
+  flex-shrink: 0;
+  background: #409eff;
+}
+
+.popover-card-title {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.popover-name {
+  font-size: 16px;
   font-weight: 600;
   color: #303133;
 }
@@ -1409,17 +1439,38 @@ onMounted(async () => {
   color: #909399;
 }
 
-.popover-info {
-  font-size: 13px;
-  color: #606266;
-  line-height: 1.8;
-  margin-bottom: 10px;
+.popover-card-info {
+  padding: 12px 16px;
+  border-bottom: 1px solid #f0f0f0;
 }
 
-.popover-actions {
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  line-height: 2;
+}
+
+.info-label {
+  color: #909399;
+}
+
+.info-value {
+  color: #303133;
+  font-weight: 500;
+}
+
+.popover-card-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
+  padding: 12px 16px;
+}
+
+.popover-card-actions .action-primary {
+  flex: 1 1 100%;
+  margin-bottom: 4px;
 }
 
 /* 个人卡片（建设中） */

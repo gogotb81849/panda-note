@@ -76,6 +76,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   'bar-click': [payload: { assignment: StaffAssignment; event: MouseEvent }]
+  'empty-click': [payload: { shipId: number; date: string }]
 }>()
 
 const DAY_MS = 1000 * 60 * 60 * 24
@@ -451,18 +452,56 @@ const chartOption = computed(() => {
 })
 
 // 点击色条触发事件
+let barClickFlag = false
+
 function handleChartClick(params: any) {
   const data = params?.data
   if (!data) return
   const id = data[5]
   const assignment = assignmentMap.value.get(id)
   if (!assignment) return
+  barClickFlag = true
   const nativeEvent =
     (params?.event && (params.event.event || params.event)) as MouseEvent
   emit('bar-click', {
     assignment: assignment as unknown as StaffAssignment,
     event: nativeEvent,
   })
+}
+
+// 空白区域点击：点击甘特图非色条区域时， emit empty-click（带船ID + 日期）
+function handleDomClick(e: MouseEvent) {
+  setTimeout(() => {
+    if (barClickFlag) {
+      barClickFlag = false
+      return
+    }
+    const chart = chartRef.value as any
+    if (!chart || !chartDom) return
+    const rect = chartDom.getBoundingClientRect()
+    const pixelX = e.clientX - rect.left
+    const pixelY = e.clientY - rect.top
+    // 只处理图表网格区域内的点击
+    if (!chart.containPixel('grid', [pixelX, pixelY])) return
+    // 像素坐标 → 数据坐标
+    const point = chart.convertFromPixel({ seriesIndex: 0 }, [pixelX, pixelY])
+    const timeValue = point[0]
+    const yIndex = Math.round(point[1])
+    const shipId = yIndexToShipId.value[yIndex]
+    if (shipId === undefined) return
+    // 检查该位置是否已有色条（有则不触发 empty-click）
+    const hasBar = props.assignments.some((a) => {
+      if (a.shipId !== shipId) return false
+      const s = new Date(a.startDate).getTime()
+      const ed = a.endDate ? new Date(a.endDate).getTime() : Date.now()
+      return timeValue >= s && timeValue <= ed
+    })
+    if (hasBar) return
+    // 触发 empty-click
+    const date = new Date(timeValue)
+    const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+    emit('empty-click', { shipId, date: dateStr })
+  }, 50)
 }
 
 // ====== 移动端双指缩放（pinch-to-zoom）======
@@ -551,6 +590,7 @@ onMounted(() => {
         chartDom.addEventListener('touchstart', onTouchStart, { passive: false })
         chartDom.addEventListener('touchmove', onTouchMove, { passive: false })
         chartDom.addEventListener('touchend', onTouchEnd, { passive: false })
+        chartDom.addEventListener('click', handleDomClick)
       }
     }
   })
@@ -561,6 +601,7 @@ onBeforeUnmount(() => {
     chartDom.removeEventListener('touchstart', onTouchStart)
     chartDom.removeEventListener('touchmove', onTouchMove)
     chartDom.removeEventListener('touchend', onTouchEnd)
+    chartDom.removeEventListener('click', handleDomClick)
     chartDom = null
   }
 })
