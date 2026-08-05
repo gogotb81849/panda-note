@@ -672,7 +672,21 @@ export interface StaffAssignment {
   remark?: string;
   createdAt: string;
   updatedAt: string;
-  user?: { id: number; realName: string; username: string };
+  user?: {
+    id: number;
+    realName: string;
+    username: string;
+    birthDate?: string;
+    idNumber?: string;
+    englishName?: string;
+    gender?: string;
+    nationality?: string;
+    hometown?: string;
+    politicalStatus?: string;
+    phoneNumber?: string;
+    employeeNo?: string;
+    dataSource?: string;
+  };
   ship?: { id: number; cnShipName: string; politicalInstructor?: string };
 }
 

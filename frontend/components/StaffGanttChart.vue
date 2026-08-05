@@ -58,7 +58,20 @@ type AssignmentItem = {
   sourceCompany?: string
   assignmentNo?: string
   remark?: string
-  user?: { id: number; realName: string }
+  user?: {
+    id: number
+    realName: string
+    birthDate?: string
+    idNumber?: string
+    englishName?: string
+    gender?: string
+    nationality?: string
+    hometown?: string
+    politicalStatus?: string
+    phoneNumber?: string
+    employeeNo?: string
+    dataSource?: string
+  }
   ship?: { id: number; cnShipName: string; politicalOfficerName?: string }
 }
 

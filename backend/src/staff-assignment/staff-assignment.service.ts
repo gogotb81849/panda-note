@@ -203,7 +203,24 @@ export class StaffAssignmentService {
       where: { teamCode: teamCode as any },
       include: {
         ship: { select: { id: true, cnShipName: true } },
-        user: { select: { id: true, realName: true, username: true, role: true } },
+        user: {
+          select: {
+            id: true,
+            realName: true,
+            username: true,
+            role: true,
+            birthDate: true,
+            idNumber: true,
+            englishName: true,
+            gender: true,
+            nationality: true,
+            hometown: true,
+            politicalStatus: true,
+            phoneNumber: true,
+            employeeNo: true,
+            dataSource: true,
+          },
+        },
       },
       orderBy: [{ startDate: 'desc' }, { id: 'desc' }],
     });
@@ -478,22 +495,36 @@ export class StaffAssignmentService {
         let user = await this.prisma.user.findFirst({
           where: { username: item.employeeNo },
         });
+        // 政委个人信息字段
+        const profileData: any = {
+          realName: item.realName,
+          employeeNo: item.employeeNo || null,
+          birthDate: item.birthDate ? new Date(item.birthDate) : null,
+          idNumber: item.idNumber || null,
+          englishName: item.englishName || null,
+          gender: item.gender || null,
+          nationality: item.nationality || null,
+          hometown: item.hometown || null,
+          politicalStatus: item.politicalStatus || null,
+          phoneNumber: item.phoneNumber || null,
+          dataSource: item.dataSource || null,
+        };
         if (!user) {
           user = await this.prisma.user.create({
             data: {
               username: item.employeeNo,
               password: hashedPassword,
-              realName: item.realName,
               teamCode: teamCode as any,
               role: 'ship_political_instructor' as any,
               roles: ['ship_political_instructor'] as any,
+              ...profileData,
             },
           });
         } else {
-          // 更新已有用户的姓名
+          // 更新已有用户的个人信息
           user = await this.prisma.user.update({
             where: { id: user.id },
-            data: { realName: item.realName },
+            data: profileData,
           });
         }
 

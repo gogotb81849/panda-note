@@ -182,18 +182,55 @@
       </div>
     </div>
 
-    <!-- ====== 个人卡片（建设中）====== -->
-    <el-dialog v-model="profileCardVisible" title="政委个人卡片" width="480px">
-      <div class="profile-card-building">
-        <el-avatar :size="64" icon="UserFilled" />
-        <div class="profile-name">{{ popoverAssignment?.user?.realName || '未知' }}</div>
-        <div class="profile-info">
-          <p>船舶：{{ popoverAssignment?.ship?.cnShipName || '-' }}</p>
-          <p>上船日期：{{ formatDate(popoverAssignment?.startDate) }}</p>
-          <p>来源公司：{{ popoverAssignment?.sourceCompany || '-' }}</p>
-          <p>派任编号：{{ popoverAssignment?.assignmentNo || '-' }}</p>
+    <!-- ====== 政委个人卡片 ====== -->
+    <el-dialog v-model="profileCardVisible" title="政委个人卡片" width="520px">
+      <div class="profile-card" v-if="popoverAssignment">
+        <!-- 头部：头像 + 姓名 + 状态 -->
+        <div class="profile-card-header">
+          <el-avatar :size="56" icon="UserFilled" class="profile-avatar" />
+          <div class="profile-header-info">
+            <div class="profile-name-row">
+              <span class="profile-name">{{ popoverAssignment.user?.realName || '未知' }}</span>
+              <el-tag size="small" type="info" v-if="popoverAssignment.user?.englishName">{{ popoverAssignment.user.englishName }}</el-tag>
+            </div>
+            <div class="profile-sub-row">
+              <el-tag
+                :type="popoverAssignment.status === 'active' ? 'success' : popoverAssignment.status === 'leave' ? 'warning' : 'info'"
+                size="small"
+              >{{ statusLabel(popoverAssignment.status) }}</el-tag>
+              <span class="profile-ship-name">{{ popoverAssignment.ship?.cnShipName || '-' }}</span>
+            </div>
+          </div>
         </div>
-        <el-alert title="建设中" description="政委个人卡片功能正在开发中，后续将完善履职档案、考核记录、传帮带等信息。" type="info" :closable="false" show-icon class="mt-4" />
+
+        <!-- 任职信息 -->
+        <div class="profile-section">
+          <div class="profile-section-title">任职信息</div>
+          <div class="profile-grid">
+            <div class="profile-item"><span class="profile-label">船舶</span><span class="profile-value">{{ popoverAssignment.ship?.cnShipName || '-' }}</span></div>
+            <div class="profile-item"><span class="profile-label">上船日期</span><span class="profile-value">{{ formatDate(popoverAssignment.startDate) }}</span></div>
+            <div class="profile-item" v-if="popoverAssignment.endDate"><span class="profile-label">下船日期</span><span class="profile-value">{{ formatDate(popoverAssignment.endDate) }}</span></div>
+            <div class="profile-item" v-else><span class="profile-label">在船天数</span><span class="profile-value">{{ getDaysOnBoard(popoverAssignment) }} 天</span></div>
+            <div class="profile-item"><span class="profile-label">来源公司</span><span class="profile-value">{{ popoverAssignment.sourceCompany || '-' }}</span></div>
+            <div class="profile-item"><span class="profile-label">派任编号</span><span class="profile-value">{{ popoverAssignment.assignmentNo || '-' }}</span></div>
+          </div>
+        </div>
+
+        <!-- 个人信息 -->
+        <div class="profile-section">
+          <div class="profile-section-title">个人信息</div>
+          <div class="profile-grid">
+            <div class="profile-item"><span class="profile-label">性别</span><span class="profile-value">{{ popoverAssignment.user?.gender || '-' }}</span></div>
+            <div class="profile-item"><span class="profile-label">出生年月</span><span class="profile-value">{{ formatDate(popoverAssignment.user?.birthDate) }}</span></div>
+            <div class="profile-item"><span class="profile-label">国籍</span><span class="profile-value">{{ popoverAssignment.user?.nationality || '-' }}</span></div>
+            <div class="profile-item"><span class="profile-label">籍贯</span><span class="profile-value">{{ popoverAssignment.user?.hometown || '-' }}</span></div>
+            <div class="profile-item"><span class="profile-label">政治面貌</span><span class="profile-value">{{ popoverAssignment.user?.politicalStatus || '-' }}</span></div>
+            <div class="profile-item"><span class="profile-label">手机号</span><span class="profile-value">{{ popoverAssignment.user?.phoneNumber || '-' }}</span></div>
+            <div class="profile-item"><span class="profile-label">船员工号</span><span class="profile-value">{{ popoverAssignment.user?.employeeNo || popoverAssignment.user?.username || '-' }}</span></div>
+            <div class="profile-item"><span class="profile-label">身份证号</span><span class="profile-value">{{ popoverAssignment.user?.idNumber || '-' }}</span></div>
+            <div class="profile-item"><span class="profile-label">数据来源</span><span class="profile-value">{{ popoverAssignment.user?.dataSource || '-' }}</span></div>
+          </div>
+        </div>
       </div>
     </el-dialog>
 
@@ -1375,29 +1412,87 @@ onMounted(async () => {
   margin-bottom: 4px;
 }
 
-/* 个人卡片（建设中） */
-.profile-card-building {
-  text-align: center;
-  padding: 16px;
+/* 政委个人卡片 */
+.profile-card {
+  padding: 0;
+}
+
+.profile-card-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #ebeef5;
+  margin-bottom: 16px;
+}
+
+.profile-avatar {
+  flex-shrink: 0;
+  background: #409eff;
+}
+
+.profile-header-info {
+  flex: 1;
+}
+
+.profile-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
 }
 
 .profile-name {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 600;
-  margin-top: 12px;
   color: #303133;
 }
 
-.profile-info {
-  text-align: left;
-  margin-top: 16px;
-  font-size: 14px;
-  color: #606266;
-  line-height: 2;
+.profile-sub-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.mt-4 {
-  margin-top: 16px;
+.profile-ship-name {
+  font-size: 14px;
+  color: #606266;
+}
+
+.profile-section {
+  margin-bottom: 20px;
+}
+
+.profile-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 12px;
+  padding-left: 8px;
+  border-left: 3px solid #409eff;
+}
+
+.profile-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 24px;
+}
+
+.profile-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.profile-label {
+  font-size: 12px;
+  color: #909399;
+}
+
+.profile-value {
+  font-size: 14px;
+  color: #303133;
+  word-break: break-all;
 }
 
 /* === O4: 轮换预警看板 === */
