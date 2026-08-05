@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { OperationLogService } from '../operation-log/operation-log.service';
 import { CreateStaffAssignmentDto, UpdateStaffAssignmentDto } from './dto';
+import * as bcrypt from 'bcryptjs';
 
 @Injectable()
 export class StaffAssignmentService {
@@ -452,5 +453,98 @@ export class StaffAssignmentService {
     });
 
     return result;
+  }
+
+  /**
+   * 批量导入政委数据（首次初始化用）
+   * 对每条数据：创建/更新User → 删除该船旧派任 → 创建新派任 → 更新Ship表政委字段
+   */
+  async batchImport(teamCode: string, items: any[]) {
+    const results: any[] = [];
+    const hashedPassword = await bcrypt.hash('123456', 10);
+
+    for (const item of items) {
+      try {
+        // 1. 根据船名找到Ship
+        const ship = await this.prisma.ship.findFirst({
+          where: { cnShipName: item.cnShipName, teamCode: teamCode as any },
+        });
+        if (!ship) {
+          results.push({ ship: item.cnShipName, ok: false, error: '船舶不存在' });
+          continue;
+        }
+
+        // 2. 查找或创建User（用工号作为username）
+        let user = await this.prisma.user.findFirst({
+          where: { username: item.employeeNo },
+        });
+        if (!user) {
+          user = await this.prisma.user.create({
+            data: {
+              username: item.employeeNo,
+              password: hashedPassword,
+              realName: item.realName,
+              teamCode: teamCode as any,
+              role: 'ship_political_instructor' as any,
+              roles: ['ship_political_instructor'] as any,
+            },
+          });
+        } else {
+          // 更新已有用户的姓名
+          user = await this.prisma.user.update({
+            where: { id: user.id },
+            data: { realName: item.realName },
+          });
+        }
+
+        // 3. 删除该船的所有旧派任记录
+        await this.prisma.staffAssignment.deleteMany({
+          where: { shipId: ship.id, teamCode: teamCode as any },
+        });
+
+        // 4. 创建新的StaffAssignment
+        const startDate = new Date(item.startDate);
+        const assignment = await this.prisma.staffAssignment.create({
+          data: {
+            userId: user.id,
+            shipId: ship.id,
+            teamCode: teamCode as any,
+            startDate,
+            endDate: null,
+            status: 'active',
+            sourceCompany: item.sourceCompany || null,
+            assignmentNo: item.employeeNo,
+          },
+        });
+
+        // 5. 更新Ship表的政委字段
+        await this.prisma.ship.update({
+          where: { id: ship.id },
+          data: {
+            politicalInstructor: item.realName,
+            politicalOfficerId: user.id,
+            politicalOfficerName: item.realName,
+            instructorIdNumber: item.idNumber || null,
+            onBoardDate: item.startDate,
+          },
+        });
+
+        results.push({
+          ship: item.cnShipName,
+          officer: item.realName,
+          ok: true,
+          assignmentId: assignment.id,
+        });
+      } catch (e: any) {
+        results.push({
+          ship: item.cnShipName,
+          officer: item.realName,
+          ok: false,
+          error: e.message,
+        });
+      }
+    }
+
+    return { total: items.length, success: results.filter(r => r.ok).length, failed: results.filter(r => !r.ok).length, details: results };
   }
 }

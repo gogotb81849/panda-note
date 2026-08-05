@@ -21,6 +21,13 @@ const SHORE_MANAGEMENT_ROLES: UserRole[] = [
 export class StaffAssignmentController {
   constructor(private staffAssignmentService: StaffAssignmentService) {}
 
+  @Post('batch-import')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('shore_crew_supervisor', 'admin')
+  async batchImport(@Request() req: any, @Body() body: any) {
+    return this.staffAssignmentService.batchImport(req.user.teamCode, body.items || []);
+  }
+
   @Post()
   @UseGuards(JwtAuthGuard)
   async create(@Request() req: any, @Body() createDto: CreateStaffAssignmentDto) {
