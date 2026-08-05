@@ -1,8 +1,8 @@
 <template>
   <div class="staff-gantt-chart">
-    <!-- 空状态 -->
-    <div v-if="!loading && safeShips.length === 0" class="staff-gantt-empty">
-      <p>暂无船舶数据</p>
+    <!-- 空状态 / 加载中 -->
+    <div v-if="loading || safeShips.length === 0" class="staff-gantt-empty">
+      <p>{{ loading ? '加载中...' : '暂无船舶数据' }}</p>
     </div>
 
     <!-- 甘特图主体 -->
@@ -248,11 +248,13 @@ const timeRange = computed(() => {
     const eTs = a.endDate ? new Date(a.endDate).getTime() : now
     if (!isNaN(eTs)) maxT = Math.max(maxT, eTs)
   }
-  minT = Math.min(minT, now)
-  maxT = Math.max(maxT, now)
-  if (!isFinite(minT) || !isFinite(maxT)) {
+  // 没有派任数据时使用默认范围（与 dataZoom 默认范围一致）
+  if (minT === Infinity || maxT === -Infinity) {
     minT = now - 365 * DAY_MS
     maxT = now + 60 * DAY_MS
+  } else {
+    minT = Math.min(minT, now)
+    maxT = Math.max(maxT, now)
   }
   return {
     min: minT - 15 * DAY_MS,
