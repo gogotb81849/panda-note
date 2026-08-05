@@ -1,7 +1,7 @@
 <template>
   <div class="staff-gantt-chart">
     <!-- 空状态 -->
-    <div v-if="!loading && ships.length === 0" class="staff-gantt-empty">
+    <div v-if="!loading && safeShips.length === 0" class="staff-gantt-empty">
       <p>暂无船舶数据</p>
     </div>
 
@@ -63,8 +63,8 @@ type AssignmentItem = {
 }
 
 interface Props {
-  ships: ShipItem[]
-  assignments: AssignmentItem[]
+  ships?: ShipItem[]
+  assignments?: AssignmentItem[]
   vacantShipIds?: number[]
   loading?: boolean
 }
@@ -72,6 +72,8 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   loading: false,
   vacantShipIds: () => [],
+  ships: () => [],
+  assignments: () => [],
 })
 
 const emit = defineEmits<{
@@ -168,8 +170,12 @@ function getLeavePattern() {
   return leavePattern
 }
 
+// 安全获取 ships 和 assignments（防御 null）
+const safeShips = computed(() => props.ships || [])
+const safeAssignments = computed(() => props.assignments || [])
+
 // 容器高度根据船舶数量动态计算
-const chartHeight = computed(() => Math.max(props.ships.length * 40 + 100, 220))
+const chartHeight = computed(() => Math.max(safeShips.value.length * 40 + 100, 220))
 
 const chartRef = ref<any>(null)
 
@@ -184,23 +190,23 @@ watch(chartHeight, () => {
 // ⚠️ 必须用 cnShipName（具体船名），不能用 teamDisplayName（系列名），
 // 否则同系列姊妹船会显示为同名（如"白鹿座系列"重复多次）
 const yCategories = computed(() =>
-  props.ships.slice().reverse().map((s) => s.cnShipName),
+  safeShips.value.slice().reverse().map((s) => s.cnShipName),
 )
 
 // shipId -> Y 轴类目索引
 const shipIdToYIndex = computed(() => {
   const map = new Map<number, number>()
-  props.ships.forEach((s, i) => {
-    map.set(s.id, props.ships.length - 1 - i)
+  safeShips.value.forEach((s, i) => {
+    map.set(s.id, safeShips.value.length - 1 - i)
   })
   return map
 })
 
 // Y 轴类目索引 -> shipId（给 formatter / splitArea 用）
 const yIndexToShipId = computed(() => {
-  const arr: number[] = new Array(props.ships.length)
-  props.ships.forEach((s, i) => {
-    arr[props.ships.length - 1 - i] = s.id
+  const arr: number[] = new Array(safeShips.value.length)
+  safeShips.value.forEach((s, i) => {
+    arr[safeShips.value.length - 1 - i] = s.id
   })
   return arr
 })
@@ -210,7 +216,7 @@ const vacantIdSet = computed(() => new Set(props.vacantShipIds || []))
 // splitArea 行背景色：空缺行高亮为淡红，交替行更明显
 const splitAreaStyles = computed(() => {
   const arr: any[] = []
-  for (let i = 0; i < props.ships.length; i++) {
+  for (let i = 0; i < safeShips.value.length; i++) {
     const shipId = yIndexToShipId.value[i]
     if (vacantIdSet.value.has(shipId)) {
       arr.push({ color: 'rgba(245, 108, 108, 0.12)' })
@@ -224,7 +230,7 @@ const splitAreaStyles = computed(() => {
 // assignmentId -> assignment，供 tooltip / 点击事件查找
 const assignmentMap = computed(() => {
   const map = new Map<number, AssignmentItem>()
-  for (const a of props.assignments) map.set(a.id, a)
+  for (const a of safeAssignments.value) map.set(a.id, a)
   return map
 })
 
@@ -233,7 +239,7 @@ const timeRange = computed(() => {
   let minT = Infinity
   let maxT = -Infinity
   const now = Date.now()
-  for (const a of props.assignments) {
+  for (const a of safeAssignments.value) {
     const s = new Date(a.startDate).getTime()
     if (!isNaN(s)) {
       minT = Math.min(minT, s)
@@ -256,7 +262,7 @@ const timeRange = computed(() => {
 
 // custom series 数据：[shipIndex, startDate, endDate, color, officerName, assignmentId]
 const seriesData = computed(() => {
-  return props.assignments.map((a) => {
+  return safeAssignments.value.map((a) => {
     const shipIndex = shipIdToYIndex.value.get(a.shipId) ?? 0
     const start = new Date(a.startDate).getTime()
     const end = a.endDate ? new Date(a.endDate).getTime() : Date.now()
@@ -332,7 +338,7 @@ const chartOption = computed(() => {
         if (!a) return ''
         const shipName =
           a.ship?.cnShipName ||
-          props.ships.find((s) => s.id === a.shipId)?.cnShipName ||
+          safeShips.value.find((s) => s.id === a.shipId)?.cnShipName ||
           '-'
         const officer = a.user?.realName || a.ship?.politicalOfficerName || '未指派'
         const days = getDaysOnBoard(a.startDate, a.endDate)
@@ -490,7 +496,7 @@ function handleDomClick(e: MouseEvent) {
     const shipId = yIndexToShipId.value[yIndex]
     if (shipId === undefined) return
     // 检查该位置是否已有色条（有则不触发 empty-click）
-    const hasBar = props.assignments.some((a) => {
+    const hasBar = safeAssignments.value.some((a) => {
       if (a.shipId !== shipId) return false
       const s = new Date(a.startDate).getTime()
       const ed = a.endDate ? new Date(a.endDate).getTime() : Date.now()

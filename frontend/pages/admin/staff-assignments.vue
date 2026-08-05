@@ -802,9 +802,11 @@ const userMetaMap = computed<Record<number, UserPoolMeta>>(() => {
 // ====== 数据加载 ======
 const loadShips = async () => {
   try {
-    ships.value = await api.ships.getAll() as Ship[];
+    const result = await api.ships.getAll() as Ship[];
+    ships.value = Array.isArray(result) ? result : [];
   } catch (e) {
     console.error('加载船舶列表失败', e);
+    ships.value = [];
   }
 };
 
@@ -812,7 +814,7 @@ const loadUsers = async () => {
   try {
     const response = await api.userManagement.listUsers({ page: 1, pageSize: 200 }) as any;
     const allUsers = response?.users || response || [];
-    users.value = allUsers.filter((u: User) => u.role === 'ship_political_instructor');
+    users.value = Array.isArray(allUsers) ? allUsers.filter((u: User) => u.role === 'ship_political_instructor') : [];
   } catch (e) {
     console.error('加载用户列表失败', e);
     users.value = [];

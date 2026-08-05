@@ -16,9 +16,11 @@ export const useStaffAssignment = () => {
   const loadAll = async () => {
     loading.value = true;
     try {
-      assignments.value = await api.staffAssignments.getAll() as StaffAssignment[];
+      const result = await api.staffAssignments.getAll() as StaffAssignment[];
+      assignments.value = Array.isArray(result) ? result : [];
     } catch (e) {
       console.error('加载派任记录失败', e);
+      assignments.value = [];
     } finally {
       loading.value = false;
     }
