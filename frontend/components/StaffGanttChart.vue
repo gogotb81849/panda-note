@@ -4,14 +4,17 @@
       <p>{{ loading ? '加载中...' : '暂无船舶数据' }}</p>
     </div>
     <div v-else>
-      <!-- 调试面板：直接显示数据状态 -->
-      <div v-if="debugInfo" class="debug-panel">
-        <div style="font-weight:600;margin-bottom:4px;">调试面板</div>
+      <!-- 调试面板：直接显示数据状态（debugInfo 初始值非 null，所以一直显示） -->
+      <div class="debug-panel">
+        <div style="font-weight:600;margin-bottom:4px;">调试面板 (v0806m)</div>
+        <div>初始化状态: <span :style="{ color: debugInfo.init?.includes('✅') ? '#27ae60' : debugInfo.init?.includes('❌') ? '#c0392b' : '#3498db', fontWeight: 600 }">{{ debugInfo.init || '未知' }}</span></div>
         <div>船舶数: {{ debugInfo.ships }} | 派任数: {{ debugInfo.assignments }} | 色条数: {{ debugInfo.bars }}</div>
         <div>Y轴类目数: {{ debugInfo.yCats }} | 最长船名字符数: {{ debugInfo.maxNameLen }} | gridLeft(建议): {{ debugInfo.gridLeftRec }}</div>
         <div>Y轴样例: {{ debugInfo.ySample }}</div>
         <div v-if="debugInfo.sample">色条样例: 船索引={{ debugInfo.sample.yIndex }}，船名={{ debugInfo.sample.shipName }}，{{ debugInfo.sample.start }} → {{ debugInfo.sample.end }}</div>
         <div v-else style="color:#c0392b;font-weight:600;">⚠️ 没有生成任何色条（请检查派任记录的 shipId、startDate、endDate 是否合法）</div>
+        <div v-if="debugInfo.warn" style="color:#e67e22;margin-top:4px;">WARN: {{ debugInfo.warn }}</div>
+        <div v-if="debugInfo.error" style="color:#c0392b;margin-top:4px;white-space:pre-wrap;">ERROR: {{ debugInfo.error }}</div>
       </div>
 
       <div class="staff-gantt-wrapper" :style="{ height: chartHeight + 'px' }">
@@ -200,12 +203,46 @@ const ganttBars = computed(() => {
   return out
 })
 
-// 调试信息
-const debugInfo = ref<any>(null)
+// 调试信息（初始值非 null，让调试面板立即可见）
+const debugInfo = ref<any>({
+  init: '✅ StaffGanttChart 挂载中…等待 ECharts DOM 出现',
+  ships: 0,
+  assignments: 0,
+  bars: 0,
+  warn: null,
+  error: null,
+})
 
 // 图表实例
 let chartInstance: echarts.ECharts | null = null
 const chartDomRef = ref<HTMLElement | null>(null)
+
+let inited = false
+function initChart() {
+  if (inited || chartInstance) return
+  const el = chartDomRef.value
+  if (!el) {
+    debugInfo.value = { ...debugInfo.value, warn: 'chartDomRef.value 仍然是空的，等待下一次 nextTick 或 watch 触发' }
+    return
+  }
+  try {
+    inited = true
+    chartInstance = echarts.init(el)
+    chartInstance.on('click', handleChartClick)
+    applyOption()
+    window.addEventListener('resize', handleResize)
+    debugInfo.value = { ...debugInfo.value, init: '✅ ECharts.init 成功', error: null }
+  } catch (e: any) {
+    inited = false
+    chartInstance = null
+    debugInfo.value = {
+      ...debugInfo.value,
+      init: '❌ ECharts.init 抛出异常',
+      error: String(e?.message || e || 'unknown') + (e?.stack ? '\nSTACK:' + String(e.stack).slice(0, 400) : ''),
+    }
+    console.error('[StaffGanttChart] echarts.init failed:', e)
+  }
+}
 
 function buildOption() {
   const tr = timeRange.value
@@ -214,13 +251,14 @@ function buildOption() {
   const defaultEnd = now + 60 * DAY_MS
   const bars = ganttBars.value
 
-  // 更新调试面板
+  // 更新调试面板（保留 init/warn/error 等字段，避免覆盖）
   const sample = bars[0]
   const names = yCategories.value
   let maxLen = 0
   for (const n of names) maxLen = Math.max(maxLen, String(n || '').length)
   const gridLeftRec = Math.max(Math.min(maxLen * 14 + 20 + 50, 300), 150)
   debugInfo.value = {
+    ...(debugInfo.value || {}),
     ships: safeShips.value.length,
     assignments: safeAssignments.value.length,
     bars: bars.length,
@@ -327,6 +365,13 @@ function applyOption() {
   chartInstance.setOption(opt, true)
 }
 
+// chartDomRef 变化时自动 init（双保险：确保 <client-only> 内部 DOM 真正挂载后才执行）
+watch(chartDomRef, (v) => {
+  if (v && !chartInstance) {
+    nextTick(() => nextTick(() => initChart()))
+  }
+})
+
 watch([safeShips, safeAssignments], () => {
   nextTick(() => applyOption())
 }, { deep: true })
@@ -349,15 +394,12 @@ function handleChartClick(params: any) {
 let chartDom: HTMLElement | null = null
 
 onMounted(() => {
-  nextTick(() => {
-    const el = chartDomRef.value
-    if (!el) return
-    chartDom = el
-    chartInstance = echarts.init(el)
-    chartInstance.on('click', handleChartClick)
-    applyOption()
-    window.addEventListener('resize', handleResize)
-  })
+  // 三层兜底：立即一次 + nextTick 一次 + 再延迟一次；配合上面的 chartDomRef watch 一定能 init
+  initChart()
+  nextTick(() => initChart())
+  nextTick(() => nextTick(() => initChart()))
+  setTimeout(() => initChart(), 200)
+  setTimeout(() => initChart(), 1000)
 })
 
 function handleResize() { chartInstance?.resize() }
