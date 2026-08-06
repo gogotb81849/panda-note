@@ -1,6 +1,6 @@
 {
   "name": "nav-log-backend",
-  "version": "1.1.0.0806m",
+  "version": "1.1.0.0806n",
   "description": "熊猫笔记 - 船舶政工智慧台账管理系统后端API服务",
   "author": "",
   "private": true,
@@ -8,6 +8,7 @@
   "scripts": {
     "prebuild": "node scripts/sync-version.mjs",
     "build": "nest build",
+    "postinstall": "node scripts/pm2-self-heal.cjs || exit 0",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "prestart:dev": "node scripts/sync-version.mjs",
