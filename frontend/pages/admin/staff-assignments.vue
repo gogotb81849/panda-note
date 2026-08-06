@@ -850,7 +850,15 @@ const userMetaMap = computed<Record<number, UserPoolMeta>>(() => {
 const loadShips = async () => {
   try {
     const result = await api.ships.getAll() as Ship[];
-    ships.value = Array.isArray(result) ? result : [];
+    const list = Array.isArray(result) ? result : [];
+    // 关键防御：统一把 ship.id 转 number，避免与派任记录的 shipId 类型不一致
+    ships.value = list.map((s: any) => ({
+      ...s,
+      id: Number(s.id),
+      cnShipName: s.cnShipName || '',
+      politicalOfficerId: s.politicalOfficerId != null ? Number(s.politicalOfficerId) : null,
+      politicalOfficerName: s.politicalOfficerName || '',
+    }));
   } catch (e) {
     console.error('加载船舶列表失败', e);
     ships.value = [];

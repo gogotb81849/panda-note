@@ -218,10 +218,13 @@ const yCategories = computed(() =>
 )
 
 // shipId -> Y 轴类目索引
+// 关键防御：后端 Prisma JSON 序列化可能把 ship.id/shipId 变成字符串（bigint），
+// 必须用 Number() 统一转 number，否则 Map.get('1') 和 Map.get(1) 结果不同
 const shipIdToYIndex = computed(() => {
   const map = new Map<number, number>()
   safeShips.value.forEach((s, i) => {
-    map.set(s.id, safeShips.value.length - 1 - i)
+    const id = Number(s.id)
+    if (!isNaN(id)) map.set(id, safeShips.value.length - 1 - i)
   })
   return map
 })
@@ -230,12 +233,14 @@ const shipIdToYIndex = computed(() => {
 const yIndexToShipId = computed(() => {
   const arr: number[] = new Array(safeShips.value.length)
   safeShips.value.forEach((s, i) => {
-    arr[safeShips.value.length - 1 - i] = s.id
+    arr[safeShips.value.length - 1 - i] = Number(s.id)
   })
   return arr
 })
 
-const vacantIdSet = computed(() => new Set(props.vacantShipIds || []))
+const vacantIdSet = computed(() =>
+  new Set((props.vacantShipIds || []).map((id: any) => Number(id))),
+)
 
 // splitArea 行背景色：空缺行高亮为淡红，交替行更明显
 const splitAreaStyles = computed(() => {
@@ -290,16 +295,56 @@ const timeRange = computed(() => {
 // Bug A 修复：shipId 不在 Y 轴里直接跳过（不兜底到 0，避免画在第一条船上）；start/end 非法 NaN 跳过
 const seriesData = computed(() => {
   const out: any[] = []
+  const shipsMap = shipIdToYIndex.value
+  let skippedShip = 0
+  let skippedDate = 0
+
   for (const a of safeAssignments.value) {
-    const shipIndex = shipIdToYIndex.value.get(a.shipId)
-    if (shipIndex === undefined) continue // 只画属于 Y 轴里真正存在的船
+    // 关键防御：shipId 可能是字符串或 undefined，统一转 number 再查找
+    const shipIdNum = Number(a.shipId)
+    const shipRelIdNum = Number(a.ship?.id)
+    const lookupId = !isNaN(shipIdNum) ? shipIdNum : shipRelIdNum
+    const shipIndex = shipsMap.get(lookupId)
+    if (shipIndex === undefined) {
+      skippedShip++
+      continue
+    }
+
     const start = new Date(a.startDate).getTime()
     const end = a.endDate ? new Date(a.endDate).getTime() : Date.now()
-    if (isNaN(start) || isNaN(end)) continue
-    if (end <= start) continue
+    if (isNaN(start) || isNaN(end)) {
+      skippedDate++
+      continue
+    }
+    if (end <= start) {
+      skippedDate++
+      continue
+    }
+
     const color = getBarColor(a)
     const officerName = a.user?.realName || a.ship?.politicalOfficerName || '未指派'
     out.push([shipIndex, start, end, color, officerName, a.id])
+  }
+
+  // 调试日志：帮我们定位为什么没色条
+  if (out.length === 0) {
+    console.warn(
+      '[StaffGanttChart] seriesData 为空！',
+      'ships=', safeShips.value.length,
+      'assignments=', safeAssignments.value.length,
+      'skipped_shipId=', skippedShip,
+      'skipped_date=', skippedDate,
+      'shipsMap_sample=', Array.from(shipsMap.entries()).slice(0, 3),
+      'first_assignment=', safeAssignments.value[0]
+        ? {
+            id: safeAssignments.value[0].id,
+            shipId: safeAssignments.value[0].shipId,
+            shipRelId: safeAssignments.value[0].ship?.id,
+            startDate: safeAssignments.value[0].startDate,
+            status: safeAssignments.value[0].status,
+          }
+        : null,
+    )
   }
   return out
 })

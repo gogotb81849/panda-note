@@ -17,7 +17,25 @@ export const useStaffAssignment = () => {
     loading.value = true;
     try {
       const result = await api.staffAssignments.getAll() as StaffAssignment[];
-      assignments.value = Array.isArray(result) ? result : [];
+      const list = Array.isArray(result) ? result : [];
+      // 关键防御：把后端 JSON 返回的 id/shipId/userId 全部统一转 number
+      // 避免 Prisma bigint 或其他序列化器把 number 字段变成字符串
+      assignments.value = list.map((a: any) => ({
+        ...a,
+        id: Number(a.id),
+        shipId: Number(a.shipId),
+        userId: Number(a.userId),
+        teamCode: a.teamCode || String(a.teamCode || ''),
+        startDate: a.startDate ? String(a.startDate) : '',
+        endDate: a.endDate ? String(a.endDate) : null,
+        status: a.status || 'active',
+        ship: a.ship
+          ? { ...a.ship, id: Number(a.ship.id), cnShipName: a.ship.cnShipName || '' }
+          : undefined,
+        user: a.user
+          ? { ...a.user, id: Number(a.user.id) }
+          : undefined,
+      }));
     } catch (e) {
       console.error('加载派任记录失败', e);
       assignments.value = [];
