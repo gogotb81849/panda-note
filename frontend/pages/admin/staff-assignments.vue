@@ -115,7 +115,17 @@
         <span class="legend-item"><span class="legend-color" style="background:#f89a3c"></span>8月 预警</span>
         <span class="legend-item"><span class="legend-color" style="background:#ad0606"></span>>11月 违规</span>
         <span class="legend-item"><span class="legend-color" style="background:#b8b8b8"></span>已下船</span>
-        <span class="legend-item"><span class="legend-color" style="background:#e6a23c;background-image:repeating-linear-gradient(45deg,#fff 0,#fff 2px,transparent 2px,transparent 6px)"></span>休假</span>
+        <span class="legend-item">
+          <span class="legend-color" style="background:rgba(220,220,220,0.25);border:1px dashed #a8abb2;box-sizing:border-box"></span>
+          政委休假（船上空缺）
+        </span>
+        <span class="legend-item">
+          <span class="legend-color" style="background:rgba(245,108,108,0.12)"></span>
+          空缺船舶行
+        </span>
+        <span class="legend-hint">
+          【船舶视角】每艘船一行，横向显示历任政委时间段；点击色条查看该政委详情（含休假情况）。
+        </span>
       </div>
       <!-- 甘特图组件 -->
       <StaffGanttChart
@@ -1208,9 +1218,10 @@ onMounted(async () => {
   ]);
   // 从URL读取shipId参数并自动筛选（从船舶管理页面跳转过来时使用）
   const urlShipId = route.query.shipId;
-  if (urlShipId) {
+  if (urlShipId && typeof urlShipId === 'string') {
     const numId = Number(urlShipId);
-    if (!isNaN(numId)) {
+    // Bug A 防御：NaN 或负数/0 不赋值，避免 selectedShipId 变成 NaN 导致 filteredAssignments 全部过滤掉
+    if (!isNaN(numId) && numId > 0 && ships.value.some(s => s.id === numId)) {
       await nextTick();
       selectedShipId.value = numId;
       filterByShip();
@@ -1323,6 +1334,14 @@ onMounted(async () => {
   height: 12px;
   border-radius: 2px;
   border: 1px solid #dcdfe6;
+}
+
+.legend-hint {
+  margin-left: auto;
+  font-size: 11px;
+  color: #909399;
+  max-width: 520px;
+  line-height: 1.5;
 }
 
 /* Popover 编辑菜单 */

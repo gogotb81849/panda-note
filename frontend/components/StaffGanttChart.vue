@@ -104,9 +104,10 @@ function getDaysOnBoard(startDate: string, endDate?: string | null): number {
 }
 
 // 根据状态与在船天数获取色条颜色（用于 tooltip / 兜底）
+// 需求 B 修正：船舶视角不单独高亮"休假"。leave 派任 = 该政委名义派任但实际不在船 → 显示为灰色虚线边框
 function getBarColor(assignment: AssignmentItem): string {
+  if (assignment.status === 'leave') return '#d3d3d3'
   if (assignment.status === 'ended' || assignment.endDate) return '#b8b8b8'
-  if (assignment.status === 'leave') return '#e6a23c'
   const days = getDaysOnBoard(assignment.startDate, assignment.endDate)
   if (days > 330) return '#ad0606'
   if (days > 300) return '#f56c6c'
@@ -116,11 +117,11 @@ function getBarColor(assignment: AssignmentItem): string {
 }
 
 // === 渐变色条：6个月内纯绿，6个月后沿时间轴向红色渐变 ===
+// leave 派任：填充透明 + 虚线边框（船舶视角看起来就是"空缺占位"，不会与在船色条混淆）
 function getBarFill(assignment: AssignmentItem): string | object {
+  if (assignment.status === 'leave') return 'rgba(220,220,220,0.25)'
   // 已下船：整条灰色
   if (assignment.status === 'ended' || assignment.endDate) return '#b8b8b8'
-  // 休假：斜线图案
-  if (assignment.status === 'leave') return getLeavePattern()
 
   const days = getDaysOnBoard(assignment.startDate, assignment.endDate)
   // 6个月内：纯绿
@@ -189,6 +190,16 @@ const safeAssignments = computed(() => props.assignments || [])
 
 // 容器高度根据船舶数量动态计算
 const chartHeight = computed(() => Math.max(safeShips.value.length * 40 + 100, 220))
+
+// ==== Bug A 修复：动态计算 grid.left，避免中文长船名 + 空缺徽标被裁切 ====
+// 中文每字约 13px，最长船名 + 20px padding + 48px 空缺徽标宽度
+const gridLeft = computed(() => {
+  const names = yCategories.value
+  let maxLen = 0
+  for (const n of names) maxLen = Math.max(maxLen, String(n || '').length)
+  const byText = Math.max(maxLen * 13 + 20 + 48, 140)
+  return Math.min(byText, 280)
+})
 
 const chartRef = ref<any>(null)
 
@@ -276,16 +287,21 @@ const timeRange = computed(() => {
 })
 
 // custom series 数据：[shipIndex, startDate, endDate, color, officerName, assignmentId]
+// Bug A 修复：shipId 不在 Y 轴里直接跳过（不兜底到 0，避免画在第一条船上）；start/end 非法 NaN 跳过
 const seriesData = computed(() => {
-  return safeAssignments.value.map((a) => {
-    const shipIndex = shipIdToYIndex.value.get(a.shipId) ?? 0
+  const out: any[] = []
+  for (const a of safeAssignments.value) {
+    const shipIndex = shipIdToYIndex.value.get(a.shipId)
+    if (shipIndex === undefined) continue // 只画属于 Y 轴里真正存在的船
     const start = new Date(a.startDate).getTime()
     const end = a.endDate ? new Date(a.endDate).getTime() : Date.now()
+    if (isNaN(start) || isNaN(end)) continue
+    if (end <= start) continue
     const color = getBarColor(a)
-    // 政委名双数据源兜底：派任记录 user.realName → 船舶资料 politicalOfficerName → 未指派
     const officerName = a.user?.realName || a.ship?.politicalOfficerName || '未指派'
-    return [shipIndex, start, end, color, officerName, a.id]
-  })
+    out.push([shipIndex, start, end, color, officerName, a.id])
+  }
+  return out
 })
 
 // renderItem：根据 startDate / endDate 在对应行画矩形条
@@ -302,9 +318,22 @@ function renderItem(_params: any, api: any) {
   let fill: string | object = '#ccc'
   let textFill = '#fff'
   let opacity = 1
+  let stroke: string | undefined
+  let lineDash: number[] | undefined
+  let strokeOpacity: number | undefined
+  let label = String(api.value(4) || '')
+
   if (assignment) {
     fill = getBarFill(assignment)
-    if (assignment.status === 'ended' || assignment.endDate) {
+    if (assignment.status === 'leave') {
+      // 需求 B：leave 派任 = 名义派任但实际不在船，显示淡灰虚线边框，文字灰 + （休假）后缀
+      stroke = '#a8abb2'
+      lineDash = [4, 3]
+      strokeOpacity = 0.9
+      textFill = '#6e7278'
+      opacity = 0.85
+      label = label ? `${label}（休假）` : '休假中'
+    } else if (assignment.status === 'ended' || assignment.endDate) {
       textFill = '#888'
       opacity = 0.65
     }
@@ -324,13 +353,17 @@ function renderItem(_params: any, api: any) {
     },
     style: {
       fill: fill,
-      text: api.value(4),
-      textFill: textFill,
+      stroke,
+      lineDash,
+      strokeOpacity,
+      strokeWidth: stroke ? 1.2 : undefined,
+      text: label,
+      textFill,
       fontSize: 11,
       textPosition: 'insideLeft',
       textAlign: 'left',
       textVerticalAlign: 'middle',
-      opacity: opacity,
+      opacity,
     },
   }
 }
@@ -374,10 +407,11 @@ const chartOption = computed(() => {
       },
     },
     grid: {
-      left: 140,
+      left: gridLeft.value,
       right: 40,
       top: 30,
       bottom: 70,
+      containLabel: false,
     },
     xAxis: {
       type: 'time',
