@@ -859,11 +859,15 @@ const loadShips = async () => {
 
 const loadUsers = async () => {
   try {
-    const response = await api.userManagement.listUsers({ page: 1, pageSize: 200 }) as any;
-    const allUsers = response?.users || response || [];
-    users.value = Array.isArray(allUsers) ? allUsers.filter((u: User) => u.role === 'ship_political_instructor') : [];
+    // 修复 "Forbidden resource"：原来调用 /admin/users（仅 admin 角色），
+    // ship_political_instructor 角色会被 RolesGuard 拦截并报 403 默认文案
+    // "Forbidden resource"。现在改用业务专用 /staff-assignments/candidates，
+    // 只走 JwtAuthGuard，所有合法登录角色都能调用
+    const list = await api.staffAssignments.listCandidates() as any;
+    const allUsers = Array.isArray(list) ? list : (list?.users || []);
+    users.value = Array.isArray(allUsers) ? allUsers.filter((u: User) => !u.role || u.role === 'ship_political_instructor') : [];
   } catch (e) {
-    console.error('加载用户列表失败', e);
+    console.error('加载政委候选人列表失败', e);
     users.value = [];
   }
 };

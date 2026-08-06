@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { OperationLogService } from '../operation-log/operation-log.service';
 import { CreateStaffAssignmentDto, UpdateStaffAssignmentDto } from './dto';
 import * as bcrypt from 'bcryptjs';
+import { UserRole } from '@prisma/client';
 
 @Injectable()
 export class StaffAssignmentService {
@@ -10,6 +11,28 @@ export class StaffAssignmentService {
     private prisma: PrismaService,
     private operationLogService: OperationLogService,
   ) {}
+
+  /**
+   * 列出同团队下所有可指派的政委候选人（用于人员派任页下拉）
+   * 这个接口不做 admin 限制，任何合法登录角色（含 ship_political_instructor）都可调用
+   */
+  async listPoliticalInstructors(teamCode: string) {
+    const users = await this.prisma.user.findMany({
+      where: {
+        teamCode: teamCode as any,
+        role: UserRole.ship_political_instructor,
+      },
+      select: {
+        id: true,
+        realName: true,
+        username: true,
+        role: true,
+        teamCode: true,
+      },
+      orderBy: { id: 'asc' as const },
+    })
+    return users
+  }
 
   /**
    * 创建派任记录（上船）

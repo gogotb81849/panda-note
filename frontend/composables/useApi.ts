@@ -1181,6 +1181,7 @@ export const useApi = () => {
 
     staffAssignments: {
       getAll: () => apiFetch('/staff-assignments'),
+      listCandidates: () => apiFetch('/staff-assignments/candidates'),
       getByUserId: (userId: number) => apiFetch(`/staff-assignments/user/${userId}`),
       getByShipId: (shipId: number) => apiFetch(`/staff-assignments/ship/${shipId}`),
       getCurrent: (userId: number) => apiFetch(`/staff-assignments/user/${userId}/current`),

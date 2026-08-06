@@ -21,6 +21,16 @@ const SHORE_MANAGEMENT_ROLES: UserRole[] = [
 export class StaffAssignmentController {
   constructor(private staffAssignmentService: StaffAssignmentService) {}
 
+  /**
+   * 政委候选人下拉（无 admin 限制）：所有同 team 的 ship_political_instructor 角色
+   * 修复：原 /admin/users 需要 admin 角色，ship_political_instructor 角色调用会被 RolesGuard 拦截并报 "Forbidden resource"
+   */
+  @Get('candidates')
+  @UseGuards(JwtAuthGuard)
+  async listCandidates(@Request() req: any) {
+    return this.staffAssignmentService.listPoliticalInstructors(req.user.teamCode);
+  }
+
   @Post('batch-import')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('shore_crew_supervisor', 'admin')
