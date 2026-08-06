@@ -6,10 +6,12 @@
     <div v-else>
       <!-- 调试面板：直接显示数据状态 -->
       <div v-if="debugInfo" class="debug-panel">
-        <span>船舶: {{ debugInfo.ships }} | 派任: {{ debugInfo.assignments }} | 色条: {{ debugInfo.bars }}</span>
-        <span v-if="debugInfo.sample" class="debug-sample">
-          首条: 船索引={{ debugInfo.sample.yIndex }}, 开始={{ debugInfo.sample.start }}, 结束={{ debugInfo.sample.end }}
-        </span>
+        <div style="font-weight:600;margin-bottom:4px;">调试面板</div>
+        <div>船舶数: {{ debugInfo.ships }} | 派任数: {{ debugInfo.assignments }} | 色条数: {{ debugInfo.bars }}</div>
+        <div>Y轴类目数: {{ debugInfo.yCats }} | 最长船名字符数: {{ debugInfo.maxNameLen }} | gridLeft(建议): {{ debugInfo.gridLeftRec }}</div>
+        <div>Y轴样例: {{ debugInfo.ySample }}</div>
+        <div v-if="debugInfo.sample">色条样例: 船索引={{ debugInfo.sample.yIndex }}，船名={{ debugInfo.sample.shipName }}，{{ debugInfo.sample.start }} → {{ debugInfo.sample.end }}</div>
+        <div v-else style="color:#c0392b;font-weight:600;">⚠️ 没有生成任何色条（请检查派任记录的 shipId、startDate、endDate 是否合法）</div>
       </div>
 
       <div class="staff-gantt-wrapper" :style="{ height: chartHeight + 'px' }">
@@ -214,20 +216,35 @@ function buildOption() {
 
   // 更新调试面板
   const sample = bars[0]
+  const names = yCategories.value
+  let maxLen = 0
+  for (const n of names) maxLen = Math.max(maxLen, String(n || '').length)
+  const gridLeftRec = Math.max(Math.min(maxLen * 14 + 20 + 50, 300), 150)
   debugInfo.value = {
     ships: safeShips.value.length,
     assignments: safeAssignments.value.length,
     bars: bars.length,
+    yCats: names.length,
+    maxNameLen: maxLen,
+    gridLeftRec,
+    ySample: names.slice(0, 5).join(' / ') + (names.length > 5 ? ` ...(共${names.length}条)` : ''),
     sample: sample
-      ? { yIndex: sample.value[0], start: new Date(sample.value[1]).toISOString().slice(0, 10), end: new Date(sample.value[2]).toISOString().slice(0, 10) }
+      ? {
+          yIndex: sample.value[0],
+          shipName: names[sample.value[0]] || '(未知船)',
+          start: new Date(sample.value[1]).toISOString().slice(0, 10),
+          end: new Date(sample.value[2]).toISOString().slice(0, 10),
+        }
       : null,
   }
 
-  // grid left
-  const names = yCategories.value
-  let maxLen = 0
-  for (const n of names) maxLen = Math.max(maxLen, String(n || '').length)
-  const gridLeft = Math.max(Math.min(maxLen * 14 + 20 + 50, 300), 150)
+  // grid left (debug info 里已算过 names/maxLen/gridLeftRec；为了代码清晰这里不再重复声明)
+  const names2 = yCategories.value
+  let maxLen2 = 0
+  for (const n of names2) maxLen2 = Math.max(maxLen2, String(n || '').length)
+  // 注意：因为 containLabel=true，实际 ECharts 会自动补足 label 宽度
+  // 这里 grid.left 我们给一个起始小值 60 就够，ECharts 会扩展
+  void maxLen2
 
   return {
     tooltip: {
@@ -246,7 +263,7 @@ function buildOption() {
           <div>在船天数：${days} 天</div>`
       },
     },
-    grid: { left: gridLeft, right: 50, top: 30, bottom: 60, containLabel: false },
+    grid: { left: 60, right: 40, top: 30, bottom: 70, containLabel: true },
     xAxis: {
       type: 'time',
       min: tr.min,
@@ -360,7 +377,6 @@ defineExpose({ chartRef: null })
   width: 100%;
   background: #fff;
   border-radius: 8px;
-  overflow: hidden;
 }
 .staff-gantt-wrapper {
   width: 100%;
