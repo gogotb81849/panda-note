@@ -163,34 +163,11 @@ jobs:
             npx prisma@5 db push --schema=prisma/schema.prisma --accept-data-loss
 
             echo "[5/5] Restart PM2..."
-            echo "[debug] DEPLOY_DIR=$DEPLOY_DIR"
-            echo "[debug] backend/package.json version: $(cat $DEPLOY_DIR/backend/package.json | head -5)"
-            echo "[debug] list PM2 processes BEFORE reload:"
-            pm2 ls || true
-            echo "[debug] nav-log-backend pm cwd:"
-            pm2 show nav-log-backend 2>/dev/null | grep -E "exec cwd|status" || true
-            echo "[debug] nav-log-frontend pm cwd:"
-            pm2 show nav-log-frontend 2>/dev/null | grep -E "exec cwd|status" || true
-
-            # —— 后端重启 ——
-            # 先 delete 再 start：避免 PM2 沿用第一次保存时的旧 cwd
-            cd "$DEPLOY_DIR/backend"
-            pm2 delete nav-log-backend 2>/dev/null || true
-            pm2 start dist/main.js \
-              --name nav-log-backend \
-              --cwd "$DEPLOY_DIR/backend" \
-              --node-args="--max-old-space-size=512" || true
-
-            # —— 前端重启 ——
+            pm2 reload nav-log-backend 2>/dev/null || \
+              pm2 start dist/main.js --name nav-log-backend --node-args="--max-old-space-size=512"
             cd "$DEPLOY_DIR/frontend"
-            ls -la .output/server/index.mjs || echo "WARNING: .output/server/index.mjs NOT FOUND"
-            pm2 delete nav-log-frontend 2>/dev/null || true
-            pm2 start .output/server/index.mjs \
-              --name nav-log-frontend \
-              --cwd "$DEPLOY_DIR/frontend" \
-              --node-args="--max-old-space-size=512" || true
-
-            pm2 ls || true
+            pm2 reload nav-log-frontend 2>/dev/null || \
+              pm2 start .output/server/index.mjs --name nav-log-frontend --node-args="--max-old-space-size=512"
             pm2 save
 
             echo "=== Deploy script done! ==="
