@@ -1,6 +1,6 @@
 {
   "name": "nav-log-frontend",
-  "version": "1.1.0.0806p",
+  "version": "1.1.0.0806q",
   "private": true,
   "type": "module",
   "scripts": {
@@ -25,7 +25,7 @@
     "@pinia/nuxt": "^0.5.1",
     "browser-image-compression": "^2.0.2",
     "docx-preview": "^0.3.7",
-    "echarts": "^6.1.0",
+    "echarts": "^5.5.0",
     "element-plus": "^2.8.0",
     "jszip": "^3.10.1",
     "nuxt": "^3.13.0",
