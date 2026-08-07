@@ -7,14 +7,15 @@
       <!-- 调试面板：默认隐藏，双击甘特图区域才显示（开发调试入口）
            正式上线默认隐藏，页面清爽；需要排查问题时双击 wrapper 可再显示所有诊断信息 -->
       <div class="debug-panel" v-show="debugVisible" style="display:flex;flex-wrap:wrap;gap:4px 16px;padding:10px 12px;">
-        <div style="width:100%;font-weight:600;margin-bottom:2px;">调试面板 (v0807g) · 双击下方色条区域可关闭</div>
+        <div style="width:100%;font-weight:600;margin-bottom:2px;">调试面板 (v0807h) · 双击下方色条区域可关闭</div>
         <div style="min-width:280px;">初始化状态: <span :style="{ color: debugInfo.init?.includes('✅') ? '#27ae60' : debugInfo.init?.includes('❌') ? '#c0392b' : '#3498db', fontWeight: 600 }">{{ debugInfo.init || '未知' }}</span></div>
         <div style="min-width:240px;font-size:12px;color:#555;">echarts 加载状态: <b>{{ echartsLoadState }}</b>{{ echartsLoadError ? '（' + echartsLoadError + '）' : '' }}</div>
         <div style="min-width:240px;">船舶数: {{ debugInfo.ships }} | 派任数: {{ debugInfo.assignments }} | 色条数: {{ debugInfo.bars }}</div>
-        <div style="min-width:260px;">Y轴类目数: {{ debugInfo.yCats }} | 最长船名字符数: {{ debugInfo.maxNameLen }} | gridLeft(建议): {{ debugInfo.gridLeftRec }}</div>
+        <div style="min-width:260px;">Y轴类目数: {{ debugInfo.yCats }} | 最长船名字符数: {{ debugInfo.maxNameLen }} | gridLeft(实际): {{ debugInfo.gridLeftRec }}</div>
         <div style="min-width:300px;">Y轴样例: {{ debugInfo.ySample }}</div>
         <div v-if="debugInfo.sample" style="min-width:320px;">色条样例: 船索引={{ debugInfo.sample.yIndex }}，船名={{ debugInfo.sample.shipName }}，{{ debugInfo.sample.start }} → {{ debugInfo.sample.end }}</div>
         <div v-else style="min-width:300px;color:#c0392b;font-weight:600;">⚠️ 没有生成任何色条（请检查派任记录的 shipId、startDate、endDate 是否合法）</div>
+        <div v-if="debugInfo.yMapDebug" style="width:100%;font-size:12px;color:#2c3e50;white-space:pre-wrap;">Y轴映射自检（前6行）: {{ debugInfo.yMapDebug }}</div>
         <div v-if="lastFatalWarn" style="min-width:320px;color:#e67e22;">永久 WARN: {{ lastFatalWarn }}</div>
         <div v-if="lastFatalError" style="width:100%;color:#c0392b;font-weight:600;white-space:pre-wrap;">永久 ERROR: {{ lastFatalError }}</div>
         <div v-if="lastInitSteps.length > 0" style="width:100%;font-size:12px;color:#34495e;white-space:pre-wrap;">初始化步骤追踪: {{ lastInitSteps.join(' → ') }}</div>
@@ -122,10 +123,26 @@ const safeAssignments = computed(() => props.assignments || [])
 
 const chartHeight = computed(() => Math.max(safeShips.value.length * 44 + 120, 260))
 
-// ★ 关键修复：yCategories / shipIdToYIndex / yIndexToShipId 三者必须从同一个 reversedShips 数组派生，
-//    彻底消灭索引错位（safeShips.slice().reverse().map(cn) 与 (length-1-i) 分别计算可能不一致）
+// ★ v0807h 终极修复：彻底消灭 Y 轴索引错位（经验 904365 教训：单一数据模型驱动所有渲染）
+//   1) reversedShips 唯一派生 yCategories (String[])
+//   2) 新增 cnShipNameToYIndex Map<cnShipName, number> —— 只有这一个源可以"船名→Y 索引"
+//   3) 新增 cnShipNameToShipId Map<cnShipName, number> —— axisLabel 从 val(船名) 直接反查 shipId，不再用 yIndexToShipId[idx] 二次猜测（二次猜会造成错位链）
+//   4) series.data.value[0] 仍然是 number（yIndex），但 yIndex 仅从 cnShipNameToYIndex 里拿
 const reversedShips = computed(() => safeShips.value.slice().reverse())
 const yCategories = computed(() => reversedShips.value.map((s) => s.cnShipName))
+const cnShipNameToYIndex = computed(() => {
+  const map = new Map<string, number>()
+  reversedShips.value.forEach((s, yIdx) => { map.set(String(s.cnShipName), yIdx) })
+  return map
+})
+const cnShipNameToShipId = computed(() => {
+  const map = new Map<string, number>()
+  reversedShips.value.forEach((s) => {
+    const id = Number(s.id)
+    if (!isNaN(id)) map.set(String(s.cnShipName), id)
+  })
+  return map
+})
 const shipIdToYIndex = computed(() => {
   const map = new Map<number, number>()
   reversedShips.value.forEach((s, yIdx) => {
@@ -455,7 +472,23 @@ function buildOption() {
   const names = yCategories.value
   let maxLen = 0
   for (const n of names) maxLen = Math.max(maxLen, String(n || '').length)
-  const gridLeftRec = Math.max(Math.min(maxLen * 14 + 20 + 50, 300), 150)
+  // ★ v0807h 统一 grid.left 计算公式：maxLen × 16px + 徽标 64px + padding 32px，上限 320，下限 150
+  const gridLeftRec = Math.max(Math.min(maxLen * 16 + 64 + 32, 320), 150)
+
+  // v0807h 新增 Y 轴映射自检：最近 6 行=船名/Y索引/shipId/vacant/色条数，方便定位错位问题
+  const yMapDebug: string[] = []
+  // 统计每条船有多少条色条
+  const yIdxBarCount = new Map<number, number>()
+  for (const b of bars) {
+    const yIdx = Number(b.value[0])
+    if (!isNaN(yIdx)) yIdxBarCount.set(yIdx, (yIdxBarCount.get(yIdx) || 0) + 1)
+  }
+  reversedShips.value.slice(0, 6).forEach((s, yIdx) => {
+    const shipId = Number(s.id)
+    const vacant = vacantIdSet.value.has(shipId) ? '🔴vacant' : '✅ok'
+    const cnt = yIdxBarCount.get(yIdx) ?? 0
+    yMapDebug.push(`Y${yIdx}=${String(s.cnShipName).slice(0,6)}(id${shipId})${vacant}色条${cnt}`)
+  })
   debugInfo.value = {
     ...(debugInfo.value || {}),
     ships: safeShips.value.length,
@@ -465,6 +498,7 @@ function buildOption() {
     maxNameLen: maxLen,
     gridLeftRec,
     ySample: names.slice(0, 5).join(' / ') + (names.length > 5 ? ` ...(共${names.length}条)` : ''),
+    yMapDebug: yMapDebug.join(' | '),
     sample: sample
       ? {
           yIndex: sample.value[0],
@@ -500,7 +534,18 @@ function buildOption() {
           <div>在船天数：${days} 天</div>`
       },
     },
-    grid: { left: 60, right: 40, top: 30, bottom: 70, containLabel: true },
+    grid: {
+      // ★ v0807h 修复左侧船名被遮：
+      //   containLabel=true 时 grid.left 作为"起始小值"，ECharts 会自动扩展到 label 实际宽度。
+      //   但为了彻底避免出现「空缺徽标 + 长船名」超出被裁，这里我们自己算出最小需要的像素值：
+      //   最长船名 maxLen × 16px（中文字号 12 实际宽度约 14+2padding）+ 徽标 64px + 左右 padding 32px
+      //   再取 "计算值 vs 150" 两者较大的，上限 320。
+      left: Math.max(Math.min(maxLen * 16 + 64 + 32, 320), 150),
+      right: 40,
+      top: 30,
+      bottom: 70,
+      containLabel: true,
+    },
     xAxis: {
       type: 'time',
       min: tr.min,
@@ -518,12 +563,19 @@ function buildOption() {
       axisLabel: {
         color: '#303133',
         fontSize: 12,
+        padding: [0, 10, 0, 4], // ★ v0807h 左侧留白，避免船名最左端紧挨画布边缘被裁
         formatter: (val: string, idx: number) => {
-          const shipId = yIndexToShipId.value[idx]
-          return vacantIdSet.value.has(shipId) ? `{name|${val}}{vacant|空缺}` : `{name|${val}}`
+          // ★ v0807h 修复：直接用"船名→shipId"唯一映射 cnShipNameToShipId 查，
+          //   绝对不要再用 yIndexToShipId.value[idx] 猜测（yIndex 和 ECharts 内部 idx 可能不同步
+          //   特别是 containLabel=true 动态扩展后，ECharts 可能微调索引）
+          const shipId = cnShipNameToShipId.value.get(String(val))
+          if (shipId !== undefined && vacantIdSet.value.has(shipId)) {
+            return `{name|${val}}{vacant|空缺}`
+          }
+          return `{name|${val}}`
         },
         rich: {
-          name: { color: '#303133', fontSize: 12, padding: [0, 6, 0, 0], lineHeight: 22 },
+          name: { color: '#303133', fontSize: 12, padding: [0, 8, 0, 6], lineHeight: 22 },
           vacant: {
             backgroundColor: 'rgba(245, 108, 108, 0.15)',
             borderColor: '#f56c6c', borderWidth: 1, color: '#c0392b',
