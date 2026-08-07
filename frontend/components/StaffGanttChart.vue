@@ -257,11 +257,12 @@ function initChart() {
   }
 
   try {
-    inited = true
+    // 关键：只有 echarts.init 真正成功后才标记 inited=true
     chartInstance = echarts.init(el)
     chartInstance.on('click', handleChartClick)
     applyOption()
     window.addEventListener('resize', handleResize)
+    inited = true
     debugInfo.value = {
       ...debugInfo.value,
       init: `✅ ECharts.init 成功（容器 ${Math.round(rect.width)}×${Math.round(rect.height)}px）`,
