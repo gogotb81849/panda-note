@@ -6,8 +6,9 @@
     <div v-else>
       <!-- 调试面板：直接显示数据状态（debugInfo 初始值非 null，所以一直显示） -->
       <div class="debug-panel">
-        <div style="font-weight:600;margin-bottom:4px;">调试面板 (v0807a)</div>
-        <div>初始化状态: <span :style="{ color: debugInfo.init?.includes('✅') ? '#27ae60' : debugInfo.init?.includes('❌') ? '#c0392b' : '#3498db', fontWeight: 600 }">{{ debugInfo.init || '未知' }}</span></div>
+        <div style="font-weight:600;margin-bottom:4px;">调试面板 (v0807b)</div>
+<div>初始化状态: <span :style="{ color: debugInfo.init?.includes('✅') ? '#27ae60' : debugInfo.init?.includes('❌') ? '#c0392b' : '#3498db', fontWeight: 600 }">{{ debugInfo.init || '未知' }}</span></div>
+<div style="margin-top:2px;font-size:12px;color:#555;">echarts 加载状态: <b>{{ echartsLoadState }}</b>{{ echartsLoadError ? '（' + echartsLoadError + '）' : '' }}</div>
         <div>船舶数: {{ debugInfo.ships }} | 派任数: {{ debugInfo.assignments }} | 色条数: {{ debugInfo.bars }}</div>
         <div>Y轴类目数: {{ debugInfo.yCats }} | 最长船名字符数: {{ debugInfo.maxNameLen }} | gridLeft(建议): {{ debugInfo.gridLeftRec }}</div>
         <div>Y轴样例: {{ debugInfo.ySample }}</div>
@@ -31,8 +32,16 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
-import * as echarts from 'echarts'
+// ★ 重要！删除顶层 echarts import：
+// 顶层 `import * as echarts from 'echarts'` 在 Nuxt SSR 阶段（Node 环境）就会被执行，
+// zrender 内部访问 window/Canvas API 导致整个模块损坏，到客户端后 init 调用就报
+// "s.setTimeout is not a function" 且 40 次重试全部失败。
+// 解决方案：用 await import('echarts') 在 initChart 中**客户端懒加载**。
 import type { StaffAssignment } from '~/types'
+
+// ★ echarts 客户端懒加载：只在浏览器中、第一次 initChart 时才真正 import
+type EChartsModule = typeof import('echarts')
+let echartsModule: EChartsModule | null = null
 
 type ShipItem = { id: number; cnShipName: string; teamDisplayName?: string; politicalOfficerName?: string }
 type AssignmentItem = {
@@ -213,13 +222,17 @@ const debugInfo = ref<any>({
   error: null,
 })
 
-// 图表实例
-let chartInstance: echarts.ECharts | null = null
+// 图表实例（用 EChartsModule 类型代替顶层 import 引用）
+let chartInstance: any = null
 // SSR 环境下没有 document，避免引用错误
 const isBrowser = typeof document !== 'undefined'
 // ★ 终极方案：用稳定的唯一 ID 直接 getElementById，不依赖 ref/ClientOnly
 //    每次组件挂载都生成新 ID，避免同一页面多个甘特图 ID 冲突
 const canvasUniqueId = 'staff-gantt-canvas-' + Math.random().toString(36).slice(2, 10)
+
+// echarts 加载状态（调试面板显示用，必须 ref，不然 UI 不更新）
+const echartsLoadState = ref<'未加载' | '加载中' | '已加载' | '加载失败'>('未加载')
+const echartsLoadError = ref<string | null>(null)
 
 let inited = false
 function resolveChartEl(): HTMLElement | null {
@@ -239,17 +252,46 @@ function resolveChartEl(): HTMLElement | null {
   return null
 }
 
-function initChart() {
+// ★ 客户端懒加载 echarts：保证绝对不会在 SSR 阶段 import
+async function loadECharts(): Promise<EChartsModule | null> {
+  if (!isBrowser) return null
+  if (echartsModule) return echartsModule
+  if (echartsLoadState.value === '加载中') return null // 正在加载，等待下一轮
+  try {
+    echartsLoadState.value = '加载中'
+    debugInfo.value = { ...debugInfo.value, init: '⏳ 正在客户端加载 echarts 5.5.0...' }
+    echartsModule = await import(/* webpackChunkName: "echarts" */ 'echarts')
+    echartsLoadState.value = '已加载'
+    debugInfo.value = { ...debugInfo.value, init: '✅ echarts 加载完成（客户端动态 import）' }
+    return echartsModule
+  } catch (e: any) {
+    echartsLoadState.value = '加载失败'
+    echartsLoadError.value = String(e?.message || e || 'unknown')
+    debugInfo.value = {
+      ...debugInfo.value,
+      init: '❌ echarts import 失败',
+      error: `import('echarts') 抛错: ${echartsLoadError.value}`,
+    }
+    console.error('[StaffGanttChart] dynamic import(echarts) failed:', e)
+    return null
+  }
+}
+
+async function initChart() {
   if (inited || chartInstance) return
   if (!isBrowser) return // SSR 直接跳过
 
+  // ★ 第一步：懒加载 echarts（客户端动态 import，SSR 阶段永远不会执行）
+  const echarts = await loadECharts()
+  if (!echarts) return // 还在加载中 or 加载失败，下一轮重试
+
   const el = resolveChartEl()
   if (!el) {
-    const byIdInfo = isBrowser ? document.getElementById(canvasUniqueId) : null
-    const qInfo = isBrowser ? document.querySelector('.staff-gantt-canvas') : null
+    const byIdInfo = document.getElementById(canvasUniqueId)
+    const qInfo = document.querySelector('.staff-gantt-canvas')
     debugInfo.value = {
       ...debugInfo.value,
-      warn: `DOM 未就绪（getElementById(id=${canvasUniqueId.slice(-8)})=null? ${!byIdInfo}, querySel=null? ${!qInfo}），继续重试`,
+      warn: `DOM 未就绪（echarts已${echartsLoadState.value}，getElementById(id=…${canvasUniqueId.slice(-6)})=null? ${!byIdInfo}, querySel=null? ${!qInfo}），继续重试`,
     }
     return
   }
@@ -273,7 +315,7 @@ function initChart() {
     inited = true
     debugInfo.value = {
       ...debugInfo.value,
-      init: `✅ ECharts.init 成功（容器 ${Math.round(rect.width)}×${Math.round(rect.height)}px，方法=getElementById）`,
+      init: `✅ ECharts.init 成功（容器 ${Math.round(rect.width)}×${Math.round(rect.height)}px，echarts=动态import,方法=getElementById）`,
       error: null,
       warn: null,
     }
@@ -286,7 +328,7 @@ function initChart() {
       ...debugInfo.value,
       init: '❌ ECharts.init 抛出异常',
       error: `[${e?.constructor?.name || 'Err'}] ${msg}${stack}`,
-      warn: `elType=${el.constructor.name} tag=${el.tagName} size=${Math.round(rect.width)}×${Math.round(rect.height)}`,
+      warn: `echarts加载=${echartsLoadState.value}，elType=${el.constructor.name} tag=${el.tagName} size=${Math.round(rect.width)}×${Math.round(rect.height)}`,
     }
     console.error('[StaffGanttChart] echarts.init failed:', e, 'element:', el)
   }

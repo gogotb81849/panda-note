@@ -1,7 +1,7 @@
 {
-  "version": "1.1.0.0802f",
+  "version": "1.1.0.0807",
   "previous_version": "1.1.0.0802c",
-  "buildTime": "2026-08-02T07:10:00.000Z",
+  "buildTime": "2026-08-07T12:07:56.792Z",
   "environment": "production",
   "nodeVersion": "auto",
   "changes": [
