@@ -18,9 +18,9 @@
               :value="ship.id"
             />
           </el-select>
-          <!-- ★ v0807j 永远可见版本号（用户一打开就知道是不是最新部署） -->
+          <!-- ★ v0807k 永远可见版本号（用户一打开就知道是不是最新部署） -->
           <div style="font-size:12px;color:#606266;font-weight:600;padding:0 8px;">
-            🏷️ 页面 <span style="color:#409eff;">v0807j</span> · TAG <span style="color:#27ae60;">1.1.0.0807j</span>
+            🏷️ 页面 <span style="color:#409eff;">v0807k</span> · TAG <span style="color:#27ae60;">1.1.0.0807k</span>
           </div>
         </div>
         <div class="toolbar-right">
