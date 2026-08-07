@@ -7,7 +7,7 @@
       <!-- 调试面板：默认隐藏，双击甘特图区域才显示（开发调试入口）
            正式上线默认隐藏，页面清爽；需要排查问题时双击 wrapper 可再显示所有诊断信息 -->
       <div class="debug-panel" v-show="debugVisible" style="display:flex;flex-wrap:wrap;gap:4px 16px;padding:10px 12px;">
-        <div style="width:100%;font-weight:600;margin-bottom:2px;">调试面板 (v0807f) · 双击下方色条区域可关闭</div>
+        <div style="width:100%;font-weight:600;margin-bottom:2px;">调试面板 (v0807g) · 双击下方色条区域可关闭</div>
         <div style="min-width:280px;">初始化状态: <span :style="{ color: debugInfo.init?.includes('✅') ? '#27ae60' : debugInfo.init?.includes('❌') ? '#c0392b' : '#3498db', fontWeight: 600 }">{{ debugInfo.init || '未知' }}</span></div>
         <div style="min-width:240px;font-size:12px;color:#555;">echarts 加载状态: <b>{{ echartsLoadState }}</b>{{ echartsLoadError ? '（' + echartsLoadError + '）' : '' }}</div>
         <div style="min-width:240px;">船舶数: {{ debugInfo.ships }} | 派任数: {{ debugInfo.assignments }} | 色条数: {{ debugInfo.bars }}</div>
@@ -122,26 +122,19 @@ const safeAssignments = computed(() => props.assignments || [])
 
 const chartHeight = computed(() => Math.max(safeShips.value.length * 44 + 120, 260))
 
-const yCategories = computed(() =>
-  safeShips.value.slice().reverse().map((s) => s.cnShipName),
-)
-
+// ★ 关键修复：yCategories / shipIdToYIndex / yIndexToShipId 三者必须从同一个 reversedShips 数组派生，
+//    彻底消灭索引错位（safeShips.slice().reverse().map(cn) 与 (length-1-i) 分别计算可能不一致）
+const reversedShips = computed(() => safeShips.value.slice().reverse())
+const yCategories = computed(() => reversedShips.value.map((s) => s.cnShipName))
 const shipIdToYIndex = computed(() => {
   const map = new Map<number, number>()
-  safeShips.value.forEach((s, i) => {
+  reversedShips.value.forEach((s, yIdx) => {
     const id = Number(s.id)
-    if (!isNaN(id)) map.set(id, safeShips.value.length - 1 - i)
+    if (!isNaN(id)) map.set(id, yIdx)
   })
   return map
 })
-
-const yIndexToShipId = computed(() => {
-  const arr: number[] = new Array(safeShips.value.length)
-  safeShips.value.forEach((s, i) => {
-    arr[safeShips.value.length - 1 - i] = Number(s.id)
-  })
-  return arr
-})
+const yIndexToShipId = computed(() => reversedShips.value.map((s) => Number(s.id)))
 
 const vacantIdSet = computed(() =>
   new Set((props.vacantShipIds || []).map((id: any) => Number(id))),
@@ -189,8 +182,20 @@ const ganttBars = computed(() => {
     const shipIdNum = Number(a.shipId)
     const shipRelIdNum = Number(a.ship?.id)
     const lookupId = !isNaN(shipIdNum) ? shipIdNum : shipRelIdNum
+    if (isNaN(lookupId)) continue
     const yIndex = shipsMap.get(lookupId)
     if (yIndex === undefined) continue
+
+    // ★ 船舶视角需求（001 优化文档）：空缺船舶当前无任何在任政委，
+    //   该行不绘制任何派任色条——完全空着 + 红色「空缺」徽标在 Y 轴上就够了
+    //   防止把"历史上任/休假/已下船"的派任错画到空缺船行上
+    if (vacantIdSet.value.has(lookupId)) continue
+
+    // ★ 船舶视角需求（001 优化文档）：不要出现独立的「休假」色条
+    //   同一艘船同一时段如果在任状态已被其他派任覆盖，休假（status=leave）派任不单独绘制
+    //   如果派任同时是 ended(已下船) + leave，也按历史在任绘制（透明度不同），不画独立虚线休假条
+    const status = (a.status || '').toLowerCase()
+    if (status === 'leave') continue
 
     const start = new Date(a.startDate).getTime()
     const end = a.endDate ? new Date(a.endDate).getTime() : Date.now()
@@ -200,30 +205,19 @@ const ganttBars = computed(() => {
     const startStr = new Date(start).toISOString().slice(0, 10)
     const endStr = a.endDate ? new Date(end).toISOString().slice(0, 10) : '至今'
     const name = a.user?.realName || a.ship?.politicalOfficerName || '未指派'
-    const labelText = a.status === 'leave'
-      ? `${name}（休假 ${days} 天）`
-      : `${name}（${days} 天）${startStr}${a.endDate ? '~' + endStr.slice(5) : '→至今'}`
+    const ended = status === 'ended' || !!a.endDate
+    const labelText = `${name}（${days}天）${startStr}${a.endDate ? '~' + endStr.slice(5) : '→至今'}`
 
     out.push({
       value: [yIndex, start, end],
       _assignmentId: a.id,
+      _labelText: labelText, // series.label.formatter 统一读取
       itemStyle: {
         color: getBarColor(a),
-        opacity: a.status === 'leave' ? 0.55 : a.status === 'ended' || a.endDate ? 0.65 : 1,
+        opacity: ended ? 0.65 : 1,
         borderRadius: [3, 3, 3, 3],
-        borderColor: a.status === 'leave' ? '#a8abb2' : 'transparent',
-        borderWidth: a.status === 'leave' ? 1.5 : 0,
-        borderType: a.status === 'leave' ? 'dashed' : 'solid',
-      },
-      label: {
-        show: true,
-        formatter: labelText,
-        position: 'insideLeft',
-        color: a.status === 'leave' ? '#606266' : '#ffffff',
-        fontSize: 11,
-        fontWeight: 500,
-        overflow: 'truncate',
-        padding: [0, 6],
+        borderColor: 'transparent',
+        borderWidth: 0,
       },
     })
   }
@@ -565,6 +559,18 @@ function buildOption() {
       barMinHeight: 2,
       clip: false,
       z: 10,
+      // ★ ECharts 5.x 对 encode:{x:[1,2]} 时间跨度 bar，
+      //   data[i].label 子对象配置有时不生效，必须在 series.label 上配 show + formatter
+      label: {
+        show: true,
+        position: 'insideLeft',
+        color: '#ffffff',
+        fontSize: 11,
+        fontWeight: 500,
+        overflow: 'truncate',
+        padding: [0, 6],
+        formatter: (params: any) => String(params?.data?._labelText || params?.data?.label?.formatter || ''),
+      },
       markLine: {
         silent: true,
         symbol: ['none', 'none'],
