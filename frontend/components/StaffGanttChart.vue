@@ -6,7 +6,7 @@
     <div v-else>
       <!-- 调试面板：直接显示数据状态（debugInfo 初始值非 null，所以一直显示） -->
       <div class="debug-panel">
-        <div style="font-weight:600;margin-bottom:4px;">调试面板 (v0807b)</div>
+        <div style="font-weight:600;margin-bottom:4px;">调试面板 (v0807c)</div>
 <div>初始化状态: <span :style="{ color: debugInfo.init?.includes('✅') ? '#27ae60' : debugInfo.init?.includes('❌') ? '#c0392b' : '#3498db', fontWeight: 600 }">{{ debugInfo.init || '未知' }}</span></div>
 <div style="margin-top:2px;font-size:12px;color:#555;">echarts 加载状态: <b>{{ echartsLoadState }}</b>{{ echartsLoadError ? '（' + echartsLoadError + '）' : '' }}</div>
         <div>船舶数: {{ debugInfo.ships }} | 派任数: {{ debugInfo.assignments }} | 色条数: {{ debugInfo.bars }}</div>
@@ -235,6 +235,11 @@ const echartsLoadState = ref<'未加载' | '加载中' | '已加载' | '加载�
 const echartsLoadError = ref<string | null>(null)
 
 let inited = false
+// ★ 并发锁：initChart 是 async，setInterval 每 300ms 不 await 就触发，
+//    必须保证同一时刻只有一个 initChart 执行链路在跑，否则多个 async
+//    都会调用 echarts.init(el) 同一个 div，第二次 init 会 dispose 第一次，
+//    然后第一次后续代码就会报 "Cannot read properties of undefined (reading '__ec_inner_xx')"
+let initRunning = false
 function resolveChartEl(): HTMLElement | null {
   if (!isBrowser) return null // SSR 直接跳过
   // ★ 优先级 1（最可靠）：直接通过我们自己的稳定 ID 获取
@@ -280,6 +285,19 @@ async function loadECharts(): Promise<EChartsModule | null> {
 async function initChart() {
   if (inited || chartInstance) return
   if (!isBrowser) return // SSR 直接跳过
+  // 并发锁：同一时刻只允许一个 initChart 链路执行
+  if (initRunning) return
+  initRunning = true
+  try {
+    await doInitChart()
+  } finally {
+    initRunning = false
+  }
+}
+
+async function doInitChart() {
+  if (inited || chartInstance) return
+  if (!isBrowser) return
 
   // ★ 第一步：懒加载 echarts（客户端动态 import，SSR 阶段永远不会执行）
   const echarts = await loadECharts()
@@ -307,23 +325,52 @@ async function initChart() {
   }
 
   try {
+    // ★ 防重复 init 检查：如果 el 已经被之前某次并发 init 过了（有 __ec_inner_xx 属性），
+    //    直接 getInstanceByDom 拿现有实例，绝对不要 echarts.init 第二次！
+    //    （ECharts 会在 el 上挂 __ec_inner_<随机后缀> 作为唯一实例标记）
+    let alreadyInit = false
+    try {
+      const keys = Object.keys(el)
+      for (const k of keys) {
+        if (k.startsWith('__ec_inner_')) { alreadyInit = true; break }
+      }
+    } catch (_) { /* ignore */ }
+    let localInstance: any = null
+    if (alreadyInit) {
+      try {
+        localInstance = (echarts as any).getInstanceByDom ? (echarts as any).getInstanceByDom(el) : null
+      } catch (_) { localInstance = null }
+    }
+
+    if (!localInstance) {
+      // 真正安全的 init：只有 el 上没有任何 __ec_inner_ 标记时才调用 echarts.init
+      localInstance = echarts.init(el)
+    }
+
     // 关键：只有 echarts.init 真正成功后才标记 inited=true（确保失败后下一次还能重试）
-    chartInstance = echarts.init(el)
+    chartInstance = localInstance
+    try { chartInstance.off('click') } catch (_) { /* ignore */ }
     chartInstance.on('click', handleChartClick)
     applyOption()
+    window.removeEventListener('resize', handleResize)
     window.addEventListener('resize', handleResize)
     inited = true
     debugInfo.value = {
       ...debugInfo.value,
-      init: `✅ ECharts.init 成功（容器 ${Math.round(rect.width)}×${Math.round(rect.height)}px，echarts=动态import,方法=getElementById）`,
+      init: `✅ ECharts.init 成功（容器 ${Math.round(rect.width)}×${Math.round(rect.height)}px，echarts=动态import${alreadyInit ? ',复用已存在实例' : ',全新init'},方法=getElementById）`,
       error: null,
       warn: null,
     }
   } catch (e: any) {
+    // ★ 失败兜底：如果 init 抛错，立刻 dispose 可能半初始化的实例，
+    //    并且把 chartInstance 置空，保证下一轮 retry 可以继续尝试
+    if (chartInstance) {
+      try { chartInstance.dispose() } catch (_) { /* ignore */ }
+      chartInstance = null
+    }
     inited = false
-    chartInstance = null
     const msg = String(e?.message || e || 'unknown')
-    const stack = e?.stack ? '\n...STACK:' + String(e.stack).slice(0, 300) : ''
+    const stack = e?.stack ? '\n...STACK:' + String(e.stack).slice(0, 500) : ''
     debugInfo.value = {
       ...debugInfo.value,
       init: '❌ ECharts.init 抛出异常',
