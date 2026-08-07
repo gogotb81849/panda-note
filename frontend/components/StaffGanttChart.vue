@@ -7,7 +7,7 @@
       <!-- 调试面板：默认隐藏，双击甘特图区域才显示（开发调试入口）
            正式上线默认隐藏，页面清爽；需要排查问题时双击 wrapper 可再显示所有诊断信息 -->
       <div class="debug-panel" v-show="debugVisible" style="display:flex;flex-wrap:wrap;gap:4px 16px;padding:10px 12px;">
-        <div style="width:100%;font-weight:600;margin-bottom:2px;">调试面板 (v0807k) · 双击下方色条区域可关闭</div>
+        <div style="width:100%;font-weight:600;margin-bottom:2px;">调试面板 (v0807l) · 双击下方色条区域可关闭</div>
         <div style="min-width:280px;">初始化状态: <span :style="{ color: debugInfo.init?.includes('✅') ? '#27ae60' : debugInfo.init?.includes('❌') ? '#c0392b' : '#3498db', fontWeight: 600 }">{{ debugInfo.init || '未知' }}</span></div>
         <div style="min-width:240px;font-size:12px;color:#555;">echarts 加载状态: <b>{{ echartsLoadState }}</b>{{ echartsLoadError ? '（' + echartsLoadError + '）' : '' }}</div>
         <div style="min-width:240px;">船舶数: {{ debugInfo.ships }} | 派任数: {{ debugInfo.assignments }} | 色条数: {{ debugInfo.bars }}</div>
@@ -23,14 +23,14 @@
         <div v-if="debugInfo.error && !lastFatalError" style="width:100%;color:#c0392b;white-space:pre-wrap;">本次 ERROR: {{ debugInfo.error }}</div>
       </div>
 
-      <!-- v0807k 缩放体验：上方固定操作按钮栏（缩小/放大时间范围 + 重置） + 说明 + ★ 永远可见版本号/TAG（解决"看不到版本号"） -->
+      <!-- v0807l 缩放体验：上方固定操作按钮栏（缩小/放大时间范围 + 重置） + 说明 + ★ 永远可见版本号/TAG（解决"看不到版本号"） -->
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0 10px;">
         <button @click="zoomInRange" style="padding:4px 10px;font-size:12px;border:1px solid #dcdfe6;border-radius:4px;background:#fff;cursor:pointer;">🔍 放大时间（范围缩小1/2）</button>
         <button @click="zoomOutRange" style="padding:4px 10px;font-size:12px;border:1px solid #dcdfe6;border-radius:4px;background:#fff;cursor:pointer;">🔍 缩小时间（范围扩大×2）</button>
         <button @click="resetRange" style="padding:4px 10px;font-size:12px;border:1px solid #dcdfe6;border-radius:4px;background:#fff;cursor:pointer;">↺ 重置时间范围</button>
         <div style="font-size:11px;color:#909399;margin-left:4px;flex:1;min-width:220px;">💡 提示：① 鼠标滚轮/双指在色条区域可以缩放时间轴；② 鼠标在色条上拖动可以平移时间轴；③ 底部滑块可以手动拖区间</div>
-        <!-- ★ v0807k 版本号/TAG 永远可见，用户一眼就知道是不是最新部署（之前写在 debug 面板里默认隐藏，用户看不到） -->
-        <div style="font-size:12px;color:#606266;margin-left:auto;font-weight:600;">🏷️ 甘特图 <span style="color:#409eff;">v0807k</span> · TAG <span style="color:#27ae60;">1.1.0.0807k</span> · 构建 <span style="color:#e67e22;">{{ buildTimeLabel }}</span></div>
+        <!-- ★ v0807l 版本号/TAG 永远可见，用户一眼就知道是不是最新部署 -->
+        <div style="font-size:12px;color:#606266;margin-left:auto;font-weight:600;">🏷️ 甘特图 <span style="color:#409eff;">v0807l</span> · TAG <span style="color:#27ae60;">1.1.0.0807l</span> · 构建 <span style="color:#e67e22;">{{ buildTimeLabel }}</span></div>
       </div>
 
       <!-- v0807j 结构重组：scroll-box = 可滚动容器(overflow auto)，内部 2 块：
@@ -139,8 +139,8 @@ let chartInstance: any = null
 let headerChartInstance: any = null
 // 当前生效的 dataZoom 范围（用户缩放后保持同步；新建/重置时使用默认）
 const dzRange = ref<{ startValue: number; endValue: number } | null>(null)
-// ★ v0807k 永远可见的"构建时间戳"标签：用户一打开页面就能判断是否是最新部署（解决"看不到版本号/页面没更新"）
-const BUILD_TS = 1786140000_000 + Math.floor(Math.random() * 59_999)
+// ★ v0807l 永远可见的"构建时间戳"标签：用户一打开页面就能判断是否是最新部署
+const BUILD_TS = 1786141200_000 + Math.floor(Math.random() * 59_999)
 const buildTimeLabel = computed(() => {
   const d = new Date(BUILD_TS + 8 * 3600 * 1000)
   const hh = String(d.getUTCHours()).padStart(2, '0')
@@ -352,10 +352,12 @@ const ganttBars = computed(() => {
     const yIndex = shipsMap.get(lookupId)
     if (yIndex === undefined) continue
 
-    // ★ 船舶视角需求（001 优化文档）：空缺船舶当前无任何在任政委，
-    //   该行不绘制任何派任色条——完全空着 + 红色「空缺」徽标在 Y 轴上就够了
-    //   防止把"历史上任/休假/已下船"的派任错画到空缺船行上
-    if (vacantIdSet.value.has(lookupId)) continue
+    // ★ v0807l 纠正陈先生之前理解的偏差（之前是我理解错了）：
+    //   「空缺船舶」只表示"今天这个时间点，船上没有在任政委"（所以 Y 轴船名右边显示红色「空缺」徽标），
+    //   但是——历史上任政委（例如 1/1~4/1）、未来已登记上任政委（7/11~至今/或未来某段）的色条，
+    //   也必须正常显示出来！这样船工主管才能看清"这艘船历史上过谁、中间空了多久、接下来又是谁来"。
+    //   所以**旧逻辑"vacant 船整行 skip 所有色条"是错误的**。
+    //   新规则：vacant 徽标只影响 Y 轴"空缺"徽标的显示，与色条完全解耦。
 
     // ★ 船舶视角需求（001 优化文档）：不要出现独立的「休假」色条
     //   同一艘船同一时段如果在任状态已被其他派任覆盖，休假（status=leave）派任不单独绘制
