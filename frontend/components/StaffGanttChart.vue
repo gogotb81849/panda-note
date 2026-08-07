@@ -4,11 +4,10 @@
       <p>{{ loading ? '加载中...' : '暂无船舶数据' }}</p>
     </div>
     <div v-else>
-      <!-- 调试面板：v0807d 升级——
-           - flex-wrap 适配手机窄屏（解决竖屏文字挤到竖排）
-           - 新增『永久错误 / 永久警告 / 初始化步骤追踪』独立 ref，绝不被其他赋值覆盖丢失 -->
-      <div class="debug-panel" style="display:flex;flex-wrap:wrap;gap:4px 16px;padding:10px 12px;">
-        <div style="width:100%;font-weight:600;margin-bottom:2px;">调试面板 (v0807e)</div>
+      <!-- 调试面板：默认隐藏，双击甘特图区域才显示（开发调试入口）
+           正式上线默认隐藏，页面清爽；需要排查问题时双击 wrapper 可再显示所有诊断信息 -->
+      <div class="debug-panel" v-show="debugVisible" style="display:flex;flex-wrap:wrap;gap:4px 16px;padding:10px 12px;">
+        <div style="width:100%;font-weight:600;margin-bottom:2px;">调试面板 (v0807f) · 双击下方色条区域可关闭</div>
         <div style="min-width:280px;">初始化状态: <span :style="{ color: debugInfo.init?.includes('✅') ? '#27ae60' : debugInfo.init?.includes('❌') ? '#c0392b' : '#3498db', fontWeight: 600 }">{{ debugInfo.init || '未知' }}</span></div>
         <div style="min-width:240px;font-size:12px;color:#555;">echarts 加载状态: <b>{{ echartsLoadState }}</b>{{ echartsLoadError ? '（' + echartsLoadError + '）' : '' }}</div>
         <div style="min-width:240px;">船舶数: {{ debugInfo.ships }} | 派任数: {{ debugInfo.assignments }} | 色条数: {{ debugInfo.bars }}</div>
@@ -23,7 +22,7 @@
         <div v-if="debugInfo.error && !lastFatalError" style="width:100%;color:#c0392b;white-space:pre-wrap;">本次 ERROR: {{ debugInfo.error }}</div>
       </div>
 
-      <div class="staff-gantt-wrapper" :style="{ height: chartHeight + 'px' }">
+      <div class="staff-gantt-wrapper" :style="{ height: chartHeight + 'px' }" @dblclick="onDblClickWrapper">
         <!-- ★ 终极兜底：彻底绕开 ClientOnly/ref 绑定问题
              - 用稳定的 ID 直接定位元素
              - 不使用 <ClientOnly> 包裹（Nuxt 3 SSR 时用 document 判断自动跳过，不报错）
@@ -47,6 +46,12 @@ import type { StaffAssignment } from '~/types'
 // ★ echarts 客户端懒加载：只在浏览器中、第一次 initChart 时才真正 import
 type EChartsModule = typeof import('echarts')
 let echartsModule: EChartsModule | null = null
+
+// 调试面板显示/隐藏：默认隐藏，双击甘特图区域才显示（开发调试入口）
+const debugVisible = ref(false)
+function onDblClickWrapper() {
+  debugVisible.value = !debugVisible.value
+}
 
 type ShipItem = { id: number; cnShipName: string; teamDisplayName?: string; politicalOfficerName?: string }
 type AssignmentItem = {
@@ -191,6 +196,14 @@ const ganttBars = computed(() => {
     const end = a.endDate ? new Date(a.endDate).getTime() : Date.now()
     if (isNaN(start) || isNaN(end) || end <= start) continue
 
+    const days = Math.max(1, Math.round((end - start) / DAY_MS))
+    const startStr = new Date(start).toISOString().slice(0, 10)
+    const endStr = a.endDate ? new Date(end).toISOString().slice(0, 10) : '至今'
+    const name = a.user?.realName || a.ship?.politicalOfficerName || '未指派'
+    const labelText = a.status === 'leave'
+      ? `${name}（休假 ${days} 天）`
+      : `${name}（${days} 天）${startStr}${a.endDate ? '~' + endStr.slice(5) : '→至今'}`
+
     out.push({
       value: [yIndex, start, end],
       _assignmentId: a.id,
@@ -204,9 +217,9 @@ const ganttBars = computed(() => {
       },
       label: {
         show: true,
-        formatter: a.user?.realName || a.ship?.politicalOfficerName || '未指派',
+        formatter: labelText,
         position: 'insideLeft',
-        color: '#ffffff',
+        color: a.status === 'leave' ? '#606266' : '#ffffff',
         fontSize: 11,
         fontWeight: 500,
         overflow: 'truncate',
