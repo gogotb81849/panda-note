@@ -8,7 +8,7 @@
            - flex-wrap 适配手机窄屏（解决竖屏文字挤到竖排）
            - 新增『永久错误 / 永久警告 / 初始化步骤追踪』独立 ref，绝不被其他赋值覆盖丢失 -->
       <div class="debug-panel" style="display:flex;flex-wrap:wrap;gap:4px 16px;padding:10px 12px;">
-        <div style="width:100%;font-weight:600;margin-bottom:2px;">调试面板 (v0807d)</div>
+        <div style="width:100%;font-weight:600;margin-bottom:2px;">调试面板 (v0807e)</div>
         <div style="min-width:280px;">初始化状态: <span :style="{ color: debugInfo.init?.includes('✅') ? '#27ae60' : debugInfo.init?.includes('❌') ? '#c0392b' : '#3498db', fontWeight: 600 }">{{ debugInfo.init || '未知' }}</span></div>
         <div style="min-width:240px;font-size:12px;color:#555;">echarts 加载状态: <b>{{ echartsLoadState }}</b>{{ echartsLoadError ? '（' + echartsLoadError + '）' : '' }}</div>
         <div style="min-width:240px;">船舶数: {{ debugInfo.ships }} | 派任数: {{ debugInfo.assignments }} | 色条数: {{ debugInfo.bars }}</div>
@@ -525,7 +525,19 @@ function buildOption() {
         },
       },
       splitLine: { show: true, lineStyle: { color: '#f5f5f5' } },
-      splitArea: { show: true, interval: 0, areaStyle: splitAreaStyles.value },
+      // ★ 修复 v0807d 致命错误：yAxis.splitArea.areaStyle 在 ECharts 5.x 只接受单个 Object，
+      //   传数组的话 ECharts 内部会按 index 去 areaStyle[idx]，当行数超过数组长度时
+      //   返回 null，再访问 .length → "Cannot read properties of null (reading 'length')"
+      //   直接炸整个 applyOption → dispose
+      //   这里改成单 Object 间隔色，空缺船舶仍靠 axisLabel.rich「空缺」徽标 + 色条样式区分，
+      //   完全不影响需求显示
+      splitArea: {
+        show: true,
+        interval: 0,
+        areaStyle: {
+          color: ['rgba(0,0,0,0.02)', 'rgba(0,0,0,0.05)'],
+        },
+      },
     },
     dataZoom: [
       { type: 'slider', xAxisIndex: 0, startValue: defaultStart, endValue: defaultEnd, height: 20, bottom: 10, borderColor: '#dcdfe6' },
