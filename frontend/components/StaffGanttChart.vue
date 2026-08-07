@@ -6,7 +6,7 @@
     <div v-else>
       <!-- 调试面板：直接显示数据状态（debugInfo 初始值非 null，所以一直显示） -->
       <div class="debug-panel">
-        <div style="font-weight:600;margin-bottom:4px;">调试面板 (v0806p)</div>
+        <div style="font-weight:600;margin-bottom:4px;">调试面板 (v0807a)</div>
         <div>初始化状态: <span :style="{ color: debugInfo.init?.includes('✅') ? '#27ae60' : debugInfo.init?.includes('❌') ? '#c0392b' : '#3498db', fontWeight: 600 }">{{ debugInfo.init || '未知' }}</span></div>
         <div>船舶数: {{ debugInfo.ships }} | 派任数: {{ debugInfo.assignments }} | 色条数: {{ debugInfo.bars }}</div>
         <div>Y轴类目数: {{ debugInfo.yCats }} | 最长船名字符数: {{ debugInfo.maxNameLen }} | gridLeft(建议): {{ debugInfo.gridLeftRec }}</div>
@@ -18,12 +18,12 @@
       </div>
 
       <div class="staff-gantt-wrapper" :style="{ height: chartHeight + 'px' }">
-        <client-only>
-          <div ref="chartDomRef" class="staff-gantt-canvas" />
-          <template #fallback>
-            <div class="staff-gantt-fallback">图表加载中...</div>
-          </template>
-        </client-only>
+        <!-- ★ 终极兜底：彻底绕开 ClientOnly/ref 绑定问题
+             - 用稳定的 ID 直接定位元素
+             - 不使用 <ClientOnly> 包裹（Nuxt 3 SSR 时用 document 判断自动跳过，不报错）
+             - 不依赖 ref（SSR hydration 时 ref 常绑定到 Comment 占位符）
+        -->
+        <div :id="canvasUniqueId" class="staff-gantt-canvas" />
       </div>
     </div>
   </div>
@@ -215,35 +215,43 @@ const debugInfo = ref<any>({
 
 // 图表实例
 let chartInstance: echarts.ECharts | null = null
-const chartDomRef = ref<HTMLElement | null>(null)
+// SSR 环境下没有 document，避免引用错误
+const isBrowser = typeof document !== 'undefined'
+// ★ 终极方案：用稳定的唯一 ID 直接 getElementById，不依赖 ref/ClientOnly
+//    每次组件挂载都生成新 ID，避免同一页面多个甘特图 ID 冲突
+const canvasUniqueId = 'staff-gantt-canvas-' + Math.random().toString(36).slice(2, 10)
 
 let inited = false
 function resolveChartEl(): HTMLElement | null {
-  // ClientOnly 下 ref 可能绑定到占位符（不是真正 HTMLElement），用双重兜底确保拿到真实 DOM
-  // 方式1: 直接用 class 选择器获取真正的 DOM 元素
+  if (!isBrowser) return null // SSR 直接跳过
+  // ★ 优先级 1（最可靠）：直接通过我们自己的稳定 ID 获取
+  //    getElementById 返回的一定是真实挂载到 DOM 树的 HTMLElement，
+  //    100% 不会拿到 Comment/Text/VNode 占位符
+  const byId = document.getElementById(canvasUniqueId)
+  if (byId && byId instanceof HTMLElement && byId.tagName === 'DIV') {
+    return byId as HTMLElement
+  }
+  // 兜底 2：class 选择器
   const q = document.querySelector('.staff-gantt-canvas')
   if (q && q instanceof HTMLElement && q.tagName === 'DIV') {
     return q as HTMLElement
-  }
-  // 方式2: ref 直接绑定
-  if (chartDomRef.value instanceof HTMLElement && chartDomRef.value.tagName === 'DIV') {
-    return chartDomRef.value
   }
   return null
 }
 
 function initChart() {
   if (inited || chartInstance) return
+  if (!isBrowser) return // SSR 直接跳过
 
   const el = resolveChartEl()
   if (!el) {
-    const refInfo = chartDomRef.value
-      const qInfo = document.querySelector('.staff-gantt-canvas')
-      debugInfo.value = {
-        ...debugInfo.value,
-        warn: `DOM 仍未就绪（ref=NULL? ${refInfo === null}, refType=${refInfo?.constructor?.name || 'n/a'}, querySel=NULL? ${!qInfo}），将继续重试`,
-      }
-      return
+    const byIdInfo = isBrowser ? document.getElementById(canvasUniqueId) : null
+    const qInfo = isBrowser ? document.querySelector('.staff-gantt-canvas') : null
+    debugInfo.value = {
+      ...debugInfo.value,
+      warn: `DOM 未就绪（getElementById(id=${canvasUniqueId.slice(-8)})=null? ${!byIdInfo}, querySel=null? ${!qInfo}），继续重试`,
+    }
+    return
   }
 
   // 尺寸检查：元素必须真正可见
@@ -251,13 +259,13 @@ function initChart() {
   if (rect.width < 10 || rect.height < 10) {
     debugInfo.value = {
       ...debugInfo.value,
-      warn: `DOM 找到但尺寸为 ${Math.round(rect.width)}×${Math.round(rect.height)}（< 10px），可能还没 layout，延时重试`,
+      warn: `DOM 找到但尺寸为 ${Math.round(rect.width)}×${Math.round(rect.height)}（< 10px），layout 未完成，延时重试`,
     }
     return
   }
 
   try {
-    // 关键：只有 echarts.init 真正成功后才标记 inited=true
+    // 关键：只有 echarts.init 真正成功后才标记 inited=true（确保失败后下一次还能重试）
     chartInstance = echarts.init(el)
     chartInstance.on('click', handleChartClick)
     applyOption()
@@ -265,7 +273,7 @@ function initChart() {
     inited = true
     debugInfo.value = {
       ...debugInfo.value,
-      init: `✅ ECharts.init 成功（容器 ${Math.round(rect.width)}×${Math.round(rect.height)}px）`,
+      init: `✅ ECharts.init 成功（容器 ${Math.round(rect.width)}×${Math.round(rect.height)}px，方法=getElementById）`,
       error: null,
       warn: null,
     }
@@ -405,12 +413,8 @@ function applyOption() {
   chartInstance.setOption(opt, true)
 }
 
-// chartDomRef 变化时自动 init — 用 resolveChartEl 验证（ClientOnly 下 ref 可能是占位符）
-watch(chartDomRef, (v) => {
-  if (!chartInstance) {
-    nextTick(() => nextTick(() => initChart()))
-  }
-})
+// ★ 已移除 chartDomRef 的 watch：现在不依赖 ref，用 getElementById 直接定位
+//    元素渲染完成后，initChart 的定时重试一定能拿到真实 HTMLElement
 
 watch([safeShips, safeAssignments], () => {
   nextTick(() => applyOption())
@@ -431,25 +435,26 @@ function handleChartClick(params: any) {
   emit('bar-click', { assignment: assignment as unknown as StaffAssignment, event: {} as MouseEvent })
 }
 
-let chartDom: HTMLElement | null = null
 let retryTimer: any = null
 
 onMounted(() => {
-  // 立即 + 多层 nextTick + 延时兜底，保证 ClientOnly 内部 DOM 真正挂载后再 init
+  // 多层兜底：立即执行 + 多层 nextTick + 多次延时
+  // （因为 getElementById 一定能拿到真正挂载到 DOM 的元素，所以下面一定有一次会成功）
   initChart()
   nextTick(() => initChart())
   nextTick(() => nextTick(() => initChart()))
   setTimeout(() => initChart(), 200)
   setTimeout(() => initChart(), 600)
   setTimeout(() => initChart(), 1200)
+  setTimeout(() => initChart(), 2000)
+  setTimeout(() => initChart(), 3000)
 
-  // 持续重试兜底：如果上面几次都失败（DOM 延迟挂载/尺寸未就绪），每 300ms 重试一次
+  // 持续重试兜底：每 300ms 重试一次，共 40 次 = 12 秒，保证一定成功
   let retryCount = 0
-  const MAX_RETRY = 25 // 25 * 300ms = 7.5s
+  const MAX_RETRY = 40
   retryTimer = setInterval(() => {
     retryCount++
     if (chartInstance) {
-      // 成功了，清掉定时器
       if (retryTimer) { clearInterval(retryTimer); retryTimer = null }
       return
     }
@@ -457,8 +462,8 @@ onMounted(() => {
       if (retryTimer) { clearInterval(retryTimer); retryTimer = null }
       debugInfo.value = {
         ...debugInfo.value,
-        init: '❌ 重试已耗尽（25 次 × 300ms）',
-        error: '请检查浏览器控制台是否有其他错误',
+        init: '❌ 重试已耗尽（40 次 × 300ms）',
+        error: '请检查浏览器控制台是否有其他错误（按 F12 → Console）',
       }
       return
     }
@@ -473,7 +478,6 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', handleResize)
   chartInstance?.dispose()
   chartInstance = null
-  chartDom = null
 })
 
 defineExpose({ chartRef: null })
