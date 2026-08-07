@@ -18,9 +18,9 @@
               :value="ship.id"
             />
           </el-select>
-          <!-- ★ v0807l 永远可见版本号（用户一打开就知道是不是最新部署） -->
+          <!-- ★ v0807m 永远可见版本号（用户一打开就知道是不是最新部署） -->
           <div style="font-size:12px;color:#606266;font-weight:600;padding:0 8px;">
-            🏷️ 页面 <span style="color:#409eff;">v0807l</span> · TAG <span style="color:#27ae60;">1.1.0.0807l</span>
+            🏷️ 页面 <span style="color:#409eff;">v0807m</span> · TAG <span style="color:#27ae60;">1.1.0.0807m</span>
           </div>
         </div>
         <div class="toolbar-right">
@@ -152,6 +152,13 @@
         @bar-click="onBarClick"
         @empty-click="onEmptyClick"
       />
+    </div>
+
+    <!-- v0807m 页面最底部"版本号 / 刷新确认"黄条（滚动到底时也能看到） -->
+    <div style="margin:18px 0 40px;padding:10px 16px;border-radius:8px;background:#fffbeb;border:1px solid #fde68a;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+      <span style="font-weight:700;color:#92400e;">📌 版本校验提示：</span>
+      <span>本页面代码版本号应为 <span style="color:#c2410c;font-weight:700;">v0807m</span>（TAG 1.1.0.0807m）；</span>
+      <span style="color:#78350f;">如果您看到的版本号不一致，请立即点击 <b style="color:#dc2626;">【🔧 强制刷新服务端】</b> → 等待 15 秒 → 下拉刷新页面一次。</span>
     </div>
 
     <!-- ====== 政委卡片（甘特图点击色条后弹出）====== -->
