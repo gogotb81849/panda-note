@@ -7,7 +7,7 @@
       <!-- 调试面板：默认隐藏，双击甘特图区域才显示（开发调试入口）
            正式上线默认隐藏，页面清爽；需要排查问题时双击 wrapper 可再显示所有诊断信息 -->
       <div class="debug-panel" v-show="debugVisible" style="display:flex;flex-wrap:wrap;gap:4px 16px;padding:10px 12px;">
-        <div style="width:100%;font-weight:600;margin-bottom:2px;">调试面板 (v0807i) · 双击下方色条区域可关闭</div>
+        <div style="width:100%;font-weight:600;margin-bottom:2px;">调试面板 (v0807j) · 双击下方色条区域可关闭</div>
         <div style="min-width:280px;">初始化状态: <span :style="{ color: debugInfo.init?.includes('✅') ? '#27ae60' : debugInfo.init?.includes('❌') ? '#c0392b' : '#3498db', fontWeight: 600 }">{{ debugInfo.init || '未知' }}</span></div>
         <div style="min-width:240px;font-size:12px;color:#555;">echarts 加载状态: <b>{{ echartsLoadState }}</b>{{ echartsLoadError ? '（' + echartsLoadError + '）' : '' }}</div>
         <div style="min-width:240px;">船舶数: {{ debugInfo.ships }} | 派任数: {{ debugInfo.assignments }} | 色条数: {{ debugInfo.bars }}</div>
@@ -23,15 +23,17 @@
         <div v-if="debugInfo.error && !lastFatalError" style="width:100%;color:#c0392b;white-space:pre-wrap;">本次 ERROR: {{ debugInfo.error }}</div>
       </div>
 
-      <!-- v0807i 缩放体验：上方固定操作按钮栏（缩小/放大时间范围 + 重置） + 说明 -->
+      <!-- v0807j 缩放体验：上方固定操作按钮栏（缩小/放大时间范围 + 重置） + 说明 + ★ 永远可见版本号/TAG（解决"看不到版本号"） -->
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0 10px;">
         <button @click="zoomInRange" style="padding:4px 10px;font-size:12px;border:1px solid #dcdfe6;border-radius:4px;background:#fff;cursor:pointer;">🔍 放大时间（范围缩小1/2）</button>
         <button @click="zoomOutRange" style="padding:4px 10px;font-size:12px;border:1px solid #dcdfe6;border-radius:4px;background:#fff;cursor:pointer;">🔍 缩小时间（范围扩大×2）</button>
         <button @click="resetRange" style="padding:4px 10px;font-size:12px;border:1px solid #dcdfe6;border-radius:4px;background:#fff;cursor:pointer;">↺ 重置时间范围</button>
-        <div style="font-size:11px;color:#909399;margin-left:4px;">💡 提示：① 鼠标滚轮/双指在色条区域可以缩放时间轴；② 鼠标在色条上拖动可以平移时间轴；③ 底部滑块可以手动拖区间</div>
+        <div style="font-size:11px;color:#909399;margin-left:4px;flex:1;min-width:220px;">💡 提示：① 鼠标滚轮/双指在色条区域可以缩放时间轴；② 鼠标在色条上拖动可以平移时间轴；③ 底部滑块可以手动拖区间</div>
+        <!-- ★ v0807j 版本号/TAG 永远可见，用户一眼就知道是不是最新部署（之前写在 debug 面板里默认隐藏，用户看不到） -->
+        <div style="font-size:12px;color:#606266;margin-left:auto;font-weight:600;">🏷️ 甘特图 <span style="color:#409eff;">v0807j</span> · TAG <span style="color:#27ae60;">1.1.0.0807j</span> · 构建 <span style="color:#e67e22;">{{ buildTimeLabel }}</span></div>
       </div>
 
-      <!-- v0807i 结构重组：scroll-box = 可滚动容器(overflow auto)，内部 2 块：
+      <!-- v0807j 结构重组：scroll-box = 可滚动容器(overflow auto)，内部 2 块：
              ┌─ headerSticky (sticky top=0) ─┐  ← 经验 446971 冻结表头：独立 canvas 仅渲染月份刻度
              │ 月份刻度(表头canvas)             │     + 左侧Y轴船名区底色遮住进度条左端
              ├─ 主甘特图 canvas (可滚动)     ─┤  ← 色条 + Y轴船名文字（底色靠上层 DOM 遮住进度条左端）
@@ -137,6 +139,16 @@ let chartInstance: any = null
 let headerChartInstance: any = null
 // 当前生效的 dataZoom 范围（用户缩放后保持同步；新建/重置时使用默认）
 const dzRange = ref<{ startValue: number; endValue: number } | null>(null)
+// ★ v0807j 永远可见的"构建时间戳"标签：用户一打开页面就能判断是否是最新部署（解决"看不到版本号/页面没更新"）
+//   固定写死：2026-08-07 16:14（CST）+ 秒级随机后缀，每次发版手动更一行，一眼分辨新旧版本
+const BUILD_TS = 1786138440_000 + Math.floor(Math.random() * 59_999)
+const buildTimeLabel = computed(() => {
+  const d = new Date(BUILD_TS + 8 * 3600 * 1000)
+  const hh = String(d.getUTCHours()).padStart(2, '0')
+  const mm = String(d.getUTCMinutes()).padStart(2, '0')
+  const ss = String(d.getUTCSeconds()).padStart(2, '0')
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')} ${hh}:${mm}:${ss}`
+})
 // 缩放按钮
 function zoomInRange() {
   if (!chartInstance || !echartsModule) return

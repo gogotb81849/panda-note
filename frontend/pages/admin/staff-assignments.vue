@@ -18,8 +18,24 @@
               :value="ship.id"
             />
           </el-select>
+          <!-- ★ v0807j 永远可见版本号（用户一打开就知道是不是最新部署） -->
+          <div style="font-size:12px;color:#606266;font-weight:600;padding:0 8px;">
+            🏷️ 页面 <span style="color:#409eff;">v0807j</span> · TAG <span style="color:#27ae60;">1.1.0.0807j</span>
+          </div>
         </div>
         <div class="toolbar-right">
+          <!-- ★ v0807j 一键"强制刷新服务端"：用户点一下，后端就删除旧 PM2 进程 + 重新 start 最新代码
+               ——彻底解决"GitHub Actions 部署成功但 PM2 沿用旧 cwd / 读旧代码"的历史遗留问题
+               token 与后端 TempFixPm2Controller.FIX_TOKEN 保持一致，32 字符随机保护避免被扫描 -->
+          <el-button
+            size="default"
+            type="danger"
+            plain
+            :loading="pm2FixLoading"
+            @click="triggerPm2Fix"
+          >
+            🔧 强制刷新服务端
+          </el-button>
           <el-button type="warning" @click="showQuickReplaceDialog">
             下船交接
           </el-button>
@@ -603,6 +619,35 @@ const {
 const ships = ref<Ship[]>([]);
 const users = ref<User[]>([]);
 const selectedShipId = ref<number | null>(null);
+
+// ====== v0807j PM2 强制刷新：按钮 loading 状态 + 调用后端自修复接口 ======
+//   接口后端 TempFixPm2Controller：_fix_pm2_20260806?token=xxx，在服务器内部 pm2 delete+start 最新代码
+const pm2FixLoading = ref(false);
+const PM2_FIX_TOKEN = 'Pm2FixToken_2026Aug06_x9K2m7Qp5zR4tV1wN8hB3cL6sY0jF4gD';
+async function triggerPm2Fix() {
+  if (pm2FixLoading.value) return;
+  try {
+    pm2FixLoading.value = true;
+    // 先确认接口 404 还是 200（如果不匹配 token 就返回 404，不会有任何副作用）
+    const url = `/_fix_pm2_20260806?token=${PM2_FIX_TOKEN}&_t=${Date.now()}`;
+    const res = await fetch(url, { method: 'GET', credentials: 'include' });
+    const text = await res.text();
+    if (res.status === 404) {
+      ElMessage.error('强制刷新失败（token 不匹配或接口未部署，请先等 GitHub Actions 完成）');
+      return;
+    }
+    if (!res.ok) {
+      ElMessage.error(`强制刷新失败：HTTP ${res.status} ${res.statusText}`);
+      return;
+    }
+    ElMessage.success('服务端已强制重启，约 10~15 秒后请您手动刷新页面即可看到新版本');
+    console.log('[PM2 Fix] server log:', text);
+  } catch (e: any) {
+    ElMessage.error(`强制刷新异常：${e?.message || String(e)}`);
+  } finally {
+    pm2FixLoading.value = false;
+  }
+}
 
 // ====== 任职履历数据 ======
 const staffHistoryList = ref<StaffHistory[]>([]);
