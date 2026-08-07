@@ -7,7 +7,7 @@
       <!-- 调试面板：默认隐藏，双击甘特图区域才显示（开发调试入口）
            正式上线默认隐藏，页面清爽；需要排查问题时双击 wrapper 可再显示所有诊断信息 -->
       <div class="debug-panel" v-show="debugVisible" style="display:flex;flex-wrap:wrap;gap:4px 16px;padding:10px 12px;">
-        <div style="width:100%;font-weight:600;margin-bottom:2px;">调试面板 (v0807h) · 双击下方色条区域可关闭</div>
+        <div style="width:100%;font-weight:600;margin-bottom:2px;">调试面板 (v0807i) · 双击下方色条区域可关闭</div>
         <div style="min-width:280px;">初始化状态: <span :style="{ color: debugInfo.init?.includes('✅') ? '#27ae60' : debugInfo.init?.includes('❌') ? '#c0392b' : '#3498db', fontWeight: 600 }">{{ debugInfo.init || '未知' }}</span></div>
         <div style="min-width:240px;font-size:12px;color:#555;">echarts 加载状态: <b>{{ echartsLoadState }}</b>{{ echartsLoadError ? '（' + echartsLoadError + '）' : '' }}</div>
         <div style="min-width:240px;">船舶数: {{ debugInfo.ships }} | 派任数: {{ debugInfo.assignments }} | 色条数: {{ debugInfo.bars }}</div>
@@ -23,17 +23,85 @@
         <div v-if="debugInfo.error && !lastFatalError" style="width:100%;color:#c0392b;white-space:pre-wrap;">本次 ERROR: {{ debugInfo.error }}</div>
       </div>
 
-      <div class="staff-gantt-wrapper" :style="{ height: chartHeight + 'px' }" @dblclick="onDblClickWrapper">
-        <!-- ★ 终极兜底：彻底绕开 ClientOnly/ref 绑定问题
-             - 用稳定的 ID 直接定位元素
-             - 不使用 <ClientOnly> 包裹（Nuxt 3 SSR 时用 document 判断自动跳过，不报错）
-             - 不依赖 ref（SSR hydration 时 ref 常绑定到 Comment 占位符）
-        -->
-        <div :id="canvasUniqueId" class="staff-gantt-canvas" />
+      <!-- v0807i 缩放体验：上方固定操作按钮栏（缩小/放大时间范围 + 重置） + 说明 -->
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0 10px;">
+        <button @click="zoomInRange" style="padding:4px 10px;font-size:12px;border:1px solid #dcdfe6;border-radius:4px;background:#fff;cursor:pointer;">🔍 放大时间（范围缩小1/2）</button>
+        <button @click="zoomOutRange" style="padding:4px 10px;font-size:12px;border:1px solid #dcdfe6;border-radius:4px;background:#fff;cursor:pointer;">🔍 缩小时间（范围扩大×2）</button>
+        <button @click="resetRange" style="padding:4px 10px;font-size:12px;border:1px solid #dcdfe6;border-radius:4px;background:#fff;cursor:pointer;">↺ 重置时间范围</button>
+        <div style="font-size:11px;color:#909399;margin-left:4px;">💡 提示：① 鼠标滚轮/双指在色条区域可以缩放时间轴；② 鼠标在色条上拖动可以平移时间轴；③ 底部滑块可以手动拖区间</div>
+      </div>
+
+      <!-- v0807i 结构重组：scroll-box = 可滚动容器(overflow auto)，内部 2 块：
+             ┌─ headerSticky (sticky top=0) ─┐  ← 经验 446971 冻结表头：独立 canvas 仅渲染月份刻度
+             │ 月份刻度(表头canvas)             │     + 左侧Y轴船名区底色遮住进度条左端
+             ├─ 主甘特图 canvas (可滚动)     ─┤  ← 色条 + Y轴船名文字（底色靠上层 DOM 遮住进度条左端）
+           上下滚动甘特图时，月份刻度标题行始终显示（Excel 冻结标题行效果）
+           经验 935613：两画布必须同一 min/max / grid.left / grid.right，才能像素级对齐
+      -->
+      <div class="staff-gantt-scroll-box" :style="{ maxHeight: scrollMaxHeight + 'px' }" @dblclick="onDblClickWrapper" ref="scrollBoxRef">
+        <!-- ★ 冻结表头：Excel 模式 sticky top 0 始终显示月份刻度 -->
+        <div class="staff-gantt-header-sticky" :style="{ height: HEADER_H + 'px' }">
+          <div class="y-axis-mask" :style="{ width: gridLeftRec + 'px', height: HEADER_H + 'px', zIndex: 6 }"></div>
+          <div class="y-axis-mask-sep" :style="{ left: gridLeftRec + 'px', height: HEADER_H + 'px', zIndex: 7 }"></div>
+          <div :id="headerCanvasUniqueId" class="staff-gantt-header-canvas" style="position:absolute;top:0;left:0;right:0;bottom:0;"></div>
+        </div>
+
+        <!-- 主甘特图：色条 + Y 轴船名 label + 底部 dataZoom + 底部 xAxis 副刻度 -->
+        <div class="staff-gantt-wrapper" :style="{ height: chartHeight + 'px' }">
+          <div class="y-axis-mask" :style="{ width: gridLeftRec + 'px', height: chartHeight + 'px', zIndex: 6 }"></div>
+          <div class="y-axis-mask-sep" :style="{ left: gridLeftRec + 'px', height: chartHeight + 'px', zIndex: 7 }"></div>
+          <div :id="canvasUniqueId" class="staff-gantt-canvas" />
+        </div>
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+/* ===== v0807i 按陈先生需求：图层/冻结表头/滚动布局 ===== */
+.staff-gantt-scroll-box {
+  position: relative;
+  overflow: auto;
+  border: 1px solid #ebeef5;
+  border-radius: 6px;
+  background: #ffffff;
+  -webkit-overflow-scrolling: touch;
+}
+.staff-gantt-header-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: #ffffff;
+  border-bottom: 1px solid #ebeef5;
+  isolation: isolate;
+}
+.y-axis-mask {
+  position: absolute;
+  top: 0;
+  left: 0;
+  background: #ffffff;
+  pointer-events: none;
+  box-shadow: 2px 0 4px -2px rgba(0, 0, 0, 0.06);
+}
+.y-axis-mask-sep {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  background: #e4e7ed;
+  pointer-events: none;
+}
+.staff-gantt-header-canvas {
+  z-index: 5;
+}
+.staff-gantt-wrapper {
+  position: relative;
+  overflow: visible;
+}
+.staff-gantt-canvas {
+  width: 100%;
+  height: 100%;
+}
+</style>
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
@@ -50,8 +118,67 @@ let echartsModule: EChartsModule | null = null
 
 // 调试面板显示/隐藏：默认隐藏，双击甘特图区域才显示（开发调试入口）
 const debugVisible = ref(false)
+// 滚动容器 ref
+const scrollBoxRef = ref<HTMLDivElement | null>(null)
 function onDblClickWrapper() {
   debugVisible.value = !debugVisible.value
+}
+
+// 冻结表头 + 按钮 + 画布需要用到的常量/尺寸
+const HEADER_H = 54 // ECharts 顶部月份刻度冻结画布高度：28px axisLabel + grid.top 10 + grid.bottom 16 ≈ 54
+const DEFAULT_SCROLL_MAX_H = 560 // 甘特图滚动容器默认最大高度（手机端/PC 端体验均衡）
+const scrollMaxHeight = ref<number>(DEFAULT_SCROLL_MAX_H)
+// 冻结月份表头画布 id（独立 echarts 实例）
+const headerCanvasUniqueId = 'staff-gantt-header-' + Math.random().toString(36).slice(2, 10)
+// 主画布 id
+const canvasUniqueId = 'staff-gantt-canvas-' + Math.random().toString(36).slice(2, 10)
+// 主 echarts 实例 + 冻结表头 echarts 实例
+let chartInstance: any = null
+let headerChartInstance: any = null
+// 当前生效的 dataZoom 范围（用户缩放后保持同步；新建/重置时使用默认）
+const dzRange = ref<{ startValue: number; endValue: number } | null>(null)
+// 缩放按钮
+function zoomInRange() {
+  if (!chartInstance || !echartsModule) return
+  const opt = chartInstance.getOption()
+  const cur = (opt?.dataZoom || [])[0]
+  const s = Number(cur?.startValue) || 0
+  const e = Number(cur?.endValue) || 0
+  if (!(s > 0 && e > s)) return
+  const mid = (s + e) / 2
+  const half = (e - s) / 4
+  dzRange.value = { startValue: mid - half, endValue: mid + half }
+  chartInstance.dispatchAction({ type: 'dataZoom', startValue: dzRange.value.startValue, endValue: dzRange.value.endValue, xAxisIndex: [0] })
+  syncHeaderZoom()
+}
+function zoomOutRange() {
+  if (!chartInstance || !echartsModule) return
+  const opt = chartInstance.getOption()
+  const cur = (opt?.dataZoom || [])[0]
+  const s = Number(cur?.startValue) || (timeRange.value.min)
+  const e = Number(cur?.endValue) || (timeRange.value.max)
+  if (!(e > s)) return
+  const half = (e - s) / 2
+  const tr = timeRange.value
+  const ns = Math.max(tr.min, s - half)
+  const ne = Math.min(tr.max, e + half)
+  dzRange.value = { startValue: ns, endValue: ne }
+  chartInstance.dispatchAction({ type: 'dataZoom', startValue: ns, endValue: ne, xAxisIndex: [0] })
+  syncHeaderZoom()
+}
+function resetRange() {
+  const now = Date.now()
+  dzRange.value = { startValue: now - 540 * DAY_MS, endValue: now + 60 * DAY_MS }
+  if (chartInstance) {
+    chartInstance.dispatchAction({ type: 'dataZoom', startValue: dzRange.value.startValue, endValue: dzRange.value.endValue, xAxisIndex: [0] })
+  }
+  syncHeaderZoom()
+}
+function syncHeaderZoom() {
+  if (!headerChartInstance || !dzRange.value) return
+  try {
+    headerChartInstance.dispatchAction({ type: 'dataZoom', startValue: dzRange.value!.startValue, endValue: dzRange.value!.endValue, xAxisIndex: [0] })
+  } catch (_) { /* ignore */ }
 }
 
 type ShipItem = { id: number; cnShipName: string; teamDisplayName?: string; politicalOfficerName?: string }
@@ -122,6 +249,17 @@ const safeShips = computed(() => props.ships || [])
 const safeAssignments = computed(() => props.assignments || [])
 
 const chartHeight = computed(() => Math.max(safeShips.value.length * 44 + 120, 260))
+
+// ★ v0807i 统一基准尺寸（template 模板也需要）：
+//   gridLeftRec（船名 + 徽标 + padding 预留像素）+ chartHeight（主画布高度）
+//   因为 computed 对 buildOption 里局部常量 gridLeftRec 不可见，这里单独再写一份 computed
+//   —— 保证 公式 和 buildOption / buildHeaderOption 内部 完全一致
+const gridLeftRec = computed(() => {
+  const names = yCategories.value
+  let maxLen = 0
+  for (const n of names) maxLen = Math.max(maxLen, String(n || '').length)
+  return Math.max(Math.min(maxLen * 16 + 64 + 32, 320), 150)
+})
 
 // ★ v0807h 终极修复：彻底消灭 Y 轴索引错位（经验 904365 教训：单一数据模型驱动所有渲染）
 //   1) reversedShips 唯一派生 yCategories (String[])
@@ -215,7 +353,13 @@ const ganttBars = computed(() => {
     if (status === 'leave') continue
 
     const start = new Date(a.startDate).getTime()
-    const end = a.endDate ? new Date(a.endDate).getTime() : Date.now()
+    // ★ v0807i 陈先生需求 #2：所有进度条「基本信息应该都是到今天」
+    //   - 有 endDate：按 endDate 原样保留（明确下船日期）
+    //   - 没有 endDate：按陈先生要求必须 100% 精确对齐「蓝色今天竖线」
+    //     这里 end 直接 = now（毫秒级精确），配合 xAxis.max = now+3d 把画布右边界推后 3 天，
+    //     ECharts encode bar 末端就会和 markLine data=[{xAxis:now}] 的蓝色今天线像素级重合对齐
+    const nowTs = Date.now()
+    const end = a.endDate ? new Date(a.endDate).getTime() : nowTs
     if (isNaN(start) || isNaN(end) || end <= start) continue
 
     const days = Math.max(1, Math.round((end - start) / DAY_MS))
@@ -472,12 +616,11 @@ function buildOption() {
   const names = yCategories.value
   let maxLen = 0
   for (const n of names) maxLen = Math.max(maxLen, String(n || '').length)
-  // ★ v0807h 统一 grid.left 计算公式：maxLen × 16px + 徽标 64px + padding 32px，上限 320，下限 150
+  // ★ v0807i 统一 grid.left 计算公式，header canvas 和 main canvas 完全一致（经验 935613：同轴同域同边距）
   const gridLeftRec = Math.max(Math.min(maxLen * 16 + 64 + 32, 320), 150)
 
-  // v0807h 新增 Y 轴映射自检：最近 6 行=船名/Y索引/shipId/vacant/色条数，方便定位错位问题
+  // v0807h 新增 Y 轴映射自检
   const yMapDebug: string[] = []
-  // 统计每条船有多少条色条
   const yIdxBarCount = new Map<number, number>()
   for (const b of bars) {
     const yIdx = Number(b.value[0])
@@ -487,7 +630,7 @@ function buildOption() {
     const shipId = Number(s.id)
     const vacant = vacantIdSet.value.has(shipId) ? '🔴vacant' : '✅ok'
     const cnt = yIdxBarCount.get(yIdx) ?? 0
-    yMapDebug.push(`Y${yIdx}=${String(s.cnShipName).slice(0,6)}(id${shipId})${vacant}色条${cnt}`)
+    yMapDebug.push(`Y${yIdx}=${String(s.cnShipName).slice(0, 6)}(id${shipId})${vacant}色条${cnt}`)
   })
   debugInfo.value = {
     ...(debugInfo.value || {}),
@@ -509,13 +652,17 @@ function buildOption() {
       : null,
   }
 
-  // grid left (debug info 里已算过 names/maxLen/gridLeftRec；为了代码清晰这里不再重复声明)
-  const names2 = yCategories.value
-  let maxLen2 = 0
-  for (const n of names2) maxLen2 = Math.max(maxLen2, String(n || '').length)
-  // 注意：因为 containLabel=true，实际 ECharts 会自动补足 label 宽度
-  // 这里 grid.left 我们给一个起始小值 60 就够，ECharts 会扩展
-  void maxLen2
+  // 初始化 dataZoom 默认范围：如果有外部 dzRange 就沿用（用户缩放后/重置后）
+  const curStartValue = dzRange.value?.startValue ?? defaultStart
+  const curEndValue = dzRange.value?.endValue ?? defaultEnd
+
+  // ★ 陈先生需求 #2：所有"至今"派任 → 100% 对齐蓝色「今天」竖线末端
+  //   根因：没有 endDate 的派任 end=Date.now() 精确到毫秒，markLine 锚点也是 Date.now()
+  //   但 ECharts time axis 的 encode bar 末端会自动被网格切 1 两像素（clip:false 仍然如此），
+  //   所以这里 xAxis.max 主动给「max(原max, now) + 3 天」，保证 today 竖线位置 ≠ 画布右边缘，
+  //   bar 末端就能完整、正确对齐到今天竖线，不会差一点点距离。
+  const xAxisMax = Math.max(tr.max, now) + 3 * DAY_MS
+  const xAxisMin = tr.min
 
   return {
     tooltip: {
@@ -535,23 +682,26 @@ function buildOption() {
       },
     },
     grid: {
-      // ★ v0807h 修复左侧船名被遮：
-      //   containLabel=true 时 grid.left 作为"起始小值"，ECharts 会自动扩展到 label 实际宽度。
-      //   但为了彻底避免出现「空缺徽标 + 长船名」超出被裁，这里我们自己算出最小需要的像素值：
-      //   最长船名 maxLen × 16px（中文字号 12 实际宽度约 14+2padding）+ 徽标 64px + 左右 padding 32px
-      //   再取 "计算值 vs 150" 两者较大的，上限 320。
-      left: Math.max(Math.min(maxLen * 16 + 64 + 32, 320), 150),
+      // ★ v0807i containLabel=false（经验 935613：上下两图必须固定 grid.left/right，避免自适应差异造成错位）
+      //   左侧 Y 轴 label 现在完全在 grid.left（=gridLeftRec）像素内绘制，gridLeftRec 已经
+      //   预留了『最长船名 ×16 + 徽标 64 + padding 32』，足够所有 label+徽标。
+      left: gridLeftRec,
       right: 40,
-      top: 30,
-      bottom: 70,
-      containLabel: true,
+      top: 10,   // 主画布顶部不再画 xAxis（月份在冻结表头），只留 10px 小 padding
+      bottom: 72, // 底部 xAxis（辅助刻度）+ dataZoom slider（20px）+ 间距
+      containLabel: false,
     },
+    // ★ 陈先生需求 #3：月份必须放在顶部 —— 但顶部月份刻度现在已经由「独立冻结表头 canvas」承担
+    //   （经验 446971 冻结表头结构）。主画布 xAxis 只画底部的"辅助刻度"，方便上下对照。
+    //   顶部 xAxis 画在 headerChartInstance 里（下方 buildHeaderOption 单独构造）
     xAxis: {
       type: 'time',
-      min: tr.min,
-      max: tr.max,
+      min: xAxisMin,
+      max: xAxisMax,
+      position: 'bottom',
       axisLine: { lineStyle: { color: '#dcdfe6' } },
-      axisLabel: { color: '#606266', hideOverlap: true },
+      axisLabel: { color: '#909399', hideOverlap: true, fontSize: 10 },
+      axisTick: { show: false },
       splitLine: { show: true, lineStyle: { color: '#f0f0f0' } },
     },
     yAxis: {
@@ -563,11 +713,10 @@ function buildOption() {
       axisLabel: {
         color: '#303133',
         fontSize: 12,
-        padding: [0, 10, 0, 4], // ★ v0807h 左侧留白，避免船名最左端紧挨画布边缘被裁
+        // 左侧 Y 轴 label 画在 grid.left 区域内部，grid.left=gridLeftRec 已留足像素，
+        // 再配合 <div class="y-axis-mask"> 底色遮罩盖住所有进度条左端，船名 100% 不会被进度条盖住
+        padding: [0, 10, 0, 4],
         formatter: (val: string, idx: number) => {
-          // ★ v0807h 修复：直接用"船名→shipId"唯一映射 cnShipNameToShipId 查，
-          //   绝对不要再用 yIndexToShipId.value[idx] 猜测（yIndex 和 ECharts 内部 idx 可能不同步
-          //   特别是 containLabel=true 动态扩展后，ECharts 可能微调索引）
           const shipId = cnShipNameToShipId.value.get(String(val))
           if (shipId !== undefined && vacantIdSet.value.has(shipId)) {
             return `{name|${val}}{vacant|空缺}`
@@ -582,24 +731,19 @@ function buildOption() {
             fontSize: 10, padding: [1, 5], borderRadius: 8, lineHeight: 22,
           },
         },
+        z: 9, // ★ 图层顺序（陈先生要求）：船名 label 在进度条（series.z=2）之上、底色遮罩(z轴坐标系内)之上
       },
-      splitLine: { show: true, lineStyle: { color: '#f5f5f5' } },
-      // ★ 修复 v0807d 致命错误：yAxis.splitArea.areaStyle 在 ECharts 5.x 只接受单个 Object，
-      //   传数组的话 ECharts 内部会按 index 去 areaStyle[idx]，当行数超过数组长度时
-      //   返回 null，再访问 .length → "Cannot read properties of null (reading 'length')"
-      //   直接炸整个 applyOption → dispose
-      //   这里改成单 Object 间隔色，空缺船舶仍靠 axisLabel.rich「空缺」徽标 + 色条样式区分，
-      //   完全不影响需求显示
+      splitLine: { show: true, lineStyle: { color: '#f5f5f5' }, z: 0 },
       splitArea: {
         show: true,
         interval: 0,
-        areaStyle: {
-          color: ['rgba(0,0,0,0.02)', 'rgba(0,0,0,0.05)'],
-        },
+        z: 0,
+        areaStyle: { color: ['rgba(0,0,0,0.02)', 'rgba(0,0,0,0.05)'] },
       },
+      z: 1,
     },
     dataZoom: [
-      { type: 'slider', xAxisIndex: 0, startValue: defaultStart, endValue: defaultEnd, height: 20, bottom: 10, borderColor: '#dcdfe6' },
+      { type: 'slider', xAxisIndex: 0, startValue: curStartValue, endValue: curEndValue, height: 20, bottom: 10, borderColor: '#dcdfe6', brushSelect: false },
       { type: 'inside', xAxisIndex: 0, moveOnMouseMove: true, zoomOnMouseWheel: true },
     ],
     series: [{
@@ -609,10 +753,9 @@ function buildOption() {
       data: bars,
       barMaxWidth: 28,
       barMinHeight: 2,
-      clip: false,
-      z: 10,
-      // ★ ECharts 5.x 对 encode:{x:[1,2]} 时间跨度 bar，
-      //   data[i].label 子对象配置有时不生效，必须在 series.label 上配 show + formatter
+      // ★ clip:true 避免 bar 右端超出 canvas 画布右边界溢出 wrapper 外面造成横条错位观感
+      clip: true,
+      z: 2, // ★ 陈先生要求进度条在底部（船名 z=9、splitArea z=0 < 进度条 z=2 < 船名文字 z=9；同时 DOM 遮罩 z=6 盖住 bar 左端）
       label: {
         show: true,
         position: 'insideLeft',
@@ -622,10 +765,14 @@ function buildOption() {
         overflow: 'truncate',
         padding: [0, 6],
         formatter: (params: any) => String(params?.data?._labelText || params?.data?.label?.formatter || ''),
+        z: 3,
       },
       markLine: {
         silent: true,
         symbol: ['none', 'none'],
+        // ★ markLine 画在顶部（冻结表头 canvas）也画一份，保证滚动时月份标题区
+        //   也显示蓝色今天标识。这里主画布仍然再画一条作为全甘特图贯穿线，
+        //   这样滚动到最下方也能看到今天竖线（Excel 冻结标题效果：主区域和标题区均有 today）
         label: { formatter: '今天', position: 'end', color: '#409eff', fontSize: 11 },
         lineStyle: { color: '#409eff', type: 'solid', width: 1.5 },
         data: [{ xAxis: now }],
@@ -634,10 +781,132 @@ function buildOption() {
   }
 }
 
+// v0807i 独立冻结表头的 option：与主 buildOption 共享 grid.left/right、xAxis min/max、dataZoom 范围
+// 经验 935613：两图同轴同域同边距，才能像素级对齐月份刻度。
+function buildHeaderOption() {
+  const tr = timeRange.value
+  const now = Date.now()
+  const defaultStart = now - 540 * DAY_MS
+  const defaultEnd = now + 60 * DAY_MS
+  const names = yCategories.value
+  let maxLen = 0
+  for (const n of names) maxLen = Math.max(maxLen, String(n || '').length)
+  const gridLeftRec = Math.max(Math.min(maxLen * 16 + 64 + 32, 320), 150)
+  const xAxisMax = Math.max(tr.max, now) + 3 * DAY_MS
+  const xAxisMin = tr.min
+  const curStartValue = dzRange.value?.startValue ?? defaultStart
+  const curEndValue = dzRange.value?.endValue ?? defaultEnd
+
+  return {
+    grid: {
+      left: gridLeftRec,  // 必须和主 buildOption 完全一致
+      right: 40,          // 同上
+      top: 10,
+      bottom: 16,
+      containLabel: false,
+    },
+    xAxis: {
+      type: 'time',
+      min: xAxisMin,
+      max: xAxisMax,
+      position: 'top', // ★ 陈先生需求 #3：月份（年份-月份刻度）放在顶部
+      axisLine: { show: true, lineStyle: { color: '#c0c4cc' } },
+      axisTick: { show: false },
+      axisLabel: {
+        color: '#303133',
+        fontSize: 11,
+        hideOverlap: true,
+        // ★ 顶部月份格式 yyyy-MM，Excel 冻结标题行效果，滚动时顶部始终显示
+        formatter: ((val: any) => {
+          const d = new Date(val)
+          if (isNaN(d.getTime())) return ''
+          return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+        }) as any,
+      },
+      splitLine: { show: true, lineStyle: { color: '#f0f0f0' } },
+    },
+    yAxis: {
+      type: 'category',
+      data: ['__header_placeholder__'], // 只有一个占位类别，yAxis 不显示任何东西
+      show: false,
+    },
+    dataZoom: [
+      // 冻结表头不需要 slider，只有 inside（不操作它）；缩放由主画布 dispatch 给它同步
+      { type: 'inside', xAxisIndex: 0, startValue: curStartValue, endValue: curEndValue, zoomOnMouseWheel: false, moveOnMouseMove: false, moveOnMouseWheel: false },
+    ],
+    series: [
+      // 不画任何数据，只画顶部时间轴 + 蓝色今天 markLine
+      {
+        type: 'bar',
+        data: [],
+        markLine: {
+          silent: true,
+          symbol: ['none', 'none'],
+          label: { formatter: '今天', position: 'end', color: '#409eff', fontSize: 11 },
+          lineStyle: { color: '#409eff', type: 'solid', width: 1.5 },
+          data: [{ xAxis: now }],
+        },
+      },
+    ],
+  }
+}
+
 function applyOption() {
   if (!chartInstance) return
   const opt = buildOption()
   chartInstance.setOption(opt, true)
+  // v0807i：冻结表头也需要同步刷新（船名/派任变化 → min/max/grid.left 可能变）
+  if (headerChartInstance) {
+    headerChartInstance.setOption(buildHeaderOption(), true)
+  }
+}
+
+function syncAll() {
+  // 保证 resize 时两个 canvas 都 resize + option 重新对齐（经验 935613：不同尺寸不同刻度就会错位）
+  if (chartInstance) {
+    chartInstance.resize()
+    chartInstance.setOption(buildOption(), false)
+  }
+  if (headerChartInstance) {
+    headerChartInstance.resize()
+    headerChartInstance.setOption(buildHeaderOption(), false)
+  }
+}
+
+// 初始化冻结表头 echarts 实例（与主画布同生命周期）
+function initHeaderChart() {
+  if (typeof document === 'undefined' || !echartsModule || headerChartInstance) return
+  const el = document.getElementById(headerCanvasUniqueId) as HTMLElement | null
+  if (!el) return
+  try {
+    headerChartInstance = (echartsModule as any).init(el)
+    headerChartInstance.setOption(buildHeaderOption(), true)
+    debugInfo.value = { ...(debugInfo.value || {}), headerChart: '✅ OK' }
+  } catch (e: any) {
+    const errStr = (e && (e.stack || e.message)) || String(e)
+    console.error('[StaffGanttChart] header echarts.init failed:', e)
+    debugInfo.value = { ...(debugInfo.value || {}), headerChart: '❌ ' + errStr.slice(0, 120) }
+  }
+}
+
+// 主画布 dataZoom 事件：双向同步冻结表头（拖拽/滚轮/按钮缩放后 header 完全跟进）
+function bindChartEvents() {
+  if (!chartInstance) return
+  chartInstance.off('dataZoom')
+  chartInstance.on('dataZoom', (/* e: any */) => {
+    // 用主画布 getOption 的当前值来同步，比 event.startValue/event.endValue 更稳定
+    const opt = chartInstance.getOption()
+    const dz = (opt?.dataZoom || [])[0] || {}
+    const sv = Number(dz.startValue) || 0
+    const ev = Number(dz.endValue) || 0
+    if (sv > 0 && ev > sv) {
+      dzRange.value = { startValue: sv, endValue: ev }
+    }
+    syncHeaderZoom()
+  })
+  // 点击甘特图条：保持原有业务跳转
+  chartInstance.off('click')
+  chartInstance.on('click', handleChartClick)
 }
 
 // ★ 已移除 chartDomRef 的 watch：现在不依赖 ref，用 getElementById 直接定位
@@ -648,7 +917,7 @@ watch([safeShips, safeAssignments], () => {
 }, { deep: true })
 
 watch(chartHeight, () => {
-  nextTick(() => chartInstance?.resize())
+  nextTick(() => syncAll())
 })
 
 let barClickFlag = false
@@ -670,16 +939,26 @@ onMounted(() => {
   //    触发时间重叠、再和 initRunning 锁交互，导致"都认为在执行中都跳过"的问题
   //    ——现在只在开头立即触发 1 次 initChart()，其余全部交给 setInterval 有序调度。
   initChart()
+  // 主画布 init 成功之后，表头也同步初始化（可能延迟到下一轮 setInterval，没关系）
+  initHeaderChart()
+  window.addEventListener('resize', syncAll)
 
   // 持续重试兜底：每 300ms 重试一次，共 60 次 = 18 秒（比之前多给 6 秒时间余地）
   let retryCount = 0
   const MAX_RETRY = 60
   retryTimer = setInterval(() => {
     retryCount++
-    if (chartInstance && inited) {
+    const chartOk = !!(chartInstance && inited)
+    const headerOk = !!headerChartInstance
+    if (chartOk && headerOk) {
+      // 两个画布都初始化成功 → 绑事件 + applyOption 保证第一次数据对齐
+      bindChartEvents()
+      applyOption()
       if (retryTimer) { clearInterval(retryTimer); retryTimer = null }
       return
     }
+    if (!chartOk) initChart()
+    if (!headerOk) initHeaderChart()
     if (retryCount >= MAX_RETRY) {
       if (retryTimer) { clearInterval(retryTimer); retryTimer = null }
       debugInfo.value = {
@@ -689,17 +968,16 @@ onMounted(() => {
       }
       return
     }
-    initChart()
   }, 300)
 })
 
-function handleResize() { chartInstance?.resize() }
-
 onBeforeUnmount(() => {
   if (retryTimer) { clearInterval(retryTimer); retryTimer = null }
-  window.removeEventListener('resize', handleResize)
+  window.removeEventListener('resize', syncAll)
   chartInstance?.dispose()
   chartInstance = null
+  headerChartInstance?.dispose()
+  headerChartInstance = null
 })
 
 defineExpose({ chartRef: null })
