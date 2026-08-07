@@ -4,18 +4,23 @@
       <p>{{ loading ? '加载中...' : '暂无船舶数据' }}</p>
     </div>
     <div v-else>
-      <!-- 调试面板：直接显示数据状态（debugInfo 初始值非 null，所以一直显示） -->
-      <div class="debug-panel">
-        <div style="font-weight:600;margin-bottom:4px;">调试面板 (v0807c)</div>
-<div>初始化状态: <span :style="{ color: debugInfo.init?.includes('✅') ? '#27ae60' : debugInfo.init?.includes('❌') ? '#c0392b' : '#3498db', fontWeight: 600 }">{{ debugInfo.init || '未知' }}</span></div>
-<div style="margin-top:2px;font-size:12px;color:#555;">echarts 加载状态: <b>{{ echartsLoadState }}</b>{{ echartsLoadError ? '（' + echartsLoadError + '）' : '' }}</div>
-        <div>船舶数: {{ debugInfo.ships }} | 派任数: {{ debugInfo.assignments }} | 色条数: {{ debugInfo.bars }}</div>
-        <div>Y轴类目数: {{ debugInfo.yCats }} | 最长船名字符数: {{ debugInfo.maxNameLen }} | gridLeft(建议): {{ debugInfo.gridLeftRec }}</div>
-        <div>Y轴样例: {{ debugInfo.ySample }}</div>
-        <div v-if="debugInfo.sample">色条样例: 船索引={{ debugInfo.sample.yIndex }}，船名={{ debugInfo.sample.shipName }}，{{ debugInfo.sample.start }} → {{ debugInfo.sample.end }}</div>
-        <div v-else style="color:#c0392b;font-weight:600;">⚠️ 没有生成任何色条（请检查派任记录的 shipId、startDate、endDate 是否合法）</div>
-        <div v-if="debugInfo.warn" style="color:#e67e22;margin-top:4px;">WARN: {{ debugInfo.warn }}</div>
-        <div v-if="debugInfo.error" style="color:#c0392b;margin-top:4px;white-space:pre-wrap;">ERROR: {{ debugInfo.error }}</div>
+      <!-- 调试面板：v0807d 升级——
+           - flex-wrap 适配手机窄屏（解决竖屏文字挤到竖排）
+           - 新增『永久错误 / 永久警告 / 初始化步骤追踪』独立 ref，绝不被其他赋值覆盖丢失 -->
+      <div class="debug-panel" style="display:flex;flex-wrap:wrap;gap:4px 16px;padding:10px 12px;">
+        <div style="width:100%;font-weight:600;margin-bottom:2px;">调试面板 (v0807d)</div>
+        <div style="min-width:280px;">初始化状态: <span :style="{ color: debugInfo.init?.includes('✅') ? '#27ae60' : debugInfo.init?.includes('❌') ? '#c0392b' : '#3498db', fontWeight: 600 }">{{ debugInfo.init || '未知' }}</span></div>
+        <div style="min-width:240px;font-size:12px;color:#555;">echarts 加载状态: <b>{{ echartsLoadState }}</b>{{ echartsLoadError ? '（' + echartsLoadError + '）' : '' }}</div>
+        <div style="min-width:240px;">船舶数: {{ debugInfo.ships }} | 派任数: {{ debugInfo.assignments }} | 色条数: {{ debugInfo.bars }}</div>
+        <div style="min-width:260px;">Y轴类目数: {{ debugInfo.yCats }} | 最长船名字符数: {{ debugInfo.maxNameLen }} | gridLeft(建议): {{ debugInfo.gridLeftRec }}</div>
+        <div style="min-width:300px;">Y轴样例: {{ debugInfo.ySample }}</div>
+        <div v-if="debugInfo.sample" style="min-width:320px;">色条样例: 船索引={{ debugInfo.sample.yIndex }}，船名={{ debugInfo.sample.shipName }}，{{ debugInfo.sample.start }} → {{ debugInfo.sample.end }}</div>
+        <div v-else style="min-width:300px;color:#c0392b;font-weight:600;">⚠️ 没有生成任何色条（请检查派任记录的 shipId、startDate、endDate 是否合法）</div>
+        <div v-if="lastFatalWarn" style="min-width:320px;color:#e67e22;">永久 WARN: {{ lastFatalWarn }}</div>
+        <div v-if="lastFatalError" style="width:100%;color:#c0392b;font-weight:600;white-space:pre-wrap;">永久 ERROR: {{ lastFatalError }}</div>
+        <div v-if="lastInitSteps.length > 0" style="width:100%;font-size:12px;color:#34495e;white-space:pre-wrap;">初始化步骤追踪: {{ lastInitSteps.join(' → ') }}</div>
+        <div v-if="debugInfo.warn && !lastFatalWarn" style="min-width:320px;color:#e67e22;">本次 WARN: {{ debugInfo.warn }}</div>
+        <div v-if="debugInfo.error && !lastFatalError" style="width:100%;color:#c0392b;white-space:pre-wrap;">本次 ERROR: {{ debugInfo.error }}</div>
       </div>
 
       <div class="staff-gantt-wrapper" :style="{ height: chartHeight + 'px' }">
@@ -234,6 +239,14 @@ const canvasUniqueId = 'staff-gantt-canvas-' + Math.random().toString(36).slice(
 const echartsLoadState = ref<'未加载' | '加载中' | '已加载' | '加载失败'>('未加载')
 const echartsLoadError = ref<string | null>(null)
 
+// ★ 永久错误存储（独立 ref，绝不让 buildOption / retry 耗尽赋值覆盖掉真正的错误内容）
+const lastFatalError = ref<string | null>(null)
+const lastFatalWarn = ref<string | null>(null)
+const lastInitSteps = ref<string[]>([])
+function pushInitStep(step: string) {
+  lastInitSteps.value = [...lastInitSteps.value.slice(-5), step]
+}
+
 let inited = false
 // ★ 并发锁：initChart 是 async，setInterval 每 300ms 不 await 就触发，
 //    必须保证同一时刻只有一个 initChart 执行链路在跑，否则多个 async
@@ -298,72 +311,110 @@ async function initChart() {
 async function doInitChart() {
   if (inited || chartInstance) return
   if (!isBrowser) return
+  pushInitStep('doInitChart[start]')
 
   // ★ 第一步：懒加载 echarts（客户端动态 import，SSR 阶段永远不会执行）
+  pushInitStep('doInitChart[await loadECharts…]')
   const echarts = await loadECharts()
-  if (!echarts) return // 还在加载中 or 加载失败，下一轮重试
+  if (!echarts) {
+    pushInitStep(`doInitChart[echarts 未就绪，状态=${echartsLoadState.value}]`)
+    return // 还在加载中 or 加载失败，下一轮重试
+  }
+  pushInitStep('doInitChart[echarts 已加载]')
 
   const el = resolveChartEl()
   if (!el) {
     const byIdInfo = document.getElementById(canvasUniqueId)
     const qInfo = document.querySelector('.staff-gantt-canvas')
-    debugInfo.value = {
-      ...debugInfo.value,
-      warn: `DOM 未就绪（echarts已${echartsLoadState.value}，getElementById(id=…${canvasUniqueId.slice(-6)})=null? ${!byIdInfo}, querySel=null? ${!qInfo}），继续重试`,
-    }
+    const w = `DOM 未就绪（echarts已${echartsLoadState.value}，id=…${canvasUniqueId.slice(-6)}:null?${!byIdInfo}, .class:null?${!qInfo}），继续重试`
+    debugInfo.value = { ...debugInfo.value, warn: w }
+    lastFatalWarn.value = w
+    pushInitStep('doInitChart[DOM缺失]')
     return
   }
 
   // 尺寸检查：元素必须真正可见
   const rect = el.getBoundingClientRect()
   if (rect.width < 10 || rect.height < 10) {
-    debugInfo.value = {
-      ...debugInfo.value,
-      warn: `DOM 找到但尺寸为 ${Math.round(rect.width)}×${Math.round(rect.height)}（< 10px），layout 未完成，延时重试`,
-    }
+    const w = `DOM 找到但尺寸 ${Math.round(rect.width)}×${Math.round(rect.height)} < 10px，layout 未完成，延时重试`
+    debugInfo.value = { ...debugInfo.value, warn: w }
+    lastFatalWarn.value = w
+    pushInitStep(`doInitChart[尺寸不足 ${Math.round(rect.width)}×${Math.round(rect.height)}]`)
     return
   }
+  pushInitStep(`doInitChart[DOM OK ${Math.round(rect.width)}×${Math.round(rect.height)}]`)
 
   try {
-    // ★ 防重复 init 检查：如果 el 已经被之前某次并发 init 过了（有 __ec_inner_xx 属性），
-    //    直接 getInstanceByDom 拿现有实例，绝对不要 echarts.init 第二次！
-    //    （ECharts 会在 el 上挂 __ec_inner_<随机后缀> 作为唯一实例标记）
-    let alreadyInit = false
-    try {
-      const keys = Object.keys(el)
-      for (const k of keys) {
-        if (k.startsWith('__ec_inner_')) { alreadyInit = true; break }
-      }
-    } catch (_) { /* ignore */ }
+    // ★ 正确防重复 init：直接用 ECharts 官方 API getInstanceByDom(el)
+    //    ECharts 用 WeakMap 存 DOM→实例，不一定挂 __ec_inner_* 属性名到 el 上
+    //    之前用 Object.keys(el) 找属性名的方法是猜测，非常不可靠
     let localInstance: any = null
-    if (alreadyInit) {
-      try {
-        localInstance = (echarts as any).getInstanceByDom ? (echarts as any).getInstanceByDom(el) : null
-      } catch (_) { localInstance = null }
-    }
+    let reused = false
+    try {
+      if ((echarts as any).getInstanceByDom) {
+        localInstance = (echarts as any).getInstanceByDom(el)
+        if (localInstance) reused = true
+      }
+    } catch (_) { localInstance = null }
+    pushInitStep(`doInitChart[getInstanceByDom → reused=${reused}]`)
 
     if (!localInstance) {
-      // 真正安全的 init：只有 el 上没有任何 __ec_inner_ 标记时才调用 echarts.init
-      localInstance = echarts.init(el)
+      try {
+        pushInitStep('doInitChart[call echarts.init(el)…]')
+        localInstance = echarts.init(el)
+        pushInitStep('doInitChart[echarts.init OK]')
+      } catch (e0: any) {
+        const m0 = `echarts.init(el) 直接抛：[${e0?.constructor?.name||'Err'}] ${String(e0?.message||e0||'unknown')}`
+        lastFatalError.value = m0
+        pushInitStep(`doInitChart[echarts.init FAIL → ${m0.slice(0,60)}]`)
+        throw e0
+      }
     }
 
-    // 关键：只有 echarts.init 真正成功后才标记 inited=true（确保失败后下一次还能重试）
+    // 关键：只有 echarts.init / getInstanceByDom 成功后，才赋值给 chartInstance
     chartInstance = localInstance
-    try { chartInstance.off('click') } catch (_) { /* ignore */ }
-    chartInstance.on('click', handleChartClick)
-    applyOption()
-    window.removeEventListener('resize', handleResize)
-    window.addEventListener('resize', handleResize)
+    try {
+      chartInstance.off && chartInstance.off('click')
+      pushInitStep('doInitChart[off(click) OK]')
+    } catch (_) { /* ignore */ }
+    try {
+      chartInstance.on('click', handleChartClick)
+      pushInitStep('doInitChart[on(click) OK]')
+    } catch (e1: any) {
+      const m1 = `on(click) 抛：${String(e1?.message||e1||'unknown')}`
+      lastFatalError.value = m1
+      pushInitStep(`doInitChart[on(click) FAIL → ${m1.slice(0,60)}]`)
+      throw e1
+    }
+    try {
+      pushInitStep('doInitChart[applyOption(buildOption→setOption)…]')
+      applyOption()
+      pushInitStep('doInitChart[applyOption OK]')
+    } catch (e2: any) {
+      const m2 = `applyOption 抛：[${e2?.constructor?.name||'Err'}] ${String(e2?.message||e2||'unknown')}${e2?.stack ? '\n'+String(e2.stack).slice(0,500) : ''}`
+      lastFatalError.value = m2
+      pushInitStep(`doInitChart[applyOption FAIL → ${m2.slice(0,70)}]`)
+      throw e2
+    }
+    try {
+      window.removeEventListener('resize', handleResize)
+      window.addEventListener('resize', handleResize)
+      pushInitStep('doInitChart[resize 监听 OK]')
+    } catch (_) { /* ignore */ }
     inited = true
     debugInfo.value = {
       ...debugInfo.value,
-      init: `✅ ECharts.init 成功（容器 ${Math.round(rect.width)}×${Math.round(rect.height)}px，echarts=动态import${alreadyInit ? ',复用已存在实例' : ',全新init'},方法=getElementById）`,
+      init: `✅ ECharts.init 成功（容器 ${Math.round(rect.width)}×${Math.round(rect.height)}px，echarts=动态import,${reused?'复用实例':'全新init'},方法=getElementById）`,
       error: null,
       warn: null,
     }
+    lastFatalError.value = null
+    lastFatalWarn.value = null
+    pushInitStep('doInitChart[全部步骤完成 ✅]')
   } catch (e: any) {
-    // ★ 失败兜底：如果 init 抛错，立刻 dispose 可能半初始化的实例，
+    // ★ 失败兜底：如果任何步骤抛错，立刻 dispose 可能半初始化的实例，
     //    并且把 chartInstance 置空，保证下一轮 retry 可以继续尝试
+    pushInitStep(`doInitChart[进入 catch 分支 → dispose 半坏实例]`)
     if (chartInstance) {
       try { chartInstance.dispose() } catch (_) { /* ignore */ }
       chartInstance = null
@@ -371,13 +422,17 @@ async function doInitChart() {
     inited = false
     const msg = String(e?.message || e || 'unknown')
     const stack = e?.stack ? '\n...STACK:' + String(e.stack).slice(0, 500) : ''
+    const errStr = `[${e?.constructor?.name || 'Err'}] ${msg}${stack}`
     debugInfo.value = {
       ...debugInfo.value,
       init: '❌ ECharts.init 抛出异常',
-      error: `[${e?.constructor?.name || 'Err'}] ${msg}${stack}`,
+      error: errStr,
       warn: `echarts加载=${echartsLoadState.value}，elType=${el.constructor.name} tag=${el.tagName} size=${Math.round(rect.width)}×${Math.round(rect.height)}`,
     }
-    console.error('[StaffGanttChart] echarts.init failed:', e, 'element:', el)
+    // ★ 永久保存：不管后面 buildOption / retry耗尽怎么覆盖 debugInfo，lastFatalError 永远保留
+    if (!lastFatalError.value) lastFatalError.value = errStr
+    lastFatalWarn.value = debugInfo.value.warn
+    console.error('[StaffGanttChart] echarts.init full step failed:', e, 'element:', el, 'lastFatal:', lastFatalError.value)
   }
 }
 
@@ -527,23 +582,18 @@ function handleChartClick(params: any) {
 let retryTimer: any = null
 
 onMounted(() => {
-  // 多层兜底：立即执行 + 多层 nextTick + 多次延时
-  // （因为 getElementById 一定能拿到真正挂载到 DOM 的元素，所以下面一定有一次会成功）
+  // ★ 只保留一条稳定的重试路径：setInterval 每 300ms 串行尝试
+  //    之前的多条 setTimeout（立即/200/600/1200/2000/3000）会和 setInterval 的
+  //    触发时间重叠、再和 initRunning 锁交互，导致"都认为在执行中都跳过"的问题
+  //    ——现在只在开头立即触发 1 次 initChart()，其余全部交给 setInterval 有序调度。
   initChart()
-  nextTick(() => initChart())
-  nextTick(() => nextTick(() => initChart()))
-  setTimeout(() => initChart(), 200)
-  setTimeout(() => initChart(), 600)
-  setTimeout(() => initChart(), 1200)
-  setTimeout(() => initChart(), 2000)
-  setTimeout(() => initChart(), 3000)
 
-  // 持续重试兜底：每 300ms 重试一次，共 40 次 = 12 秒，保证一定成功
+  // 持续重试兜底：每 300ms 重试一次，共 60 次 = 18 秒（比之前多给 6 秒时间余地）
   let retryCount = 0
-  const MAX_RETRY = 40
+  const MAX_RETRY = 60
   retryTimer = setInterval(() => {
     retryCount++
-    if (chartInstance) {
+    if (chartInstance && inited) {
       if (retryTimer) { clearInterval(retryTimer); retryTimer = null }
       return
     }
@@ -551,8 +601,8 @@ onMounted(() => {
       if (retryTimer) { clearInterval(retryTimer); retryTimer = null }
       debugInfo.value = {
         ...debugInfo.value,
-        init: '❌ 重试已耗尽（40 次 × 300ms）',
-        error: '请检查浏览器控制台是否有其他错误（按 F12 → Console）',
+        init: `❌ 重试已耗尽（${MAX_RETRY} 次 × 300ms）` + (lastFatalError.value ? '' : '，请检查浏览器控制台是否有其他错误（按 F12 → Console）'),
+        error: lastFatalError.value || debugInfo.value.error || '请检查浏览器控制台是否有其他错误（按 F12 → Console）',
       }
       return
     }
