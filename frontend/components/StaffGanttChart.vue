@@ -431,13 +431,10 @@ const debugInfo = ref<any>({
   error: null,
 })
 
-// 图表实例（用 EChartsModule 类型代替顶层 import 引用）
-let chartInstance: any = null
 // SSR 环境下没有 document，避免引用错误
 const isBrowser = typeof document !== 'undefined'
 // ★ 终极方案：用稳定的唯一 ID 直接 getElementById，不依赖 ref/ClientOnly
 //    每次组件挂载都生成新 ID，避免同一页面多个甘特图 ID 冲突
-const canvasUniqueId = 'staff-gantt-canvas-' + Math.random().toString(36).slice(2, 10)
 
 // echarts 加载状态（调试面板显示用，必须 ref，不然 UI 不更新）
 const echartsLoadState = ref<'未加载' | '加载中' | '已加载' | '加载失败'>('未加载')
