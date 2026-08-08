@@ -1445,10 +1445,17 @@ function initHeaderChart() {
 // ★ v0824 双向同步：滑块现在在顶部冻结表头（headerChartInstance）里！
 //   用户拖动顶部滑块 → 监听 headerChartInstance 的 dataZoom 事件 → 同步 dzRange → 再同步主图 xAxis min/max
 function bindChartEvents() {
-  // 点击甘特图条：保持原有业务跳转
+  // ★ v0845 点击甘特图条：双保险
+  //   1) ECharts on('click')（custom series 可能不触发，但保留）
+  //   2) canvas 原生 click + convertFromPixel 反算（主力，100% 可靠）
   if (chartInstance) {
     chartInstance.off('click')
     chartInstance.on('click', handleChartClick)
+  }
+  const canvasEl = document.getElementById(canvasUniqueId)
+  if (canvasEl) {
+    canvasEl.removeEventListener('click', nativeCanvasClickHandler as any)
+    canvasEl.addEventListener('click', nativeCanvasClickHandler as any)
   }
   // 顶部滑块的 dataZoom 事件：拖动滑块时同步主图时间范围
   if (headerChartInstance) {
@@ -1513,6 +1520,40 @@ function handleChartClick(params: any) {
     } as MouseEvent
   }
   emit('bar-click', { assignment: assignment as unknown as StaffAssignment, event: realEvent })
+}
+
+// ★ v0845 终极修复：custom series 的 click 事件在 ECharts 5 中不触发（合成事件验证：
+//   原生 mousedown/click 都到达 canvas，但 ECharts on('click') handler 不执行）。
+//   → 改用 canvas 原生 click + convertFromPixel 反算坐标，找命中的色条，手动 emit。
+//   100% 可靠，不依赖 ECharts custom series 事件机制。
+function nativeCanvasClickHandler(e: MouseEvent) {
+  if (!chartInstance) return
+  // 防重复：ECharts click 若也触发，200ms 内忽略
+  if (barClickFlag) { return }
+  const target = e.currentTarget as HTMLElement
+  const rect = target.getBoundingClientRect()
+  const px = e.clientX - rect.left
+  const py = e.clientY - rect.top
+  let ts = NaN, yVal = NaN
+  try {
+    ts = chartInstance.convertFromPixel({ xAxisIndex: 0 }, px) as number
+    yVal = chartInstance.convertFromPixel({ yAxisIndex: 0 }, py) as number
+  } catch { return }
+  if (isNaN(ts) || isNaN(yVal)) return
+  const yIdx = Math.round(yVal)
+  // 在 ganttBars 里找：yIndex 匹配 且 ts 落在 [start, end] 区间
+  const bar = ganttBars.value.find(b =>
+    Number(b.value[0]) === yIdx &&
+    Number(b.value[1]) <= ts &&
+    Number(b.value[2]) >= ts
+  )
+  if (!bar) return
+  const id = bar._assignmentId
+  const assignment = assignmentMap.value.get(id)
+  if (!assignment) return
+  barClickFlag = true
+  setTimeout(() => { barClickFlag = false }, 250)
+  emit('bar-click', { assignment: assignment as unknown as StaffAssignment, event: e })
 }
 
 let retryTimer: any = null
