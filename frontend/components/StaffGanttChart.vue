@@ -615,10 +615,15 @@ const ganttBars = computed(() => {
     const __start = new Date(a.startDate).getTime()
 
     // 规则2：右端 = status 决定
+    // ★ v0840 关键修复：ECharts time axis 画 bar 时，末端像素会被向下取整到网格刻度
+    //   即使 endFinal=今天中午(nowTs+6h)，视觉上也会比 markLine(xAxis:now=今天0点)短2-3像素
+    //   → 必须把 endFinal 推到 nowTs+12h（今天下午6点），让 bar 末端时间戳比 markLine 多12小时
+    //   → 视觉上 bar 右端一定能覆盖住今天蓝色竖线！
+    const BAR_END_BUFFER_MS = 12 * 3600 * 1000 // 12小时冗余（今天下午6点）
     let __end: number
     if (isActive) {
-      // 非 ended → 一定在任 → 右端=今天中午
-      __end = nowTs.value + 6 * 3600 * 1000
+      // 非 ended → 一定在任 → 右端=今天下午6点（绝对覆盖 markLine）
+      __end = nowTs.value + BAR_END_BUFFER_MS
     } else {
       // ended → 按原始 endDate
       if (a.endDate) {
@@ -1097,7 +1102,9 @@ function buildOption() {
   //   但 ECharts time axis 的 encode bar 末端会自动被网格切 1 两像素（clip:false 仍然如此），
   //   所以这里 xAxis.max 主动给「max(原max, now) + 3 天」，保证 today 竖线位置 ≠ 画布右边缘，
   //   bar 末端就能完整、正确对齐到今天竖线，不会差一点点距离。
-  const xAxisMax = Math.max(tr.max, now) + 3 * DAY_MS
+  // ★ v0840 关键修复：xAxis.max 给 +5天 冗余（之前+3天不够，bar endFinal=nowTs+12h 需要更多右侧空间）
+  //   确保 bar 右端(今天下午6点) 100% 可见，不被 xAxis 边缘截断
+  const xAxisMax = Math.max(tr.max, now) + 5 * DAY_MS
   const xAxisMin = tr.min
 
   return {
@@ -1249,7 +1256,8 @@ function buildHeaderOption() {
   for (const n of names) maxLen = Math.max(maxLen, String(n || '').length)
   // ★ v0824 冻结表头 grid.left 和主图、computed 完全一致：14px/字+徽标40+padding24，下限120，上限240
   const gridLeftRec = Math.max(Math.min(maxLen * 14 + 40 + 24, 240), 120)
-  const xAxisMax = Math.max(tr.max, now) + 3 * DAY_MS
+  // ★ v0840 冻结表头 xAxis.max 也 +5天 冗余（与主图一致）
+  const xAxisMax = Math.max(tr.max, now) + 5 * DAY_MS
   const xAxisMin = tr.min
   const curStartValue = dzRange.value?.startValue ?? defaultStart
   const curEndValue = dzRange.value?.endValue ?? defaultEnd
