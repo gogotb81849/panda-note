@@ -215,8 +215,8 @@
       </div>
     </div>
 
-    <!-- ====== 政委个人卡片 ====== -->
-    <el-dialog v-model="profileCardVisible" title="政委个人卡片" width="520px">
+    <!-- ====== 政委个人卡片（v0845 统一大卡片：单击色条弹出，内含政委更换操作）====== -->
+    <el-dialog v-model="profileCardVisible" title="政委个人卡片" width="560px">
       <div class="profile-card" v-if="popoverAssignment">
         <!-- 头部：头像 + 姓名 + 状态 -->
         <div class="profile-card-header">
@@ -264,7 +264,37 @@
             <div class="profile-item"><span class="profile-label">数据来源</span><span class="profile-value">{{ popoverAssignment.user?.dataSource || '-' }}</span></div>
           </div>
         </div>
+
+        <!-- ★ v0845 政委操作区：在任可「下船交接（更换）」、休假可「销假」、统一编辑/删除 -->
+        <div class="profile-section profile-actions-section">
+          <div class="profile-section-title">政委操作</div>
+          <div class="profile-actions">
+            <el-button
+              v-if="popoverAssignment.status === 'active' && !popoverAssignment.endDate"
+              type="primary"
+              @click="replaceFromCard"
+            >🔁 政委更换（下船交接）</el-button>
+            <el-button
+              v-if="popoverAssignment.status === 'active'"
+              type="warning"
+              @click="leaveFromCard"
+            >休假</el-button>
+            <el-button
+              v-if="popoverAssignment.status === 'leave'"
+              type="success"
+              @click="endLeaveFromCard"
+            >销假</el-button>
+            <el-button @click="editFromCard">编辑</el-button>
+            <el-button type="danger" @click="deleteFromCard">删除</el-button>
+          </div>
+          <div class="profile-actions-hint" v-if="popoverAssignment.status === 'active' && !popoverAssignment.endDate">
+            点击「政委更换」可设置当前政委下船时间，并登记新政委上船时间（自动生成两条派任记录）。
+          </div>
+        </div>
       </div>
+      <template #footer>
+        <el-button @click="profileCardVisible = false">关闭</el-button>
+      </template>
     </el-dialog>
 
     <!-- ====== 创建/编辑派任对话框 ====== -->
@@ -958,15 +988,24 @@ const loadStaffHistory = async () => {
 };
 
 // ====== 甘特图点击色条 ======
+// ★ v0845 统一卡片：点击色条直接弹「大卡片」(el-dialog)，不再用小 popover。
+//   大卡片内含政委情况 + 操作按钮（下船交接/编辑/休假/销假/删除），符合陈先生
+//   "统一成大的、里面能更换政委（显示下船时间+新政委上船时间）"的诉求。
 const onBarClick = (payload: { assignment: StaffAssignment; event: MouseEvent }) => {
   popoverAssignment.value = payload.assignment;
-  // 定位 Popover
-  const x = Math.min(payload.event.clientX - 120, window.innerWidth - 280);
-  const y = Math.min(payload.event.clientY + 10, window.innerHeight - 320);
-  popoverX.value = Math.max(10, x);
-  popoverY.value = Math.max(10, y);
-  popoverVisible.value = true;
+  profileCardVisible.value = true;
 };
+
+// ★ v0845 大卡片操作：先关大卡片再触发对应流程（更换/编辑/休假等对话框）
+const runFromCard = (fn: () => void) => {
+  profileCardVisible.value = false;
+  nextTick(() => fn());
+};
+const replaceFromCard = () => runFromCard(handleReplaceFromPopover);
+const editFromCard = () => runFromCard(() => handleEdit(popoverAssignment.value!));
+const leaveFromCard = () => runFromCard(() => handleLeave(popoverAssignment.value!));
+const endLeaveFromCard = () => runFromCard(() => handleEndLeave(popoverAssignment.value!));
+const deleteFromCard = () => runFromCard(() => handleDelete(popoverAssignment.value!));
 
 // 甘特图空白区域点击 → 直接上船登记（预填船舶）
 const onEmptyClick = (payload: { shipId: number; date: string }) => {
@@ -1569,6 +1608,26 @@ onMounted(async () => {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px 24px;
+}
+
+/* ★ v0845 政委操作区样式 */
+.profile-actions-section {
+  margin-top: 8px;
+  padding: 14px 16px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+.profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.profile-actions-hint {
+  margin-top: 10px;
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.6;
 }
 
 .profile-item {

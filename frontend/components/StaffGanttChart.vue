@@ -46,14 +46,16 @@
 
       <!-- v0818 版本号/TAG 永远可见（缩放按钮已移到甘特图右侧悬浮） -->
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0 10px;">
-        <div style="font-size:11px;color:#909399;flex:1;min-width:200px;">💡 提示：上下拖动可滚动船舶列表；右侧 +/- 按钮可缩放时间轴；底部滑块可手动拖区间；月份刻度已固定在顶部</div>
+        <div style="font-size:11px;color:#909399;flex:1;min-width:200px;">💡 提示：单击政委色条查看详情/更换；上下拖动滚动船舶列表；右侧 +/- 按钮缩放时间轴；月份刻度固定在顶部</div>
+        <!-- ★ v0845 调试面板切换改为按钮控制（原先双击切换会和"双击色条看卡片"冲突） -->
+        <button class="gantt-debug-toggle" @click="onDblClickWrapper" :title="debugVisible ? '关闭调试面板' : '打开调试面板'">{{ debugVisible ? '🔍 调试(开)' : '🔍 调试(关)' }}</button>
         <!-- ★ v0812 版本号/TAG 永远可见，用户一眼就知道是不是最新部署（动态从 runtimeConfig 读，不再写死） -->
         <div style="font-size:12px;color:#606266;margin-left:auto;font-weight:600;">🏷️ 甘特图 <span style="color:#409eff;">{{ APP_VERSION_SHORT }}</span> · TAG <span style="color:#27ae60;">{{ APP_VERSION }}</span> · 构建 <span style="color:#e67e22;">{{ buildTimeLabel }}</span></div>
       </div>
 
       <!-- v0807j 结构重组：scroll-box = 可滚动容器(overflow auto)，内部 2 块 + 右侧悬浮缩放按钮 -->
       <div style="position:relative;">
-      <div class="staff-gantt-scroll-box" :style="{ maxHeight: scrollMaxHeight + 'px' }" @dblclick="onDblClickWrapper" ref="scrollBoxRef">
+      <div class="staff-gantt-scroll-box" :style="{ maxHeight: scrollMaxHeight + 'px' }" ref="scrollBoxRef">
         <!-- ★ 冻结表头：Excel 模式 sticky top 0 始终显示月份刻度
              ★ v0816 终极图层重构——4层 DOM 顺序（从下到上）：
                ① canvas 月份刻度 z1 < ② mask 白底遮(盖色条左端溢出，z6) < ③ 【新增 HTML 船名图层 z8】< ④ 分割竖线 z7(调到z9最高)
@@ -164,6 +166,24 @@
 }
 .gantt-zoom-today {
   font-size: 14px;
+}
+/* ★ v0845 调试面板切换按钮 */
+.gantt-debug-toggle {
+  padding: 4px 10px;
+  border: 1px solid #dcdfe6;
+  border-radius: 6px;
+  background: #f4f4f5;
+  color: #606266;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.gantt-debug-toggle:hover {
+  background: #409eff;
+  color: #fff;
+  border-color: #409eff;
 }
 .staff-gantt-header-sticky {
   position: sticky;
@@ -1462,7 +1482,17 @@ watch(chartHeight, () => {
 let barClickFlag = false
 
 function handleChartClick(params: any) {
-  const id = params?.data?._assignmentId
+  // ★ v0845 排查 custom series 点击：custom series 的 click 事件 params.data
+  //   应为 series.data[dataIndex]（含 _assignmentId）。加日志便于定位"卡片跳不出来"。
+  console.log('[gantt-click v0845]', { componentType: params?.componentType, seriesType: params?.seriesType, dataIndex: params?.dataIndex, hasData: !!params?.data, hasId: !!params?.data?._assignmentId })
+  // custom series：params.data 即原始数据项；兼容 data 可能在 params.data.value 的情况
+  let id = params?.data?._assignmentId
+  // 兜底：若 params.data 缺失，尝试用 dataIndex 从 ganttBars 取
+  if (!id && typeof params?.dataIndex === 'number') {
+    const bar = ganttBars.value[params.dataIndex]
+    id = bar?._assignmentId
+    console.log('[gantt-click v0845] fallback dataIndex→bar', { dataIndex: params.dataIndex, foundId: id })
+  }
   if (!id) return
   const assignment = assignmentMap.value.get(id)
   if (!assignment) return
