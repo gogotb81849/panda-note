@@ -1189,57 +1189,90 @@ function buildOption() {
     // ★ v0824 陈先生要求：滑块移到顶部冻结表头（所有船的上方），主图不再放 slider
     //   滑块只在 buildHeaderOption 里声明一个，通过 dataZoom 事件双向同步。
     dataZoom: [],
-    series: [{
-      name: '政委任职',
-      type: 'bar',
-      encode: { x: [1, 2], y: 0 },
-      data: bars,
-      barMaxWidth: 28,
-      barMinHeight: 2,
-      // ★ v0812 马晶色条右端「→至今」的"今"字被切，根因就是 clip=true
-      //   之前怕 bar 溢出 canvas 外面，所以设了 clip=true → 同时把 label（insideLeft）
-      //   的尾部也一起裁掉了。外面 wrapper 有 overflow:hidden 兜底，这里必须改 clip=false。
-      clip: false,
-      z: 2, // ★ 陈先生要求进度条在底部（船名 z=9、splitArea z=0 < 进度条 z=2 < 船名文字 z=9；DOM 遮罩 z=6 盖 bar 左端）
-      label: {
-        show: true,
-        position: 'insideLeft',
-        color: '#ffffff',
-        // ★ v0812 手机端窄屏适配：屏幕宽<768px → fontSize 10px + padding 减少，尽量多放文字不被挤
-        fontSize: (typeof window !== 'undefined' && window.innerWidth < 768) ? 10 : 11,
-        fontWeight: 500,
-        overflow: 'truncate',
-        // ★ v0812 右端"至今/日"文字不被切：padding 左右都留空间，且内部再空 2px
-        padding: (typeof window !== 'undefined' && window.innerWidth < 768) ? [0, 8, 0, 4] : [0, 16, 0, 8],
-        // ★ v0812 手机端 formatter 更短：只显示人名(天数)+起始月日→至今，尽量少占宽度
-        //   PC 端保持原样：人名(天数)完整日期
-      formatter: (params: any) => {
-          const txt = String(params?.data?._labelText || params?.data?.label?.formatter || '')
-          if (typeof window !== 'undefined' && window.innerWidth < 768) {
-            // ★ v0816 手机端极致压缩：
-            //   原来还保留 MM-DD 会让色条左端 label 超长（第一张图色条左端几乎和 X 起点对齐→label写不下→overflow省略）
-            //   进一步去掉 起始日期 - 日份，只保留 【人名(天数) 至今】 或 【人名(天数) 起月~终月】，让用户知道是谁，天数，状态。
-            return txt
-              .replace(/（/g, '(').replace(/）/g, ')')
-              .replace(/\d{4}-\d{2}-(\d{2})/g, '$1') // 2026-03-07 -> 07 （去掉年月，只保留日）
-              .replace(/(\d{2})~(\d{2}-\d{2})/g, '$1→$2')
-              .replace(/→至今/g, '至今')
+    // ★ v0842 终极根因修复（陈先生反复反馈「所有船的进度条到上船日就截止、右侧空荡」）
+    //   真实根因：ECharts 5.5 的 type:'bar' 在 time axis + encode{x:[1,2]} 下
+    //   不会渲染成「区间柱」（从 start 到 end），而是把 value[1] 当成 bar 的单值，
+    //   从 xAxis.min 堆叠画到 value[1]（=startDate）。
+    //   像素扫描铁证：bar 左端=xAxisMin(120px 时间轴起点)，右端≈startDate 像素，
+    //   endFinal(今天)对应的像素根本没画到。调试面板 endFinal=08-09 是对的，
+    //   纯粹是 ECharts bar 不支持区间渲染。
+    //   → 改用 type:'custom' + renderItem，用 api.coord 显式画矩形从 startFinal 到 endFinal，
+    //     100% 精确控制色条起止，彻底绕开 ECharts bar 的区间语义缺陷。
+    series: [
+      {
+        name: '政委任职',
+        type: 'custom',
+        encode: { x: [1, 2], y: 0 },
+        data: bars,
+        clip: false,
+        z: 2,
+        renderItem: (params: any, api: any) => {
+          const yIdx = api.value(0)
+          const startTs = api.value(1)
+          const endTs = api.value(2)
+          if (startTs == null || endTs == null || isNaN(startTs) || isNaN(endTs)) return
+          const sp = api.coord([startTs, yIdx])
+          const ep = api.coord([endTs, yIdx])
+          if (!sp || !ep) return
+          const barH = 26
+          const x0 = sp[0]
+          const y0 = sp[1] - barH / 2
+          const w = Math.max(2, ep[0] - sp[0])
+          const d = params.data
+          const color = d?.itemStyle?.color || '#67c23a'
+          const opa = d?.itemStyle?.opacity ?? 1
+          const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
+          const children: any[] = [
+            {
+              type: 'rect',
+              shape: { x: x0, y: y0, width: w, height: barH, r: [3, 3, 3, 3] },
+              style: { fill: color, opacity: opa },
+            },
+          ]
+          // label：色条内部左侧白色文字（复用原 _labelText + 手机端压缩逻辑）
+          let txt = String(d?._labelText || '')
+          if (txt) {
+            if (isMobile) {
+              txt = txt
+                .replace(/（/g, '(').replace(/）/g, ')')
+                .replace(/\d{4}-\d{2}-(\d{2})/g, '$1')
+                .replace(/(\d{2})~(\d{2}-\d{2})/g, '$1→$2')
+                .replace(/→至今/g, '至今')
+            }
+            children.push({
+              type: 'text',
+              style: {
+                text: txt,
+                x: x0 + (isMobile ? 6 : 10),
+                y: sp[1],
+                fill: '#ffffff',
+                fontSize: isMobile ? 10 : 11,
+                fontWeight: 500,
+                textVerticalAlign: 'middle',
+                textAlign: 'left',
+                overflow: 'truncate',
+                textWidth: Math.max(0, w - (isMobile ? 12 : 20)),
+              },
+            })
           }
-          return txt
+          return { type: 'group', children }
         },
+      },
+      {
+        // 独立的今天线 markLine：custom series 不支持 markLine，用空 line series 承载
+        name: '今天线',
+        type: 'line',
+        data: [],
         z: 3,
+        markLine: {
+          silent: true,
+          symbol: ['none', 'none'],
+          label: { formatter: '今天', position: 'end', color: '#409eff', fontSize: 11 },
+          lineStyle: { color: '#409eff', type: 'solid', width: 2.5 },
+          data: [{ xAxis: now }],
+        },
       },
-      markLine: {
-        silent: true,
-        symbol: ['none', 'none'],
-        // ★ markLine 画在顶部（冻结表头 canvas）也画一份，保证滚动时月份标题区
-        //   也显示蓝色今天标识。这里主画布仍然再画一条作为全甘特图贯穿线，
-        //   这样滚动到最下方也能看到今天竖线（Excel 冻结标题效果：主区域和标题区均有 today）
-        label: { formatter: '今天', position: 'end', color: '#409eff', fontSize: 11 },
-        lineStyle: { color: '#409eff', type: 'solid', width: 2.5 }, // ★ v0824 加粗到2.5px，主图+表头完全一致
-        data: [{ xAxis: now }], // xAxis 完全相同 nowTs
-      },
-    }],
+    ],
   }
 }
 
