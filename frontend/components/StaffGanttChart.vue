@@ -960,7 +960,12 @@ function buildOption() {
     yAxis: {
       type: 'category',
       data: yCategories.value,
-      inverse: false,
+      // ★ v0826 根因修复：船名与色条错位
+      //   reversedShips = [船N, ..., 船1]（反转后的列表）
+      //   HTML 图层 v-for idx=0=船N 在 top=GRID_TOP（顶部）
+      //   ECharts inverse:false → data[0]=船N 在底部 → 和 HTML 完全相反！
+      //   改为 inverse:true → data[0]=船N 也在顶部 → 和 HTML idx=0 完全一致
+      inverse: true,
       // ★ v0816 船名+空缺徽标完全由独立HTML图层(z8>mask z6)绘制！彻底关闭canvas上的Y轴axisLabel/axisLine/axisTick
       //   - 关闭原因：之前 ECharts Y axisLabel 画在 canvas 的 0..grid.left 区域，
       //     但 DOM .y-axis-mask 也是宽 gridLeftRec 白底 z6 → 上层 DOM 直接盖死所有 canvas 像素
