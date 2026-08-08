@@ -40,23 +40,15 @@
         <div v-if="debugInfo.error && !lastFatalError" style="width:100%;color:#c0392b;white-space:pre-wrap;">本次 ERROR: {{ debugInfo.error }}</div>
       </div>
 
-      <!-- v0807m 缩放体验：上方固定操作按钮栏（缩小/放大时间范围 + 重置） + 说明 + ★ 永远可见版本号/TAG（解决"看不到版本号"） -->
+      <!-- v0818 版本号/TAG 永远可见（缩放按钮已移到甘特图右侧悬浮） -->
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0 10px;">
-        <button @click="zoomInRange" style="padding:4px 10px;font-size:12px;border:1px solid #dcdfe6;border-radius:4px;background:#fff;cursor:pointer;">🔍 放大时间（范围缩小1/2）</button>
-        <button @click="zoomOutRange" style="padding:4px 10px;font-size:12px;border:1px solid #dcdfe6;border-radius:4px;background:#fff;cursor:pointer;">🔍 缩小时间（范围扩大×2）</button>
-        <button @click="resetRange" style="padding:4px 10px;font-size:12px;border:1px solid #dcdfe6;border-radius:4px;background:#fff;cursor:pointer;">↺ 重置时间范围</button>
-        <div style="font-size:11px;color:#909399;margin-left:4px;flex:1;min-width:220px;">💡 提示：① 鼠标滚轮/双指在色条区域可以缩放时间轴；② 鼠标在色条上拖动可以平移时间轴；③ 底部滑块可以手动拖区间；④ 月份刻度已固定在顶部（滚动时不消失）</div>
+        <div style="font-size:11px;color:#909399;flex:1;min-width:200px;">💡 提示：上下拖动可滚动船舶列表；右侧 +/- 按钮可缩放时间轴；底部滑块可手动拖区间；月份刻度已固定在顶部</div>
         <!-- ★ v0812 版本号/TAG 永远可见，用户一眼就知道是不是最新部署（动态从 runtimeConfig 读，不再写死） -->
         <div style="font-size:12px;color:#606266;margin-left:auto;font-weight:600;">🏷️ 甘特图 <span style="color:#409eff;">{{ APP_VERSION_SHORT }}</span> · TAG <span style="color:#27ae60;">{{ APP_VERSION }}</span> · 构建 <span style="color:#e67e22;">{{ buildTimeLabel }}</span></div>
       </div>
 
-      <!-- v0807j 结构重组：scroll-box = 可滚动容器(overflow auto)，内部 2 块：
-             ┌─ headerSticky (sticky top=0) ─┐  ← 经验 446971 冻结表头：独立 canvas 仅渲染月份刻度
-             │ 月份刻度(表头canvas)             │     + 左侧Y轴船名区底色遮住进度条左端
-             ├─ 主甘特图 canvas (可滚动)     ─┤  ← 色条 + Y轴船名文字（底色靠上层 DOM 遮住进度条左端）
-           上下滚动甘特图时，月份刻度标题行始终显示（Excel 冻结标题行效果）
-           经验 935613：两画布必须同一 min/max / grid.left / grid.right，才能像素级对齐
-      -->
+      <!-- v0807j 结构重组：scroll-box = 可滚动容器(overflow auto)，内部 2 块 + 右侧悬浮缩放按钮 -->
+      <div style="position:relative;">
       <div class="staff-gantt-scroll-box" :style="{ maxHeight: scrollMaxHeight + 'px' }" @dblclick="onDblClickWrapper" ref="scrollBoxRef">
         <!-- ★ 冻结表头：Excel 模式 sticky top 0 始终显示月份刻度
              ★ v0816 终极图层重构——4层 DOM 顺序（从下到上）：
@@ -106,6 +98,14 @@
           <div class="y-axis-mask-sep" :style="{ left: gridLeftRec + 'px', height: chartHeight + 'px', zIndex: 9 }"></div>
         </div>
       </div>
+      <!-- ★ v0818 右侧悬浮缩放按钮组（陈先生要求：加减号放右侧，不影响上下滑动） -->
+      <div class="gantt-zoom-controls">
+        <button class="gantt-zoom-btn" @click="zoomInRange" title="放大时间（范围缩小1/2）">＋</button>
+        <button class="gantt-zoom-btn" @click="zoomOutRange" title="缩小时间（范围扩大×2）">－</button>
+        <button class="gantt-zoom-btn gantt-zoom-reset" @click="resetRange" title="重置时间范围">↺</button>
+        <button class="gantt-zoom-btn gantt-zoom-today" @click="goToToday" title="回到今天">📌</button>
+      </div>
+      </div>
     </div>
   </div>
 </template>
@@ -119,6 +119,47 @@
   border-radius: 6px;
   background: #ffffff;
   -webkit-overflow-scrolling: touch;
+}
+/* ★ v0818 右侧悬浮缩放按钮组 */
+.gantt-zoom-controls {
+  position: absolute;
+  right: 8px;
+  top: 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 30;
+}
+.gantt-zoom-btn {
+  width: 36px;
+  height: 36px;
+  border: 1px solid #dcdfe6;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #303133;
+  font-size: 18px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  transition: all 0.15s;
+  user-select: none;
+}
+.gantt-zoom-btn:hover {
+  background: #409eff;
+  color: #fff;
+  border-color: #409eff;
+}
+.gantt-zoom-btn:active {
+  transform: scale(0.92);
+}
+.gantt-zoom-reset {
+  font-size: 16px;
+}
+.gantt-zoom-today {
+  font-size: 14px;
 }
 .staff-gantt-header-sticky {
   position: sticky;
@@ -315,6 +356,15 @@ function resetRange() {
   }
   syncHeaderZoom()
 }
+// ★ v0818 回到今天：重置范围到以今天为中心的 6 个月窗口 + 滚动到今天位置
+function goToToday() {
+  const now = Date.now()
+  dzRange.value = { startValue: now - 90 * DAY_MS, endValue: now + 90 * DAY_MS }
+  if (chartInstance) {
+    chartInstance.dispatchAction({ type: 'dataZoom', startValue: dzRange.value.startValue, endValue: dzRange.value.endValue, xAxisIndex: [0] })
+  }
+  syncHeaderZoom()
+}
 function syncHeaderZoom() {
   if (!headerChartInstance || !dzRange.value) return
   try {
@@ -409,9 +459,10 @@ const gridLeftRec = computed(() => {
   const names = yCategories.value
   let maxLen = 0
   for (const n of names) maxLen = Math.max(maxLen, String(n || '').length)
-  // ★ v0810 陈先生手机端截图：「熊亮」只显示了"熊"半个字→左边被mask裁切。
-  //   三个措施：①每中文18px（原16px）；②徽标80+padding40（原64+32）；③最低180px（原150px），上限340px
-  return Math.max(Math.min(maxLen * 18 + 80 + 40, 340), 180)
+  // ★ v0818 陈先生反馈"左侧船名区域宽度太大造成空间浪费"：
+  //   缩小公式：每中文14px（原18px）+ 徽标40（原80）+ padding24（原40）
+  //   下限120（原180），上限240（原340）—— 让右侧时间轴获得更多空间
+  return Math.max(Math.min(maxLen * 14 + 40 + 24, 240), 120)
 })
 
 // ★ v0807h 终极修复：彻底消灭 Y 轴索引错位（经验 904365 教训：单一数据模型驱动所有渲染）
@@ -512,13 +563,11 @@ const ganttBars = computed(() => {
     //   v0812 修改 end 从 +2h→+24h 时，不小心误删了 `const nowTs = Date.now()` 这一行声明，
     //   导致下方 L421 用 nowTs 时直接报错 ReferenceError——甘特图主图 applyOption 就失败，色条全白！
     const nowTs = Date.now()
-    // ★ v0807i 陈先生需求 #2：所有进度条「基本信息应该都是到今天」
-    //   - 有 endDate：按 endDate 原样保留（明确下船日期）
-    //   - 没有 endDate：按陈先生要求必须 100% 视觉覆盖到「蓝色今天竖线」的右侧。
-    //   v0810 手机端截图再次确认：2小时不够（手机端整体缩得窄，2h宽度只有几像素，看起来就像没对齐）。
-    //   改为 +24 小时（一整天），色条右端会明显延伸到今天线右侧 1 格内，视觉上 100% 就是"到今天还在任"。
-    //   有 endDate（明确下船日期）的派任保持精确 endDate 不变。
-    const end = a.endDate ? new Date(a.endDate).getTime() : (nowTs + 24 * 3600 * 1000)
+    // ★ v0818 陈先生需求：至今色条右端必须精确对齐"今天"蓝色竖线
+    //   之前 +24h 导致色条右端超过今天线一天，视觉上反而"没对齐"。
+    //   修复：end = nowTs（精确到毫秒），和 buildOption markLine 的 xAxis: now 用同一个时间基准，
+    //   ECharts bar encode 右边缘和 markLine 竖线像素级重合。
+    const end = a.endDate ? new Date(a.endDate).getTime() : nowTs
     if (isNaN(start) || isNaN(end) || end <= start) continue
 
     const days = Math.max(1, Math.round((end - start) / DAY_MS))
@@ -894,7 +943,11 @@ function buildOption() {
     },
     dataZoom: [
       { type: 'slider', xAxisIndex: 0, startValue: curStartValue, endValue: curEndValue, height: 20, bottom: 10, borderColor: '#dcdfe6', brushSelect: false },
-      { type: 'inside', xAxisIndex: 0, moveOnMouseMove: true, zoomOnMouseWheel: true },
+      // ★ v0818 陈先生反馈"上下滑动失效"：根因是 inside 模式的 zoomOnMouseWheel+moveOnMouseMove
+      //   会拦截鼠标滚轮事件，导致 DOM scroll-box 的原生纵向滚动被吞掉。
+      //   修复：inside 只保留"双指缩放"（手机端 pinch），PC 端滚轮不再被 ECharts 拦截→纵向滚动恢复。
+      //   缩放改由右侧 +/- 按钮控制（见 template）。
+      { type: 'inside', xAxisIndex: 0, zoomOnMouseWheel: false, moveOnMouseMove: false, moveOnMouseWheel: false },
     ],
     series: [{
       name: '政委任职',
@@ -960,8 +1013,8 @@ function buildHeaderOption() {
   const names = yCategories.value
   let maxLen = 0
   for (const n of names) maxLen = Math.max(maxLen, String(n || '').length)
-  // ★ v0810 冻结表头 grid.left 和主图完全一致（同轴同域同边距）：18px/字+徽标80+padding40，下限180，上限340
-  const gridLeftRec = Math.max(Math.min(maxLen * 18 + 80 + 40, 340), 180)
+  // ★ v0818 冻结表头 grid.left 和主图完全一致（同轴同域同边距）：14px/字+徽标40+padding24，下限120，上限240
+  const gridLeftRec = Math.max(Math.min(maxLen * 14 + 40 + 24, 240), 120)
   const xAxisMax = Math.max(tr.max, now) + 3 * DAY_MS
   const xAxisMin = tr.min
   const curStartValue = dzRange.value?.startValue ?? defaultStart
@@ -1098,7 +1151,10 @@ function handleChartClick(params: any) {
   const assignment = assignmentMap.value.get(id)
   if (!assignment) return
   barClickFlag = true
-  emit('bar-click', { assignment: assignment as unknown as StaffAssignment, event: {} as MouseEvent })
+  // ★ v0818 修复 popover 定位失败：之前传空对象 {}，clientX/clientY 全是 undefined
+  //   ECharts click params.event.event 是原生 MouseEvent，包含真实坐标
+  const realEvent = (params?.event?.event || params?.event || {}) as MouseEvent
+  emit('bar-click', { assignment: assignment as unknown as StaffAssignment, event: realEvent })
 }
 
 let retryTimer: any = null
