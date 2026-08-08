@@ -461,15 +461,18 @@ function getDaysOnBoard(startDate: string, endDate?: string | null): number {
   return Math.floor((end - start) / DAY_MS)
 }
 
+// ★ v0838 色条颜色：与 ganttBars 统一规则，只有 ended集合 才算历史；其他一律在任→到今天算天数
 function getBarColor(a: AssignmentItem): string {
   const status = (a.status || '').toLowerCase()
   if (status === 'leave') return '#a8abb2'
-  // ★ v0830 只有明确 status 是 ended 才灰色；其他一切（含空/脏/未知）全算在任，不看脏 endDate
-  const ENDED_STATUSES = new Set(['ended', 'offboard', '下船', '离职', '离船', '已下船', '已离船'])
-  if (ENDED_STATUSES.has(status)) return '#b8b8b8'
-  // 天数：用 status 决定 end 基准，不能再用脏 a.endDate
-  const end = ENDED_STATUSES.has(status) && a.endDate ? new Date(a.endDate).getTime() : Date.now()
-  const days = Math.max(1, Math.floor((end - new Date(a.startDate).getTime()) / DAY_MS))
+  const ENDED_SET = new Set(['ended', 'offboard', '下船', '离职', '离船', '已下船', '已离船'])
+  const hasEnded = ENDED_SET.has(status)
+  const startTs = new Date(a.startDate).getTime()
+  const endTs = hasEnded && a.endDate
+    ? new Date(a.endDate).getTime()
+    : Date.now() // 在任→今天
+  const days = Math.max(1, Math.floor((endTs - startTs) / DAY_MS))
+  if (hasEnded) return '#b8b8b8' // 历史派任灰色
   if (days > 330) return '#ad0606'
   if (days > 300) return '#f56c6c'
   if (days > 240) return '#f89a3c'
@@ -596,60 +599,66 @@ const ganttBars = computed(() => {
     const status = (a.status || '').toLowerCase()
     if (status === 'leave') continue
 
-    const start = new Date(a.startDate).getTime()
-    // ★ v0830 陈先生反馈终极根因：「7/1上船→应该7/1→今天；实际显示 最左→7/1截止」（时间左右完全反了）
-    //   先加 DEBUG（每5条打印一次）：暴露真实 startDate/endDate/status/start/end/isActive
-    //   再绝对保险：无论 start/end 任何情况，强制 [s,e]=[min(s,e),max(s,e)]
-    //     —— ECharts encode x:[1,2] 画 bar 时，value[1] 必须 < value[2]，否则 bar 方向反（从右端往左端画）
-    const endTsRaw = a.endDate ? new Date(a.endDate).getTime() : nowTs.value
-    // ★ v0830 陈先生反馈：「7/1上船→应7/1→今天；实：最前→7/1截止」
-    //   真实根因：后端脏 endDate 太普遍了，空 status / 未知 status 都带脏 endDate < now
-    //   → 之前"其他值：有endDate且<now→历史"的宽松分支 = 把 99% 的在任派任都当历史！
-    //   终极规则：**只有明确 status=='ended'(同义值) 才算历史，其他一切状态（空/未知/active/脏）一律视为在任，忽略 endDate！**
-    //   这样无论后端 endDate 填得多乱，只要没明确下船，色条一定跑到今天。
-    let hasEnded = false
+    // ★ v0838 终极修复（陈先生原话：「所有的船舶都把上船日期当成了下船日期」）
+    //   彻底删掉所有复杂判定、min/max 调换操作。就三条死规则：
+    //   1. 左端 = 100% 原始 a.startDate 时间戳
+    //   2. 右端：
+    //      - 如果 status ∈ ended集合 → 原始 a.endDate（没有就start+1天）
+    //      - 其他一切（空/active/脏）→ 今天中午 12 点 (nowTs + 6h)
+    //   3. 最终保险：右端 < 左端 → 右端强制 = 左端 + 1天（保证不反向 / 不被 ECharts 自动丢弃）
+    //   不再猜测「是不是 min 搞错了」「是不是 max 搞反了」——一切按最直觉的写。
     const ENDED_STATUSES = new Set(['ended', 'offboard', '下船', '离职', '离船', '已下船', '已离船'])
-    hasEnded = ENDED_STATUSES.has(status)
+    const hasEnded = ENDED_STATUSES.has(status)
     const isActive = !hasEnded
-    const todayNoon = nowTs.value + 6 * 3600 * 1000
-    const _rawEndCalculated = isActive ? todayNoon : endTsRaw
-    const startFinal = start
-    const endFinal = isActive
-      ? Math.max(start, todayNoon)
-      : Math.max(start + DAY_MS, endTsRaw) // 历史派任：endDate<=start 时延长1天，保证bar可见且不反向
-    // ★ DEBUG 日志（每5条打1条，避免刷屏），方便陈先生手机打开控制台/我通过调试信息确认方向
-    if (Math.random() < 0.2) {
-      console.log('[gantt-bar-debug v0830]', {
-        shipId: a.shipId, shipName: a.ship?.cnShipName,
-        officer: a.user?.realName || a.ship?.politicalOfficerName,
-        status, startDate: a.startDate, endDate: a.endDate || '(null)',
-        isActive, hasEnded,
-        startFinal_d: new Date(startFinal).toISOString().slice(0,10),
-        endFinal_d: new Date(endFinal).toISOString().slice(0,10),
-        startFinal, endFinal,
-      })
+
+    // 规则1：左端 = 原始 a.startDate，不要任何处理
+    const __start = new Date(a.startDate).getTime()
+
+    // 规则2：右端 = status 决定
+    let __end: number
+    if (isActive) {
+      // 非 ended → 一定在任 → 右端=今天中午
+      __end = nowTs.value + 6 * 3600 * 1000
+    } else {
+      // ended → 按原始 endDate
+      if (a.endDate) {
+        __end = new Date(a.endDate).getTime()
+      } else {
+        __end = __start + DAY_MS // 没有 endDate 的 ended 派任：至少显示1天
+      }
     }
-    const end = endFinal
-    if (isNaN(startFinal) || isNaN(end) || end <= startFinal) {
-      console.warn('[gantt-bar skip v0830] invalid start<=end:', { a, startFinal, end })
+
+    // 规则3：右端必须大于左端（绝对保险，任何情况不反向）
+    if (__end <= __start) {
+      __end = __start + DAY_MS
+    }
+
+    const startFinal = __start
+    const endFinal = __end
+
+    // ★ v0838 色条 label 强制写「起始日期→结束日期」——陈先生不用猜，一眼就知道我用对了没有
+    const officerName = a.user?.realName || a.ship?.politicalOfficerName || '未指派'
+    const totalDays = Math.max(1, Math.round((endFinal - startFinal) / DAY_MS))
+    const _sMM = String(new Date(startFinal).getMonth() + 1).padStart(2, '0')
+    const _sDD = String(new Date(startFinal).getDate()).padStart(2, '0')
+    const _eMM = String(new Date(endFinal).getMonth() + 1).padStart(2, '0')
+    const _eDD = String(new Date(endFinal).getDate()).padStart(2, '0')
+    // 在任：结束日期 =「至今」；历史派任：结束日期 = MM/DD
+    const endLabel = isActive ? '至今' : `${_eMM}/${_eDD}`
+    const labelText = `${officerName}·${totalDays}天 ${_sMM}/${_sDD}→${endLabel}`
+
+    if (isNaN(startFinal) || isNaN(endFinal)) {
+      console.warn('[gantt-bar-skip v0838] NaN:', { a, startFinal, endFinal })
       continue
     }
 
-    const days = Math.max(1, Math.round(((isActive ? nowTs.value : end) - startFinal) / DAY_MS))
-    const startStr = new Date(startFinal).toISOString().slice(0, 10)
-    // ★ v0824 label：在任一律「→至今」；历史派任「~MM-DD」
-    const endStr = isActive ? '至今' : (a.endDate ? new Date(end).toISOString().slice(0, 10) : '至今')
-    const name = a.user?.realName || a.ship?.politicalOfficerName || '未指派'
-    const ended = hasEnded
-    const labelText = `${name}（${days}天）${startStr}${isActive ? '→至今' : '~' + endStr.slice(5)}`
-
     out.push({
-      value: [yIndex, startFinal, end],
+      value: [yIndex, startFinal, endFinal],  // ★ v0838：绝对不搞任何 min/max 调换，100% 按 [y, start, end]
       _assignmentId: a.id,
-      _labelText: labelText, // series.label.formatter 统一读取
+      _labelText: labelText,
       itemStyle: {
         color: getBarColor(a),
-        opacity: ended ? 0.65 : 1,
+        opacity: hasEnded ? 0.65 : 1,
         borderRadius: [3, 3, 3, 3],
         borderColor: 'transparent',
         borderWidth: 0,
