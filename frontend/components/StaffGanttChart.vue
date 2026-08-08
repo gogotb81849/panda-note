@@ -11,9 +11,9 @@
                  border:1px solid #fde68a;font-weight:700;font-size:13px;color:#7c2d12;
                  display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
         <span style="font-size:16px;">🚢</span>
-        <span>熊猫笔记 · 政委任职甘特图 <span style="color:#c2410c;">代码版本 v0807m</span> · TAG <span style="color:#15803d;">1.1.0.0807m</span></span>
+        <span>熊猫笔记 · 政委任职甘特图 <span style="color:#c2410c;">代码版本 {{ APP_VERSION_SHORT }}</span> · TAG <span style="color:#15803d;">{{ APP_VERSION }}</span></span>
         <span style="margin-left:auto;color:#9a3412;">构建时间：{{ buildTimeLabel }}</span>
-        <span style="color:#6b7280;font-weight:500;font-size:12px;">（如果您看到的版本号低于 v0807m → 请先点顶部工具栏【🔧 强制刷新服务端】按钮，15 秒后下拉刷新页面）</span>
+        <span style="color:#6b7280;font-weight:500;font-size:12px;">（如果您看到的版本号低于 {{ APP_VERSION_SHORT }} → 请先点顶部工具栏【🔧 强制刷新服务端】按钮，15 秒后下拉刷新页面）</span>
       </div>
 
       <!-- v0807m echarts 初始化失败告警（非 debug，永久可见，确保陈先生能看到 init 失败原因） -->
@@ -24,7 +24,7 @@
       <!-- 调试面板：默认隐藏，双击甘特图区域才显示（开发调试入口）
            正式上线默认隐藏，页面清爽；需要排查问题时双击 wrapper 可再显示所有诊断信息 -->
       <div class="debug-panel" v-show="debugVisible" style="display:flex;flex-wrap:wrap;gap:4px 16px;padding:10px 12px;">
-        <div style="width:100%;font-weight:600;margin-bottom:2px;">调试面板 (v0807m) · 双击下方色条区域可关闭</div>
+        <div style="width:100%;font-weight:600;margin-bottom:2px;">调试面板 ({{ APP_VERSION_SHORT }}) · 双击下方色条区域可关闭</div>
         <div style="min-width:280px;">初始化状态: <span :style="{ color: debugInfo.init?.includes('✅') ? '#27ae60' : debugInfo.init?.includes('❌') ? '#c0392b' : '#3498db', fontWeight: 600 }">{{ debugInfo.init || '未知' }}</span></div>
         <div style="min-width:240px;font-size:12px;color:#555;">echarts 加载状态: <b>{{ echartsLoadState }}</b>{{ echartsLoadError ? '（' + echartsLoadError + '）' : '' }}</div>
         <div style="min-width:240px;">船舶数: {{ debugInfo.ships }} | 派任数: {{ debugInfo.assignments }} | 色条数: {{ debugInfo.bars }}</div>
@@ -46,8 +46,8 @@
         <button @click="zoomOutRange" style="padding:4px 10px;font-size:12px;border:1px solid #dcdfe6;border-radius:4px;background:#fff;cursor:pointer;">🔍 缩小时间（范围扩大×2）</button>
         <button @click="resetRange" style="padding:4px 10px;font-size:12px;border:1px solid #dcdfe6;border-radius:4px;background:#fff;cursor:pointer;">↺ 重置时间范围</button>
         <div style="font-size:11px;color:#909399;margin-left:4px;flex:1;min-width:220px;">💡 提示：① 鼠标滚轮/双指在色条区域可以缩放时间轴；② 鼠标在色条上拖动可以平移时间轴；③ 底部滑块可以手动拖区间；④ 月份刻度已固定在顶部（滚动时不消失）</div>
-        <!-- ★ v0807m 版本号/TAG 永远可见，用户一眼就知道是不是最新部署 -->
-        <div style="font-size:12px;color:#606266;margin-left:auto;font-weight:600;">🏷️ 甘特图 <span style="color:#409eff;">v0807m</span> · TAG <span style="color:#27ae60;">1.1.0.0807m</span> · 构建 <span style="color:#e67e22;">{{ buildTimeLabel }}</span></div>
+        <!-- ★ v0812 版本号/TAG 永远可见，用户一眼就知道是不是最新部署（动态从 runtimeConfig 读，不再写死） -->
+        <div style="font-size:12px;color:#606266;margin-left:auto;font-weight:600;">🏷️ 甘特图 <span style="color:#409eff;">{{ APP_VERSION_SHORT }}</span> · TAG <span style="color:#27ae60;">{{ APP_VERSION }}</span> · 构建 <span style="color:#e67e22;">{{ buildTimeLabel }}</span></div>
       </div>
 
       <!-- v0807j 结构重组：scroll-box = 可滚动容器(overflow auto)，内部 2 块：
@@ -58,18 +58,28 @@
            经验 935613：两画布必须同一 min/max / grid.left / grid.right，才能像素级对齐
       -->
       <div class="staff-gantt-scroll-box" :style="{ maxHeight: scrollMaxHeight + 'px' }" @dblclick="onDblClickWrapper" ref="scrollBoxRef">
-        <!-- ★ 冻结表头：Excel 模式 sticky top 0 始终显示月份刻度 -->
+        <!-- ★ 冻结表头：Excel 模式 sticky top 0 始终显示月份刻度
+             ★ v0812 最致命图层BUG修复：DOM书写顺序必须是「canvas(最底层) → mask → sep」！
+               因为 position:absolute 同 z-index(auto) 下按 DOM 出现顺序叠，后写的在上层。
+               之前 canvas 写在最后，直接盖在 mask 上面，z=6 的 mask 根本没用！ -->
         <div class="staff-gantt-header-sticky" :style="{ height: HEADER_H + 'px' }">
+          <!-- ① 先写 canvas（月份刻度）——最底层 -->
+          <div :id="headerCanvasUniqueId" class="staff-gantt-header-canvas" style="position:absolute;top:0;left:0;right:0;bottom:0;z-index:1;"></div>
+          <!-- ② 再写 mask（白底遮住 canvas 左端船名区）——叠在 canvas 上层 -->
           <div class="y-axis-mask" :style="{ width: gridLeftRec + 'px', height: HEADER_H + 'px', zIndex: 6 }"></div>
+          <!-- ③ 最后写分割竖线（最高层） -->
           <div class="y-axis-mask-sep" :style="{ left: gridLeftRec + 'px', height: HEADER_H + 'px', zIndex: 7 }"></div>
-          <div :id="headerCanvasUniqueId" class="staff-gantt-header-canvas" style="position:absolute;top:0;left:0;right:0;bottom:0;"></div>
         </div>
 
-        <!-- 主甘特图：色条 + Y 轴船名 label + 底部 dataZoom + 底部 xAxis 副刻度 -->
+        <!-- 主甘特图：色条 + Y 轴船名 label + 底部 dataZoom + 底部 xAxis 副刻度
+             ★ v0812 图层DOM顺序同上：canvas(最下,z1) → mask(白底盖色条左端,z6) → sep(竖线最上,z7) -->
         <div class="staff-gantt-wrapper" :style="{ height: chartHeight + 'px' }">
+          <!-- ① 先写色条 canvas——最底层 -->
+          <div :id="canvasUniqueId" class="staff-gantt-canvas" style="position:absolute;top:0;left:0;right:0;bottom:0;z-index:1;" />
+          <!-- ② 再写 mask 白底——叠在色条上层，盖住 canvas 左端进度条起始处，船名文字在 ECharts 坐标系内 z=9 最上 -->
           <div class="y-axis-mask" :style="{ width: gridLeftRec + 'px', height: chartHeight + 'px', zIndex: 6 }"></div>
+          <!-- ③ 最后写分割竖线 -->
           <div class="y-axis-mask-sep" :style="{ left: gridLeftRec + 'px', height: chartHeight + 'px', zIndex: 7 }"></div>
-          <div :id="canvasUniqueId" class="staff-gantt-canvas" />
         </div>
       </div>
     </div>
@@ -124,6 +134,11 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+// ★ v0812 动态读取版本号/构建时间：彻底告别 template 写死 v0807m 的黑历史
+const { public: cfg } = useRuntimeConfig()
+const APP_VERSION = cfg.appVersion || '1.0.0'
+const APP_VERSION_SHORT = cfg.appVersionShort || ('v' + (APP_VERSION.split('.').pop() || 'x'))
+const APP_BUILD_TIME = cfg.appBuildTime || new Date().toISOString()
 // ★ 重要！删除顶层 echarts import：
 // 顶层 `import * as echarts from 'echarts'` 在 Nuxt SSR 阶段（Node 环境）就会被执行，
 // zrender 内部访问 window/Canvas API 导致整个模块损坏，到客户端后 init 调用就报
@@ -156,10 +171,10 @@ let chartInstance: any = null
 let headerChartInstance: any = null
 // 当前生效的 dataZoom 范围（用户缩放后保持同步；新建/重置时使用默认）
 const dzRange = ref<{ startValue: number; endValue: number } | null>(null)
-// ★ v0807m 永远可见的"构建时间戳"标签：用户一打开页面就能判断是否是最新部署
-const BUILD_TS = 1786142400_000 + Math.floor(Math.random() * 59_999)
+// ★ v0812 永远可见的"构建时间戳"标签：真实从 runtimeConfig.public.appBuildTime 读（nuxt构建时注入，每次打包都是新时间）
+//   之前写死 BUILD_TS=1786142400000 + 随机60秒，陈先生永远看到 06:40:04——这是大BUG！
 const buildTimeLabel = computed(() => {
-  const d = new Date(BUILD_TS + 8 * 3600 * 1000)
+  const d = new Date(new Date(APP_BUILD_TIME).getTime() + 8 * 3600 * 1000)
   const hh = String(d.getUTCHours()).padStart(2, '0')
   const mm = String(d.getUTCMinutes()).padStart(2, '0')
   const ss = String(d.getUTCSeconds()).padStart(2, '0')
@@ -207,7 +222,17 @@ function resetRange() {
 function syncHeaderZoom() {
   if (!headerChartInstance || !dzRange.value) return
   try {
-    headerChartInstance.dispatchAction({ type: 'dataZoom', startValue: dzRange.value!.startValue, endValue: dzRange.value!.endValue, xAxisIndex: [0] })
+    // ★ v0812 之前 dispatchAction({type:'dataZoom'}) 是错误用法！
+    //   冻结表头 buildHeaderOption 里根本没有声明 dataZoom 组件，dispatchAction 是找不到
+    //   dataZoom 目标的（静默失败，月份标题永远不跟随缩放）。
+    //   正确做法：直接 setOption 同步 min/max —— header 有独立 xAxis 就能响应。
+    const now = Date.now()
+    const tr = timeRange.value
+    headerChartInstance.setOption({
+      xAxis: { min: dzRange.value.startValue, max: dzRange.value.endValue },
+    }, false)
+    // 顺便刷新整个 header option 对齐主 option 的 gridLeft（如果船名变了）
+    headerChartInstance.setOption(buildHeaderOption(), false)
   } catch (_) { /* ignore */ }
 }
 
@@ -797,18 +822,34 @@ function buildOption() {
       data: bars,
       barMaxWidth: 28,
       barMinHeight: 2,
-      // ★ clip:true 避免 bar 右端超出 canvas 画布右边界溢出 wrapper 外面造成横条错位观感
-      clip: true,
-      z: 2, // ★ 陈先生要求进度条在底部（船名 z=9、splitArea z=0 < 进度条 z=2 < 船名文字 z=9；同时 DOM 遮罩 z=6 盖住 bar 左端）
+      // ★ v0812 马晶色条右端「→至今」的"今"字被切，根因就是 clip=true
+      //   之前怕 bar 溢出 canvas 外面，所以设了 clip=true → 同时把 label（insideLeft）
+      //   的尾部也一起裁掉了。外面 wrapper 有 overflow:hidden 兜底，这里必须改 clip=false。
+      clip: false,
+      z: 2, // ★ 陈先生要求进度条在底部（船名 z=9、splitArea z=0 < 进度条 z=2 < 船名文字 z=9；DOM 遮罩 z=6 盖 bar 左端）
       label: {
         show: true,
         position: 'insideLeft',
         color: '#ffffff',
-        fontSize: 11,
+        // ★ v0812 手机端窄屏适配：屏幕宽<768px → fontSize 10px + padding 减少，尽量多放文字不被挤
+        fontSize: (typeof window !== 'undefined' && window.innerWidth < 768) ? 10 : 11,
         fontWeight: 500,
         overflow: 'truncate',
-        padding: [0, 6],
-        formatter: (params: any) => String(params?.data?._labelText || params?.data?.label?.formatter || ''),
+        // ★ v0812 右端"至今/日"文字不被切：padding 左右都留空间，且内部再空 2px
+        padding: (typeof window !== 'undefined' && window.innerWidth < 768) ? [0, 8, 0, 4] : [0, 16, 0, 8],
+        // ★ v0812 手机端 formatter 更短：只显示人名(天数)+起始月日→至今，尽量少占宽度
+        //   PC 端保持原样：人名(天数)完整日期
+        formatter: (params: any) => {
+          const txt = String(params?.data?._labelText || params?.data?.label?.formatter || '')
+          if (typeof window !== 'undefined' && window.innerWidth < 768) {
+            // 手机端缩短："刘洪尧（154天）2026-03-07→至今" → "刘洪尧(154天)03-07至今"（去掉年份和两个大括号空格）
+            return txt
+              .replace(/（/g, '(').replace(/）/g, ')')
+              .replace(/\d{4}-/g, '')  // 去掉 2026- 年前缀
+              .replace(/~(\d{2}-\d{2})/g, '→$1') // 历史派任日期仍保留简写
+          }
+          return txt
+        },
         z: 3,
       },
       markLine: {

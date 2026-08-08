@@ -18,9 +18,9 @@
               :value="ship.id"
             />
           </el-select>
-          <!-- ★ v0807m 永远可见版本号（用户一打开就知道是不是最新部署） -->
+          <!-- ★ v0812 永远可见版本号（动态读，不再写死 v0807m） -->
           <div style="font-size:12px;color:#606266;font-weight:600;padding:0 8px;">
-            🏷️ 页面 <span style="color:#409eff;">v0807m</span> · TAG <span style="color:#27ae60;">1.1.0.0807m</span>
+            🏷️ 页面 <span style="color:#409eff;">{{ APP_VERSION_SHORT }}</span> · TAG <span style="color:#27ae60;">{{ APP_VERSION }}</span>
           </div>
         </div>
         <div class="toolbar-right">
@@ -154,10 +154,10 @@
       />
     </div>
 
-    <!-- v0807m 页面最底部"版本号 / 刷新确认"黄条（滚动到底时也能看到） -->
+    <!-- v0812 页面最底部"版本号 / 刷新确认"黄条（动态读，不再写死 v0807m） -->
     <div style="margin:18px 0 40px;padding:10px 16px;border-radius:8px;background:#fffbeb;border:1px solid #fde68a;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
       <span style="font-weight:700;color:#92400e;">📌 版本校验提示：</span>
-      <span>本页面代码版本号应为 <span style="color:#c2410c;font-weight:700;">v0807m</span>（TAG 1.1.0.0807m）；</span>
+      <span>本页面代码版本号应为 <span style="color:#c2410c;font-weight:700;">{{ APP_VERSION_SHORT }}</span>（TAG {{ APP_VERSION }}）；</span>
       <span style="color:#78350f;">如果您看到的版本号不一致，请立即点击 <b style="color:#dc2626;">【🔧 强制刷新服务端】</b> → 等待 15 秒 → 下拉刷新页面一次。</span>
     </div>
 
@@ -608,6 +608,11 @@ import { useApi } from '~/composables/useApi';
 import { useStaffAssignment } from '~/composables/useStaffAssignment';
 import type { StaffAssignment, Ship, User, StaffHistory, CreateStaffHistoryRequest } from '~/types';
 import { ElMessage, ElMessageBox } from 'element-plus';
+
+// ★ v0812 彻底修复：template 版本号不再写死 v0807m，从 runtimeConfig 动态读
+const { public: cfg } = useRuntimeConfig();
+const APP_VERSION = cfg.appVersion || '1.0.0';
+const APP_VERSION_SHORT = cfg.appVersionShort || ('v' + (APP_VERSION.split('.').pop() || 'x'));
 
 definePageMeta({
   middleware: ['auth'],

@@ -142,6 +142,10 @@ export default defineNuxtConfig({
       apiBase: process.env.NODE_ENV === 'production' ? (process.env.NUXT_PUBLIC_API_BASE || '/api') : 'http://localhost:3002/api',
       appName: '熊猫笔记',
       appVersion: pkg.version || '1.0.0',
+      // ★ v0812 陈先生手机端一直显示旧版本号v0807m——template里写死了！
+      //   这里把「短版本号」和「真实构建时间」直接注入，template直接读就能真·动态显示
+      appVersionShort: 'v' + (pkg.version || '1.0.0').split('.').pop(),   // → v0812 / v0813
+      appBuildTime: new Date().toISOString(),                              // → 构建时真实 ISO 时间戳
     },
   },
   app: {
