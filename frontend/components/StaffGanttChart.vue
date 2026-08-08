@@ -59,27 +59,51 @@
       -->
       <div class="staff-gantt-scroll-box" :style="{ maxHeight: scrollMaxHeight + 'px' }" @dblclick="onDblClickWrapper" ref="scrollBoxRef">
         <!-- ★ 冻结表头：Excel 模式 sticky top 0 始终显示月份刻度
-             ★ v0812 最致命图层BUG修复：DOM书写顺序必须是「canvas(最底层) → mask → sep」！
-               因为 position:absolute 同 z-index(auto) 下按 DOM 出现顺序叠，后写的在上层。
-               之前 canvas 写在最后，直接盖在 mask 上面，z=6 的 mask 根本没用！ -->
+             ★ v0816 终极图层重构——4层 DOM 顺序（从下到上）：
+               ① canvas 月份刻度 z1 < ② mask 白底遮(盖色条左端溢出，z6) < ③ 【新增 HTML 船名图层 z8】< ④ 分割竖线 z7(调到z9最高)
+               为什么？陈先生两张截图里左侧大面积空白船名全没了——根因是原来 ECharts Y axisLabel 画在 canvas 的 0..grid.left 区域，
+               而 .y-axis-mask 也是 width=gridLeftRec+白底 z=6，直接把 canvas 上的 axisLabel 全盖死了！(ECharts内部z=9在canvas像素级，z6的DOM层在上层当然能盖住所有canvas像素)
+               彻底解法：所有「船名 + 空缺徽标」不用 ECharts 画在 canvas 上，改为**独立一层 HTML DOM**（position:absolute 叠在 mask 和 canvas 之上），
+               永远不会被 mask 盖住，也不受 ECharts clip/grid 坐标影响，100% 可控！ -->
         <div class="staff-gantt-header-sticky" :style="{ height: HEADER_H + 'px' }">
-          <!-- ① 先写 canvas（月份刻度）——最底层 -->
+          <!-- ① 最底层：canvas（月份刻度） -->
           <div :id="headerCanvasUniqueId" class="staff-gantt-header-canvas" style="position:absolute;top:0;left:0;right:0;bottom:0;z-index:1;"></div>
-          <!-- ② 再写 mask（白底遮住 canvas 左端船名区）——叠在 canvas 上层 -->
+          <!-- ② 白底遮罩：盖住 canvas 左端色条溢出区 -->
           <div class="y-axis-mask" :style="{ width: gridLeftRec + 'px', height: HEADER_H + 'px', zIndex: 6 }"></div>
-          <!-- ③ 最后写分割竖线（最高层） -->
-          <div class="y-axis-mask-sep" :style="{ left: gridLeftRec + 'px', height: HEADER_H + 'px', zIndex: 7 }"></div>
+          <!-- ③ ★ v0816 新增：顶部船名表头图层（z8，叠在 mask 之上！永远不会被盖） -->
+          <div class="y-axis-html-labels y-axis-html-labels-header" :style="{ width: gridLeftRec + 'px', height: HEADER_H + 'px', zIndex: 8 }">
+            <span class="ship-col-title">船舶 / 政委</span>
+          </div>
+          <!-- ④ 分割竖线（最上层 z9） -->
+          <div class="y-axis-mask-sep" :style="{ left: gridLeftRec + 'px', height: HEADER_H + 'px', zIndex: 9 }"></div>
         </div>
 
-        <!-- 主甘特图：色条 + Y 轴船名 label + 底部 dataZoom + 底部 xAxis 副刻度
-             ★ v0812 图层DOM顺序同上：canvas(最下,z1) → mask(白底盖色条左端,z6) → sep(竖线最上,z7) -->
+        <!-- 主甘特图：色条 canvas + mask + 【v0816 HTML 船名图层（独立z8，不被mask盖）】+ sep -->
         <div class="staff-gantt-wrapper" :style="{ height: chartHeight + 'px' }">
-          <!-- ① 先写色条 canvas——最底层 -->
+          <!-- ① 最底层：canvas（色条 / x轴 / dataZoom） -->
           <div :id="canvasUniqueId" class="staff-gantt-canvas" style="position:absolute;top:0;left:0;right:0;bottom:0;z-index:1;" />
-          <!-- ② 再写 mask 白底——叠在色条上层，盖住 canvas 左端进度条起始处，船名文字在 ECharts 坐标系内 z=9 最上 -->
+          <!-- ② 白底遮罩（盖住canvas左端色条bar溢出，z6） -->
           <div class="y-axis-mask" :style="{ width: gridLeftRec + 'px', height: chartHeight + 'px', zIndex: 6 }"></div>
-          <!-- ③ 最后写分割竖线 -->
-          <div class="y-axis-mask-sep" :style="{ left: gridLeftRec + 'px', height: chartHeight + 'px', zIndex: 7 }"></div>
+          <!-- ③ ★ v0816 新增：HTML船名图层（独立z8，在mask之上！绝对不会被盖住）
+               每艘船对应一行，top 按 GRID_TOP + idx × ROW_H 像素级和 ECharts bar 对齐。 -->
+          <div class="y-axis-html-labels y-axis-html-labels-body"
+               :style="{ width: gridLeftRec + 'px', height: chartHeight + 'px', zIndex: 8 }">
+            <div
+              v-for="(ship, idx) in reversedShips"
+              :key="ship.id || idx"
+              class="ship-row-label"
+              :style="{
+                top: (GRID_TOP + idx * ROW_H) + 'px',
+                height: ROW_H + 'px',
+                lineHeight: ROW_H + 'px',
+              }"
+            >
+              <span class="ship-cn-name" :title="ship.cnShipName">{{ ship.cnShipName }}</span>
+              <span v-if="vacantIdSet.has(Number(ship.id))" class="vacant-badge">空缺</span>
+            </div>
+          </div>
+          <!-- ④ 分割竖线（最上层 z9） -->
+          <div class="y-axis-mask-sep" :style="{ left: gridLeftRec + 'px', height: chartHeight + 'px', zIndex: 9 }"></div>
         </div>
       </div>
     </div>
@@ -130,6 +154,68 @@
   width: 100%;
   height: 100%;
 }
+/* ===== v0816 ★ 终极修复：HTML 船名图层（独立于canvas+mask的第三层DOM，z8 > mask z6）
+   船名永远不会被白底mask盖住，也不受ECharts axisLabel坐标/clip影响，100%可控。 */
+.y-axis-html-labels {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+.y-axis-html-labels-header {
+  display: flex;
+  align-items: center;
+  padding-left: 14px;
+  padding-right: 14px;
+  border-bottom: 1px solid #ebeef5;
+}
+.ship-col-title {
+  color: #303133;
+  font-weight: 600;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.ship-row-label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  padding-left: 14px;
+  padding-right: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  /* 右侧加分割线：和色条起点竖线对齐（就是 sep 的 left = gridLeftRec） */
+  border-bottom: 1px dashed #f0f2f5;
+  box-sizing: border-box;
+}
+.ship-cn-name {
+  color: #303133;
+  font-size: 12px;
+  font-weight: 500;
+  /* v0816 重点：右对齐到 padding-right 边缘（也就是分割竖线左边），船名第一个字向左排，
+     不会被左边缘裁切，和陈先生之前要求的 axisLabel align:right 视觉完全一致。*/
+  margin-left: auto;
+  margin-right: 0;
+  order: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 75%;
+  text-align: right;
+}
+.vacant-badge {
+  order: 2;
+  flex-shrink: 0;
+  background: rgba(245, 108, 108, 0.15);
+  border: 1px solid #f56c6c;
+  color: #c0392b;
+  font-size: 10px;
+  line-height: 16px;
+  padding: 1px 6px;
+  border-radius: 8px;
+}
 </style>
 
 <script setup lang="ts">
@@ -160,6 +246,16 @@ function onDblClickWrapper() {
 
 // 冻结表头 + 按钮 + 画布需要用到的常量/尺寸
 const HEADER_H = 54 // ECharts 顶部月份刻度冻结画布高度：28px axisLabel + grid.top 10 + grid.bottom 16 ≈ 54
+
+// ★ v0816 HTML 船名图层和 ECharts bar 像素级对齐的两个关键常量：
+//   主图 grid.top = 10（buildOption 中写死了 top:10），所以 HTML 行顶部偏移 GRID_TOP 也必须=10
+//   ECharts category Y 轴的行高 = (grid内实际像素高度 - gridTop - gridBottom) / yCategories.length
+//   但 series.barMaxWidth=28 意味着 bar 中心在行中线，且 chartHeight 公式是 safeShips.length × 44 + 120
+//   - chartHeight 常量我们取 safeShips*44+120；grid内纵向像素=(chartHeight - top10 - bottom72) = N×44 + 38
+//     分配 splitArea 后，每个 category 的高度 = (N×44 + 38)/N = 44 + 38/N ≈ 44（当 N≥4 时 38/N≈8），但保险我们统一用 ROW_H = 44px
+//   同时 ECharts bar 高度始终在行中心线上下延伸 ±14px（28/2），所以 HTML label 行高也必须用相同 ROW_H 44 让文字中线对齐 bar 中心。
+const GRID_TOP = 10
+const ROW_H = 44
 const DEFAULT_SCROLL_MAX_H = 560 // 甘特图滚动容器默认最大高度（手机端/PC 端体验均衡）
 const scrollMaxHeight = ref<number>(DEFAULT_SCROLL_MAX_H)
 // 冻结月份表头画布 id（独立 echarts 实例）
@@ -779,33 +875,14 @@ function buildOption() {
       type: 'category',
       data: yCategories.value,
       inverse: false,
-      axisLine: { lineStyle: { color: '#dcdfe6' } },
+      // ★ v0816 船名+空缺徽标完全由独立HTML图层(z8>mask z6)绘制！彻底关闭canvas上的Y轴axisLabel/axisLine/axisTick
+      //   - 关闭原因：之前 ECharts Y axisLabel 画在 canvas 的 0..grid.left 区域，
+      //     但 DOM .y-axis-mask 也是宽 gridLeftRec 白底 z6 → 上层 DOM 直接盖死所有 canvas 像素
+      //     → 陈先生就看到左侧大面积空白（船名被 mask 全部遮住）
+      //   - splitArea / splitLine 保留（灰白交替行，方便横向扫色条对应船），interval=0每行都有
+      axisLine: { show: false },
       axisTick: { show: false },
-      axisLabel: {
-        color: '#303133',
-        fontSize: 12,
-        align: 'right',  // ★ v0810 陈先生手机截图：船名左侧第一个字被裁切→右对齐，文字向 grid.left 右边界（也就是色条起点那根竖线）靠拢，左边就会有留白不会被 mask 裁掉
-        margin: 6,
-        // 左侧 Y 轴 label 画在 grid.left 区域内部，grid.left=gridLeftRec 已留足像素（18px/字+徽标80+padding40）
-        // 再配合 <div class="y-axis-mask"> 底色遮罩盖住所有进度条左端，船名 100% 不会被进度条盖住
-        padding: [0, 14, 0, 8],
-        formatter: (val: string, idx: number) => {
-          const shipId = cnShipNameToShipId.value.get(String(val))
-          if (shipId !== undefined && vacantIdSet.value.has(shipId)) {
-            return `{name|${val}}{vacant|空缺}`
-          }
-          return `{name|${val}}`
-        },
-        rich: {
-          name: { color: '#303133', fontSize: 12, padding: [0, 10, 0, 6], lineHeight: 22, align: 'right' },
-          vacant: {
-            backgroundColor: 'rgba(245, 108, 108, 0.15)',
-            borderColor: '#f56c6c', borderWidth: 1, color: '#c0392b',
-            fontSize: 10, padding: [1, 5], borderRadius: 8, lineHeight: 22,
-          },
-        },
-        z: 9, // ★ 图层顺序（陈先生要求）：船名 label 在进度条（series.z=2）之上、底色遮罩(z轴坐标系内)之上
-      },
+      axisLabel: { show: false }, // 🔴 关键：Y 轴文字完全由 HTML 图层接管
       splitLine: { show: true, lineStyle: { color: '#f5f5f5' }, z: 0 },
       splitArea: {
         show: true,
@@ -843,14 +920,17 @@ function buildOption() {
         padding: (typeof window !== 'undefined' && window.innerWidth < 768) ? [0, 8, 0, 4] : [0, 16, 0, 8],
         // ★ v0812 手机端 formatter 更短：只显示人名(天数)+起始月日→至今，尽量少占宽度
         //   PC 端保持原样：人名(天数)完整日期
-        formatter: (params: any) => {
+      formatter: (params: any) => {
           const txt = String(params?.data?._labelText || params?.data?.label?.formatter || '')
           if (typeof window !== 'undefined' && window.innerWidth < 768) {
-            // 手机端缩短："刘洪尧（154天）2026-03-07→至今" → "刘洪尧(154天)03-07至今"（去掉年份和两个大括号空格）
+            // ★ v0816 手机端极致压缩：
+            //   原来还保留 MM-DD 会让色条左端 label 超长（第一张图色条左端几乎和 X 起点对齐→label写不下→overflow省略）
+            //   进一步去掉 起始日期 - 日份，只保留 【人名(天数) 至今】 或 【人名(天数) 起月~终月】，让用户知道是谁，天数，状态。
             return txt
               .replace(/（/g, '(').replace(/）/g, ')')
-              .replace(/\d{4}-/g, '')  // 去掉 2026- 年前缀
-              .replace(/~(\d{2}-\d{2})/g, '→$1') // 历史派任日期仍保留简写
+              .replace(/\d{4}-\d{2}-(\d{2})/g, '$1') // 2026-03-07 -> 07 （去掉年月，只保留日）
+              .replace(/(\d{2})~(\d{2}-\d{2})/g, '$1→$2')
+              .replace(/→至今/g, '至今')
           }
           return txt
         },
