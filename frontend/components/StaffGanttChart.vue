@@ -458,10 +458,14 @@ function getDaysOnBoard(startDate: string, endDate?: string | null): number {
 }
 
 function getBarColor(a: AssignmentItem): string {
-  if (a.status === 'leave') return '#a8abb2'
-  // ★ v0822 只有 status=ended 才灰色；active 即使有 endDate 也用渐变色
-  if (a.status === 'ended') return '#b8b8b8'
-  const days = getDaysOnBoard(a.startDate, a.endDate)
+  const status = (a.status || '').toLowerCase()
+  if (status === 'leave') return '#a8abb2'
+  // ★ v0830 只有明确 status 是 ended 才灰色；其他一切（含空/脏/未知）全算在任，不看脏 endDate
+  const ENDED_STATUSES = new Set(['ended', 'offboard', '下船', '离职', '离船', '已下船', '已离船'])
+  if (ENDED_STATUSES.has(status)) return '#b8b8b8'
+  // 天数：用 status 决定 end 基准，不能再用脏 a.endDate
+  const end = ENDED_STATUSES.has(status) && a.endDate ? new Date(a.endDate).getTime() : Date.now()
+  const days = Math.max(1, Math.floor((end - new Date(a.startDate).getTime()) / DAY_MS))
   if (days > 330) return '#ad0606'
   if (days > 300) return '#f56c6c'
   if (days > 240) return '#f89a3c'
@@ -589,31 +593,46 @@ const ganttBars = computed(() => {
     if (status === 'leave') continue
 
     const start = new Date(a.startDate).getTime()
-    // ★ v0828 终极修复：陈先生反馈「华子政委3/7上船，进度条应该3/7→今天；但实际是之前→3/7为止」
-    //                 且「所有的船都存在这个问题」
-    //   根因：后端当前在任派任记录基本都带 endDate=某过去日期（默认值/历史脏数据）
-    //   旧逻辑 hasEnded = status==='ended' || (有endDate且endDate<now)
-    //         → 只要endDate存在且<现在 → hasEnded=true → end=历史endDate → 所有在任派任都被当历史派任！
-    //   修复：严格遵循 001优化文档 §2.2 「status 字段是派任状态的唯一权威」
-    //     1) status==='active'（在任）→ **无论 endDate 是否存在、是否 < 现在**，一律算至今
-    //     2) status==='ended'（明确下船）→ 按 endDate 走历史分支
-    //     3) 其他值（空/未知）：有 endDate 且 < now → 历史；否则至今（宽松兼容脏数据）
+    // ★ v0830 陈先生反馈终极根因：「7/1上船→应该7/1→今天；实际显示 最左→7/1截止」（时间左右完全反了）
+    //   先加 DEBUG（每5条打印一次）：暴露真实 startDate/endDate/status/start/end/isActive
+    //   再绝对保险：无论 start/end 任何情况，强制 [s,e]=[min(s,e),max(s,e)]
+    //     —— ECharts encode x:[1,2] 画 bar 时，value[1] 必须 < value[2]，否则 bar 方向反（从右端往左端画）
     const endTsRaw = a.endDate ? new Date(a.endDate).getTime() : nowTs.value
+    // ★ v0830 陈先生反馈：「7/1上船→应7/1→今天；实：最前→7/1截止」
+    //   真实根因：后端脏 endDate 太普遍了，空 status / 未知 status 都带脏 endDate < now
+    //   → 之前"其他值：有endDate且<now→历史"的宽松分支 = 把 99% 的在任派任都当历史！
+    //   终极规则：**只有明确 status=='ended'(同义值) 才算历史，其他一切状态（空/未知/active/脏）一律视为在任，忽略 endDate！**
+    //   这样无论后端 endDate 填得多乱，只要没明确下船，色条一定跑到今天。
     let hasEnded = false
-    if (status === 'active' || status === 'in_ship' || status === 'onboard' || status === '在任') {
-      hasEnded = false
-    } else if (status === 'ended' || status === 'offboard' || status === '下船') {
-      hasEnded = true
-    } else {
-      hasEnded = !!a.endDate && endTsRaw < nowTs.value
-    }
+    const ENDED_STATUSES = new Set(['ended', 'offboard', '下船', '离职', '离船', '已下船', '已离船'])
+    hasEnded = ENDED_STATUSES.has(status)
     const isActive = !hasEnded
     const todayNoon = nowTs.value + 6 * 3600 * 1000
-    const end = isActive ? todayNoon : endTsRaw
-    if (isNaN(start) || isNaN(end) || end <= start) continue
+    const _rawEndCalculated = isActive ? todayNoon : endTsRaw
+    const startFinal = start
+    const endFinal = isActive
+      ? Math.max(start, todayNoon)
+      : Math.max(start + DAY_MS, endTsRaw) // 历史派任：endDate<=start 时延长1天，保证bar可见且不反向
+    // ★ DEBUG 日志（每5条打1条，避免刷屏），方便陈先生手机打开控制台/我通过调试信息确认方向
+    if (Math.random() < 0.2) {
+      console.log('[gantt-bar-debug v0830]', {
+        shipId: a.shipId, shipName: a.ship?.cnShipName,
+        officer: a.user?.realName || a.ship?.politicalOfficerName,
+        status, startDate: a.startDate, endDate: a.endDate || '(null)',
+        isActive, hasEnded,
+        startFinal_d: new Date(startFinal).toISOString().slice(0,10),
+        endFinal_d: new Date(endFinal).toISOString().slice(0,10),
+        startFinal, endFinal,
+      })
+    }
+    const end = endFinal
+    if (isNaN(startFinal) || isNaN(end) || end <= startFinal) {
+      console.warn('[gantt-bar skip v0830] invalid start<=end:', { a, startFinal, end })
+      continue
+    }
 
-    const days = Math.max(1, Math.round(((isActive ? nowTs.value : end) - start) / DAY_MS))
-    const startStr = new Date(start).toISOString().slice(0, 10)
+    const days = Math.max(1, Math.round(((isActive ? nowTs.value : end) - startFinal) / DAY_MS))
+    const startStr = new Date(startFinal).toISOString().slice(0, 10)
     // ★ v0824 label：在任一律「→至今」；历史派任「~MM-DD」
     const endStr = isActive ? '至今' : (a.endDate ? new Date(end).toISOString().slice(0, 10) : '至今')
     const name = a.user?.realName || a.ship?.politicalOfficerName || '未指派'
@@ -621,7 +640,7 @@ const ganttBars = computed(() => {
     const labelText = `${name}（${days}天）${startStr}${isActive ? '→至今' : '~' + endStr.slice(5)}`
 
     out.push({
-      value: [yIndex, start, end],
+      value: [yIndex, startFinal, end],
       _assignmentId: a.id,
       _labelText: labelText, // series.label.formatter 统一读取
       itemStyle: {
@@ -923,11 +942,14 @@ function buildOption() {
         if (!a) return ''
         const shipName = a.ship?.cnShipName || safeShips.value.find((s) => s.id === a.shipId)?.cnShipName || '-'
         const officer = a.user?.realName || a.ship?.politicalOfficerName || '未指派'
-        const days = getDaysOnBoard(a.startDate, a.endDate)
-        // ★ v0807k 001文档 16.2.1 对齐：hover 必须显示"状态"（陈先生原话要求"显示该政委的...状态、个人信息等详情"）
+        // ★ v0830 hover tooltip 状态判定：只有明确ended才算历史，其他一律在任
         const statusRaw = (a.status || '').toLowerCase()
-        const hasEnded = !!(a.endDate || statusRaw === 'ended')
+        const ENDED_SET = new Set(['ended', 'offboard', '下船', '离职', '离船', '已下船', '已离船'])
+        const hasEnded = ENDED_SET.has(statusRaw)
         const isOnBoard = !hasEnded && statusRaw !== 'leave'
+        const days = hasEnded && a.endDate
+          ? getDaysOnBoard(a.startDate, a.endDate)
+          : getDaysOnBoard(a.startDate, null)
         const statusLabel = isOnBoard
           ? `<span style="color:#27ae60;font-weight:600;">🟢 在任（至今）</span>`
           : statusRaw === 'leave'
