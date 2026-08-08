@@ -34,7 +34,9 @@
         <div v-else style="min-width:300px;color:#c0392b;font-weight:600;">⚠️ 没有生成任何色条（请检查派任记录的 shipId、startDate、endDate 是否合法）</div>
         <div v-if="debugInfo.yMapDebug" style="width:100%;font-size:12px;color:#2c3e50;white-space:pre-wrap;">Y轴映射自检（前6行）: {{ debugInfo.yMapDebug }}</div>
         <div v-if="debugInfo.barsDumpHtml" style="width:100%;overflow:auto;margin-top:6px;border:1px dashed #95a5a6;padding:4px;border-radius:4px;background:#fafafa;" v-html="debugInfo.barsDumpHtml"></div>
-        <div v-else-if="debugBarsDump.length===0 && debugInfo.assignments > 0" style="width:100%;color:#c0392b;font-weight:600;">🔴 派任{{ debugInfo.assignments }}条但色条=0！检查 shipId 映射！</div>
+        <div v-else-if="debugInfo.barsDumpCount===0 && debugInfo.assignments > 0" style="width:100%;color:#c0392b;font-weight:600;">🔴 派任{{ debugInfo.assignments }}条但色条=0！检查 shipId 映射！</div>
+        <!-- v0836 每船诊断摘要：每艘船的派任情况，一眼看出为什么 bar 不到今天 -->
+        <div v-if="debugInfo.shipSummaryHtml" style="width:100%;margin-top:6px;border:1px solid #e67e22;padding:6px;border-radius:6px;background:#fffbe6;" v-html="debugInfo.shipSummaryHtml"></div>
         <div v-if="lastFatalWarn" style="min-width:320px;color:#e67e22;">永久 WARN: {{ lastFatalWarn }}</div>
         <div v-if="lastFatalError" style="width:100%;color:#c0392b;font-weight:600;white-space:pre-wrap;">永久 ERROR: {{ lastFatalError }}</div>
         <div v-if="lastInitSteps.length > 0" style="width:100%;font-size:12px;color:#34495e;white-space:pre-wrap;">初始化步骤追踪: {{ lastInitSteps.join(' → ') }}</div>
@@ -276,8 +278,8 @@ import type { StaffAssignment } from '~/types'
 type EChartsModule = typeof import('echarts')
 let echartsModule: EChartsModule | null = null
 
-// 调试面板显示/隐藏：默认隐藏，双击甘特图区域才显示（开发调试入口）
-const debugVisible = ref(false)
+// 调试面板显示/隐藏：v0836 默认显示，不再需要双击（陈先生看不到调试表格，无法定位根因）
+const debugVisible = ref(true)
 // 滚动容器 ref
 const scrollBoxRef = ref<HTMLDivElement | null>(null)
 function onDblClickWrapper() {
@@ -915,12 +917,39 @@ function buildOption() {
   const defaultStart = now - 540 * DAY_MS
   const defaultEnd = now + 60 * DAY_MS
   const bars = ganttBars.value
-  // ★ v0832 调试表格：每条派任「原始数据 + 最终计算结果」，陈先生打开页面就能看到我哪里判错
+  // ★ v0836 调试表格：直接从 bars 同步计算，不依赖 watchEffect timing（彻底解决时序问题）
+  function buildBarDumpRows(limit: number) {
+    const rows: any[] = []
+    for (const b of bars) {
+      const id = Number(b._assignmentId)
+      const a = id ? assignmentMap.value.get(id) : null
+      rows.push({
+        id,
+        officer: b._labelText?.split('（')?.[0] || '?',
+        yIndex: Number(b.value[0]),
+        shipName: yCategories.value[Number(b.value[0])] || '(未知船)',
+        startFinal: new Date(Number(b.value[1])).toISOString().slice(0, 10),
+        endFinal: new Date(Number(b.value[2])).toISOString().slice(0, 10),
+        startFinalTs: Number(b.value[1]),
+        endFinalTs: Number(b.value[2]),
+        daysNum: Math.max(1, Math.round((Number(b.value[2]) - Number(b.value[1])) / DAY_MS)),
+        opa: b.itemStyle?.opacity ?? 1,
+        color: b.itemStyle?.color ?? '?',
+        raw: a ? {
+          startDateRaw: a.startDate || '(NULL)',
+          endDateRaw: a.endDate || '(NULL)',
+          statusRaw: a.status || '(NULL)',
+          shipIdRaw: a.shipId ?? '?',
+        } : null,
+      })
+    }
+    return rows.slice(0, limit)
+  }
   function renderBarDumpTable(limit: number): string {
-    const rows = debugBarsDump.value.slice(0, limit)
-    if (!rows.length) return ''
+    const rows = buildBarDumpRows(limit)
+    const totalBars = bars.length
     const todayStr = new Date(nowTs.value).toISOString().slice(0, 10)
-    let s = `<div style="margin-bottom:4px;font-weight:600;color:#2c3e50;">📅 today基准: ${todayStr} | todayNoon基准(色条右端): ${new Date(nowTs.value + 6 * 3600 * 1000).toISOString().slice(0, 10)} | 共 ${debugBarsDump.value.length} 条色条（显示前 ${limit} 条，方向=❌=严重错误行红色高亮）</div>`
+    let s = `<div style="margin-bottom:4px;font-weight:600;color:#2c3e50;">📅 today基准: ${todayStr} | todayNoon基准(色条右端): ${new Date(nowTs.value + 6 * 3600 * 1000).toISOString().slice(0, 10)} | 共 ${totalBars} 条色条（显示前 ${limit} 条，方向=❌=严重错误行红色高亮，在任行右端≠今天也红色）</div>`
     s += `<table style="border-collapse:collapse;font-size:11px;width:100%;min-width:900px;"><tr style="background:#34495e;color:#fff;">
       <th style="border:1px solid #ccc;padding:2px 4px;text-align:left;">政委</th>
       <th style="border:1px solid #ccc;padding:2px 4px;text-align:left;">船名/Y行</th>
@@ -953,6 +982,53 @@ function buildOption() {
       </tr>`
     }
     s += `</table>`
+    return s
+  }
+
+  // v0836 每船诊断摘要：按船分组显示所有派任
+  function renderShipSummary(): string {
+    if (!bars.length) return ''
+    const todayStr2 = new Date(nowTs.value).toISOString().slice(0, 10)
+    const byShip = new Map<number, any[]>()
+    for (const b of bars) {
+      const yIdx = Number(b.value[0])
+      if (!byShip.has(yIdx)) byShip.set(yIdx, [])
+      const id = Number(b._assignmentId)
+      const a = id ? assignmentMap.value.get(id) : null
+      byShip.get(yIdx)!.push({ b, a })
+    }
+    const ENDED_SET = new Set(['ended', 'offboard', '下船', '离职', '离船', '已下船', '已离船'])
+    let s = `<div style="font-weight:600;margin-bottom:4px;">🚢 每船派任诊断（共 ${byShip.size} 艘船，${bars.length} 条色条）</div>`
+    s += `<div style="font-size:11px;margin-bottom:6px;color:#555;">图例: <b>✅</b>在任且右端=今天 | <b style="color:#c0392b;">❌</b>在任但右端≠今天(严重) | <b style="color:#e67e22;">⚠️</b>历史派任(正常，右端=下船日) | 船名后数字=派任数</div>`
+    for (const [yIdx, items] of byShip) {
+      const shipName = yCategories.value[yIdx] || '(未知船)'
+      const sorted = items.sort((a, b2) => Number(a.b.value[1]) - Number(b2.b.value[1]))
+      let shipHtml = `<div style="border:1px solid #ccc;border-radius:4px;padding:4px 6px;margin-bottom:4px;background:#fff;">`
+      shipHtml += `<b style="font-size:13px;">🚢 ${shipName} (Y${yIdx})</b> <span style="color:#888;font-size:11px;">派任${sorted.length}条</span>`
+      for (const { b: bar, a: asg } of sorted) {
+        const off = bar._labelText?.split('（')?.[0] || '?'
+        const st = (asg?.status || '').toLowerCase()
+        const isEnded = ENDED_SET.has(st)
+        const endDate = new Date(Number(bar.value[2])).toISOString().slice(0, 10)
+        const endOk = endDate === todayStr2
+        const warnClass = isEnded ? '#e67e22' : (endOk ? '#27ae60' : '#c0392b')
+        const mark = isEnded ? '⚠️历史' : (endOk ? '✅在任→今天' : '❌在任但≠今天')
+        const rawEnd = asg?.endDate || '(null)'
+        shipHtml += `<div style="font-size:11px;margin:2px 0;padding:2px 4px;background:${isEnded ? '#fff5e6' : (endOk ? '#e6ffe6' : '#ffe6e6')};border-left:3px solid ${warnClass};">
+          <span style="font-weight:600;">${off}</span>
+          <span style="color:#888;margin:0 4px;">|</span>
+          原始status=<code style="background:#f0f0f0;padding:0 2px;">${st || '(空)'}</code>
+          <span style="color:#888;margin:0 4px;">|</span>
+          原始endDate=<code style="background:#f0f0f0;padding:0 2px;">${rawEnd}</code>
+          <span style="color:#888;margin:0 4px;">|</span>
+          startFinal=${new Date(Number(bar.value[1])).toISOString().slice(0, 10)} → endFinal=${endDate}
+          <span style="color:#888;margin:0 4px;">|</span>
+          <b style="color:${warnClass};">${mark}</b>
+        </div>`
+      }
+      shipHtml += `</div>`
+      s += shipHtml
+    }
     return s
   }
 
@@ -995,8 +1071,10 @@ function buildOption() {
           end: new Date(sample.value[2]).toISOString().slice(0, 10),
         }
       : null,
-    barsDumpHtml: renderBarDumpTable(Math.min(25, debugBarsDump.value.length)),
-    barsDumpCount: debugBarsDump.value.length,
+    barsDumpHtml: renderBarDumpTable(Math.min(30, bars.length)),
+    barsDumpCount: bars.length,
+    // v0836 每船诊断摘要：按船分组显示所有派任 + 是否延伸到今天
+    shipSummaryHtml: renderShipSummary(),
     todayStr: new Date(nowTs.value).toISOString().slice(0, 10) + ' ' + new Date(nowTs.value).toISOString().slice(11, 16) + ' UTC',
     todayNoonStr: new Date(nowTs.value + 6 * 3600 * 1000).toISOString().slice(0, 10),
   }
