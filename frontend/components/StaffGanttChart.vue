@@ -33,6 +33,8 @@
         <div v-if="debugInfo.sample" style="min-width:320px;">色条样例: 船索引={{ debugInfo.sample.yIndex }}，船名={{ debugInfo.sample.shipName }}，{{ debugInfo.sample.start }} → {{ debugInfo.sample.end }}</div>
         <div v-else style="min-width:300px;color:#c0392b;font-weight:600;">⚠️ 没有生成任何色条（请检查派任记录的 shipId、startDate、endDate 是否合法）</div>
         <div v-if="debugInfo.yMapDebug" style="width:100%;font-size:12px;color:#2c3e50;white-space:pre-wrap;">Y轴映射自检（前6行）: {{ debugInfo.yMapDebug }}</div>
+        <div v-if="debugInfo.barsDumpHtml" style="width:100%;overflow:auto;margin-top:6px;border:1px dashed #95a5a6;padding:4px;border-radius:4px;background:#fafafa;" v-html="debugInfo.barsDumpHtml"></div>
+        <div v-else-if="debugBarsDump.length===0 && debugInfo.assignments > 0" style="width:100%;color:#c0392b;font-weight:600;">🔴 派任{{ debugInfo.assignments }}条但色条=0！检查 shipId 映射！</div>
         <div v-if="lastFatalWarn" style="min-width:320px;color:#e67e22;">永久 WARN: {{ lastFatalWarn }}</div>
         <div v-if="lastFatalError" style="width:100%;color:#c0392b;font-weight:600;white-space:pre-wrap;">永久 ERROR: {{ lastFatalError }}</div>
         <div v-if="lastInitSteps.length > 0" style="width:100%;font-size:12px;color:#34495e;white-space:pre-wrap;">初始化步骤追踪: {{ lastInitSteps.join(' → ') }}</div>
@@ -655,14 +657,34 @@ const ganttBars = computed(() => {
   return out
 })
 
-// 调试信息（初始值非 null，让调试面板立即可见）
-const debugInfo = ref<any>({
-  init: '✅ StaffGanttChart 挂载中…等待 ECharts DOM 出现',
-  ships: 0,
-  assignments: 0,
-  bars: 0,
-  warn: null,
-  error: null,
+// ★ v0832 ganttBars 计算出后立刻同步到 debugBarsDump，给调试面板用
+watchEffect(() => {
+  const bars = ganttBars.value
+  const out: any[] = []
+  for (const b of bars) {
+    const id = Number(b._assignmentId)
+    const a = id ? assignmentMap.value.get(id) : null
+    out.push({
+      id,
+      officer: b._labelText?.split('（')?.[0] || '?',
+      yIndex: Number(b.value[0]),
+      shipName: yCategories.value[Number(b.value[0])] || '(未知船)',
+      startFinal: new Date(Number(b.value[1])).toISOString().slice(0, 10),
+      endFinal: new Date(Number(b.value[2])).toISOString().slice(0, 10),
+      startFinalTs: Number(b.value[1]),
+      endFinalTs: Number(b.value[2]),
+      daysNum: Math.max(1, Math.round((Number(b.value[2]) - Number(b.value[1])) / DAY_MS)),
+      opa: b.itemStyle?.opacity ?? 1,
+      color: b.itemStyle?.color ?? '?',
+      raw: a ? {
+        startDateRaw: a.startDate || '(NULL)',
+        endDateRaw: a.endDate || '(NULL)',
+        statusRaw: a.status || '(NULL)',
+        shipIdRaw: a.shipId ?? '?',
+      } : null,
+    })
+  }
+  debugBarsDump.value = out
 })
 
 // SSR 环境下没有 document，避免引用错误
@@ -879,6 +901,46 @@ function buildOption() {
   const defaultStart = now - 540 * DAY_MS
   const defaultEnd = now + 60 * DAY_MS
   const bars = ganttBars.value
+  // ★ v0832 调试表格：每条派任「原始数据 + 最终计算结果」，陈先生打开页面就能看到我哪里判错
+  function renderBarDumpTable(limit: number): string {
+    const rows = debugBarsDump.value.slice(0, limit)
+    if (!rows.length) return ''
+    const todayStr = new Date(nowTs.value).toISOString().slice(0, 10)
+    let s = `<div style="margin-bottom:4px;font-weight:600;color:#2c3e50;">📅 today基准: ${todayStr} | todayNoon基准(色条右端): ${new Date(nowTs.value + 6 * 3600 * 1000).toISOString().slice(0, 10)} | 共 ${debugBarsDump.value.length} 条色条（显示前 ${limit} 条，方向=❌=严重错误行红色高亮）</div>`
+    s += `<table style="border-collapse:collapse;font-size:11px;width:100%;min-width:900px;"><tr style="background:#34495e;color:#fff;">
+      <th style="border:1px solid #ccc;padding:2px 4px;text-align:left;">政委</th>
+      <th style="border:1px solid #ccc;padding:2px 4px;text-align:left;">船名/Y行</th>
+      <th style="border:1px solid #ccc;padding:2px 4px;text-align:left;">原始 startDate</th>
+      <th style="border:1px solid #ccc;padding:2px 4px;text-align:left;">原始 endDate</th>
+      <th style="border:1px solid #ccc;padding:2px 4px;text-align:left;">status</th>
+      <th style="border:1px solid #ccc;padding:2px 4px;text-align:left;">startFinal(色条左端)</th>
+      <th style="border:1px solid #ccc;padding:2px 4px;text-align:left;">endFinal(色条右端)</th>
+      <th style="border:1px solid #ccc;padding:2px 4px;text-align:center;">天数</th>
+      <th style="border:1px solid #ccc;padding:2px 4px;text-align:center;">方向</th>
+      <th style="border:1px solid #ccc;padding:2px 4px;text-align:center;">opa</th>
+      <th style="border:1px solid #ccc;padding:2px 4px;text-align:center;">颜色</th>
+    </tr>`
+    for (const r of rows) {
+      const forward = r.endFinalTs > r.startFinalTs
+      const endIsToday = r.endFinal.slice(0, 10) === todayStr
+      const bad = !forward || (!endIsToday && r.opa >= 0.99) // opa=1=在任且右端不是今天 → 也是错
+      s += `<tr style="${bad ? 'background:#ffe0e0;color:#c0392b;font-weight:700;' : ''}">
+        <td style="border:1px solid #ccc;padding:2px 4px;">${r.officer}</td>
+        <td style="border:1px solid #ccc;padding:2px 4px;">Y${r.yIndex}·${r.shipName}</td>
+        <td style="border:1px solid #ccc;padding:2px 4px;">${r.raw?.startDateRaw}</td>
+        <td style="border:1px solid #ccc;padding:2px 4px;">${r.raw?.endDateRaw}</td>
+        <td style="border:1px solid #ccc;padding:2px 4px;">${r.raw?.statusRaw}</td>
+        <td style="border:1px solid #ccc;padding:2px 4px;">${r.startFinal}</td>
+        <td style="border:1px solid #ccc;padding:2px 4px;">${r.endFinal}${endIsToday ? ' ✅' : ''}</td>
+        <td style="border:1px solid #ccc;padding:2px 4px;text-align:center;">${r.daysNum}</td>
+        <td style="border:1px solid #ccc;padding:2px 4px;text-align:center;">${forward ? '✅正向' : '❌反向ERROR'}</td>
+        <td style="border:1px solid #ccc;padding:2px 4px;text-align:center;">${r.opa}</td>
+        <td style="border:1px solid #ccc;padding:2px 4px;text-align:center;"><span style="display:inline-block;width:16px;height:12px;background:${r.color};border:1px solid #aaa;"></span></td>
+      </tr>`
+    }
+    s += `</table>`
+    return s
+  }
 
   // 更新调试面板（保留 init/warn/error 等字段，避免覆盖）
   const sample = bars[0]
@@ -919,6 +981,10 @@ function buildOption() {
           end: new Date(sample.value[2]).toISOString().slice(0, 10),
         }
       : null,
+    barsDumpHtml: renderBarDumpTable(Math.min(25, debugBarsDump.value.length)),
+    barsDumpCount: debugBarsDump.value.length,
+    todayStr: new Date(nowTs.value).toISOString().slice(0, 10) + ' ' + new Date(nowTs.value).toISOString().slice(11, 16) + ' UTC',
+    todayNoonStr: new Date(nowTs.value + 6 * 3600 * 1000).toISOString().slice(0, 10),
   }
 
   // 初始化 dataZoom 默认范围：如果有外部 dzRange 就沿用（用户缩放后/重置后）
