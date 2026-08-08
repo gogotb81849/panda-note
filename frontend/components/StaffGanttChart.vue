@@ -589,18 +589,25 @@ const ganttBars = computed(() => {
     if (status === 'leave') continue
 
     const start = new Date(a.startDate).getTime()
-    // ★ v0824 陈先生需求：只要没下船的政委，色条必须延伸到今天蓝色竖线
-    //   宽松判定：
-    //     · status 明确是 'ended' 或 endDate < nowTs（真的过了下船日期）→ 按历史 endDate
-    //     · 其他全部算在任 → end = nowTs + 6 小时（覆盖到今天中午12点基准，
-    //       消除 ECharts bar 像素取整导致的"右端比今天线短 1-2 像素"问题）
-    //   为什么+6h不是精确nowTs？ECharts time axis 按像素量化取整，bar encode 末端会
-    //   把「xAxis上精确毫秒」向下取整到最近刻度像素，导致右端视觉短1-2像素。+6h 是
-    //   「今天当天内」的安全冗余值，视觉上色条会延伸到今天线右缘，100% 覆盖今天线。
+    // ★ v0828 终极修复：陈先生反馈「华子政委3/7上船，进度条应该3/7→今天；但实际是之前→3/7为止」
+    //                 且「所有的船都存在这个问题」
+    //   根因：后端当前在任派任记录基本都带 endDate=某过去日期（默认值/历史脏数据）
+    //   旧逻辑 hasEnded = status==='ended' || (有endDate且endDate<now)
+    //         → 只要endDate存在且<现在 → hasEnded=true → end=历史endDate → 所有在任派任都被当历史派任！
+    //   修复：严格遵循 001优化文档 §2.2 「status 字段是派任状态的唯一权威」
+    //     1) status==='active'（在任）→ **无论 endDate 是否存在、是否 < 现在**，一律算至今
+    //     2) status==='ended'（明确下船）→ 按 endDate 走历史分支
+    //     3) 其他值（空/未知）：有 endDate 且 < now → 历史；否则至今（宽松兼容脏数据）
     const endTsRaw = a.endDate ? new Date(a.endDate).getTime() : nowTs.value
-    const hasEnded = status === 'ended' || (!!a.endDate && endTsRaw < nowTs.value)
+    let hasEnded = false
+    if (status === 'active' || status === 'in_ship' || status === 'onboard' || status === '在任') {
+      hasEnded = false
+    } else if (status === 'ended' || status === 'offboard' || status === '下船') {
+      hasEnded = true
+    } else {
+      hasEnded = !!a.endDate && endTsRaw < nowTs.value
+    }
     const isActive = !hasEnded
-    // 关键：在任色条 = nowTs + 6 小时，视觉 100% 对齐/覆盖今天线
     const todayNoon = nowTs.value + 6 * 3600 * 1000
     const end = isActive ? todayNoon : endTsRaw
     if (isNaN(start) || isNaN(end) || end <= start) continue
