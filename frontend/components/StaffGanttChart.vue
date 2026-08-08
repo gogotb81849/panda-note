@@ -657,6 +657,9 @@ const ganttBars = computed(() => {
   return out
 })
 
+// ★ v0832 完整派任判定 DUMP：每条派任原始数据 + 最终计算结果，陈先生打开页面就能看到我哪里判错
+const debugBarsDump = ref<any[]>([])
+
 // ★ v0832 ganttBars 计算出后立刻同步到 debugBarsDump，给调试面板用
 watchEffect(() => {
   const bars = ganttBars.value
@@ -685,6 +688,17 @@ watchEffect(() => {
     })
   }
   debugBarsDump.value = out
+})
+
+// 调试信息（初始值非 null，让调试面板立即可见）
+const debugInfo = ref<any>({
+  init: '✅ StaffGanttChart 挂载中…等待 ECharts DOM 出现',
+  ships: 0,
+  assignments: 0,
+  bars: 0,
+  warn: null,
+  error: null,
+  barsDumpHtml: '',
 })
 
 // SSR 环境下没有 document，避免引用错误
