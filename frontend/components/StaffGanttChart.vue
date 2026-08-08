@@ -412,6 +412,10 @@ const ganttBars = computed(() => {
     if (status === 'leave') continue
 
     const start = new Date(a.startDate).getTime()
+    // ★ v0814 紧急修复 nowTs is not defined ReferenceError：
+    //   v0812 修改 end 从 +2h→+24h 时，不小心误删了 `const nowTs = Date.now()` 这一行声明，
+    //   导致下方 L421 用 nowTs 时直接报错 ReferenceError——甘特图主图 applyOption 就失败，色条全白！
+    const nowTs = Date.now()
     // ★ v0807i 陈先生需求 #2：所有进度条「基本信息应该都是到今天」
     //   - 有 endDate：按 endDate 原样保留（明确下船日期）
     //   - 没有 endDate：按陈先生要求必须 100% 视觉覆盖到「蓝色今天竖线」的右侧。

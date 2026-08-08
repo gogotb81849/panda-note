@@ -633,16 +633,21 @@ const users = ref<User[]>([]);
 const selectedShipId = ref<number | null>(null);
 
 // ====== v0807j PM2 强制刷新：按钮 loading 状态 + 调用后端自修复接口 ======
-//   接口后端 TempFixPm2Controller：_fix_pm2_20260806?token=xxx，在服务器内部 pm2 delete+start 最新代码
+//   接口后端 TempFixPm2Controller：/api/_fix_pm2_20260806?token=xxx，在服务器内部 pm2 delete+start 最新代码
+//   ★ v0814 陈先生截图报「强制刷新失败 token不匹配/接口未部署」根因：之前URL写的是 `/_fix_pm2_20260806`（无/api前缀）→404！
+//   后端有 setGlobalPrefix('api')，所以正确路径必须带 /api 前缀！统一用 runtimeConfig.public.apiBase 作为前缀（和 useApi.ts 完全一致）。
 const pm2FixLoading = ref(false);
 const PM2_FIX_TOKEN = 'Pm2FixToken_2026Aug06_x9K2m7Qp5zR4tV1wN8hB3cL6sY0jF4gD';
 async function triggerPm2Fix() {
   if (pm2FixLoading.value) return;
   try {
     pm2FixLoading.value = true;
-    // 先确认接口 404 还是 200（如果不匹配 token 就返回 404，不会有任何副作用）
-    const url = `/_fix_pm2_20260806?token=${PM2_FIX_TOKEN}&_t=${Date.now()}`;
-    const res = await fetch(url, { method: 'GET', credentials: 'include' });
+    // ★ v0814 正确 URL：apiBase 前缀 + 路径。apiBase 在客户端环境固定为 '/api'，SSR 环境是后端地址。
+    //   并且不再带 credentials（用公开的 32 字符 token 就够了，无需登录态），避免 auth 中间件 302 拦截造成"404"假象。
+    const { public: cfg } = useRuntimeConfig();
+    const apiBase = (process.client ? '/api' : String(cfg.apiBase || '/api')).replace(/\/$/, '');
+    const url = `${apiBase}/_fix_pm2_20260806?token=${PM2_FIX_TOKEN}&_t=${Date.now()}`;
+    const res = await fetch(url, { method: 'GET', cache: 'no-store' });
     const text = await res.text();
     if (res.status === 404) {
       ElMessage.error('强制刷新失败（token 不匹配或接口未部署，请先等 GitHub Actions 完成）');

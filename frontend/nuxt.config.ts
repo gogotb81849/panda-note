@@ -18,10 +18,17 @@ export default defineNuxtConfig({
       proxy: 'http://localhost:3002/uploads/**',
     },
     // ★ 临时自修复接口：直接代理到后端，绕开 Nuxt SSR + 全局 auth middleware，
-    // 确保沙箱 curl 无 cookie 也能直达 Nest 控制器，触发 PM2 进程重启
+    //   确保沙箱 curl 无 cookie 也能直达 Nest 控制器，触发 PM2 进程重启
+    //   v0814 双保险：同时支持「旧裸路径」和「正确带 /api 前缀路径」两种写法
     '/__fix_pm2_20260806**': {
       proxy: 'http://localhost:3002/__fix_pm2_20260806**',
       ssr: false,
+      swr: false,
+    },
+    '/api/__fix_pm2_20260806**': {
+      proxy: 'http://localhost:3002/api/_fix_pm2_20260806**',
+      ssr: false,
+      swr: false,
     },
   },
   modules: [
