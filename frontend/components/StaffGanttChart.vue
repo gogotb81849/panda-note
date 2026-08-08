@@ -85,9 +85,9 @@
               :key="ship.id || idx"
               class="ship-row-label"
               :style="{
-                top: (GRID_TOP + idx * ROW_H) + 'px',
-                height: ROW_H + 'px',
-                lineHeight: ROW_H + 'px',
+                top: (GRID_TOP + idx * actualRowH) + 'px',
+                height: actualRowH + 'px',
+                lineHeight: actualRowH + 'px',
               }"
             >
               <span class="ship-cn-name" :title="ship.cnShipName">{{ ship.cnShipName }}</span>
@@ -223,9 +223,11 @@
   left: 0;
   right: 0;
   padding-left: 14px;
-  padding-right: 14px;
+  padding-right: 10px;
   display: flex;
   align-items: center;
+  /* ★ v0819 修复船名左对齐：justify-content:flex-end，让内部元素整体右靠到 padding-right 边缘 */
+  justify-content: flex-end;
   gap: 6px;
   white-space: nowrap;
   /* 右侧加分割线：和色条起点竖线对齐（就是 sep 的 left = gridLeftRec） */
@@ -236,18 +238,13 @@
   color: #303133;
   font-size: 12px;
   font-weight: 500;
-  /* v0816 重点：右对齐到 padding-right 边缘（也就是分割竖线左边），船名第一个字向左排，
-     不会被左边缘裁切，和陈先生之前要求的 axisLabel align:right 视觉完全一致。*/
-  margin-left: auto;
-  margin-right: 0;
-  order: 1;
+  /* ★ v0819 彻底右对齐：删除 margin-left/right、删除 order、删除 max-width 限制（justify-content:flex-end 已统一控制） */
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 75%;
+  max-width: 100%;
   text-align: right;
 }
 .vacant-badge {
-  order: 2;
   flex-shrink: 0;
   background: rgba(245, 108, 108, 0.15);
   border: 1px solid #f56c6c;
@@ -288,15 +285,21 @@ function onDblClickWrapper() {
 // 冻结表头 + 按钮 + 画布需要用到的常量/尺寸
 const HEADER_H = 54 // ECharts 顶部月份刻度冻结画布高度：28px axisLabel + grid.top 10 + grid.bottom 16 ≈ 54
 
-// ★ v0816 HTML 船名图层和 ECharts bar 像素级对齐的两个关键常量：
-//   主图 grid.top = 10（buildOption 中写死了 top:10），所以 HTML 行顶部偏移 GRID_TOP 也必须=10
-//   ECharts category Y 轴的行高 = (grid内实际像素高度 - gridTop - gridBottom) / yCategories.length
-//   但 series.barMaxWidth=28 意味着 bar 中心在行中线，且 chartHeight 公式是 safeShips.length × 44 + 120
-//   - chartHeight 常量我们取 safeShips*44+120；grid内纵向像素=(chartHeight - top10 - bottom72) = N×44 + 38
-//     分配 splitArea 后，每个 category 的高度 = (N×44 + 38)/N = 44 + 38/N ≈ 44（当 N≥4 时 38/N≈8），但保险我们统一用 ROW_H = 44px
-//   同时 ECharts bar 高度始终在行中心线上下延伸 ±14px（28/2），所以 HTML label 行高也必须用相同 ROW_H 44 让文字中线对齐 bar 中心。
+// ★ v0819 HTML 船名图层和 ECharts bar 像素级对齐的两个关键常量：
+//   主图 grid.top = 10，grid.bottom = 72，grid内实际像素 = chartHeight - 10 - 72 = N×44 + 38
+//   每个 category 实际行高 = ((N×44 + 38) - 8*(N-1)) / N ？ 不对 —— ECharts splitArea 会均匀
+//   地把 （grid内像素 - splitAreaSpacing） / N。我们直接算出实际行高，不再写死 44。
 const GRID_TOP = 10
-const ROW_H = 44
+const GRID_BOTTOM_MAIN = 72
+const GRID_TOP_HEADER = 10
+const GRID_BOTTOM_HEADER = 16
+// 精确的 HTML ROW_H = (chartHeight - 10 - 72) / N（= 每个 category 在 grid 内真实像素）
+const actualRowH = computed(() => {
+  const n = Math.max(1, safeShips.value.length)
+  const innerH = chartHeight.value - GRID_TOP - GRID_BOTTOM_MAIN
+  return Math.max(24, Math.round(innerH / n))
+})
+const ROW_H = 44 // 兜底常量，template 里改读 actualRowH
 const DEFAULT_SCROLL_MAX_H = 560 // 甘特图滚动容器默认最大高度（手机端/PC 端体验均衡）
 const scrollMaxHeight = ref<number>(DEFAULT_SCROLL_MAX_H)
 // 冻结月份表头画布 id（独立 echarts 实例）
@@ -420,6 +423,14 @@ const emit = defineEmits<{
   'empty-click': [payload: { shipId: number; date: string }]
 }>()
 
+// ★ v0819 「今天」统一时间戳 ref（解决 色条end / today markLine / today max 三个 Date.now() 毫秒差）
+//   每次 applyOption() 执行时设置一次 nowTs.value = Date.now()，所有依赖都读它：
+//   - ganttBars end = a.endDate? : nowTs
+//   - buildOption xAxis max, markLine xAxis: nowTs
+//   - buildHeaderOption markLine xAxis: nowTs / xAxis max
+//   - timeRange computed max 也取 nowTs
+const nowTs = ref<number>(Date.now())
+
 const DAY_MS = 1000 * 60 * 60 * 24
 
 function getDaysOnBoard(startDate: string, endDate?: string | null): number {
@@ -519,7 +530,7 @@ const assignmentMap = computed(() => {
 const timeRange = computed(() => {
   let minT = Infinity
   let maxT = -Infinity
-  const now = Date.now()
+  const now = nowTs.value // ★ v0819 用统一 nowTs ref（避免和 buildOption/ganttBars 内 Date.now() 时间差）
   for (const a of safeAssignments.value) {
     const s = new Date(a.startDate).getTime()
     if (!isNaN(s)) { minT = Math.min(minT, s); maxT = Math.max(maxT, s) }
@@ -559,15 +570,11 @@ const ganttBars = computed(() => {
     if (status === 'leave') continue
 
     const start = new Date(a.startDate).getTime()
-    // ★ v0814 紧急修复 nowTs is not defined ReferenceError：
-    //   v0812 修改 end 从 +2h→+24h 时，不小心误删了 `const nowTs = Date.now()` 这一行声明，
-    //   导致下方 L421 用 nowTs 时直接报错 ReferenceError——甘特图主图 applyOption 就失败，色条全白！
-    const nowTs = Date.now()
-    // ★ v0818 陈先生需求：至今色条右端必须精确对齐"今天"蓝色竖线
-    //   之前 +24h 导致色条右端超过今天线一天，视觉上反而"没对齐"。
-    //   修复：end = nowTs（精确到毫秒），和 buildOption markLine 的 xAxis: now 用同一个时间基准，
-    //   ECharts bar encode 右边缘和 markLine 竖线像素级重合。
-    const end = a.endDate ? new Date(a.endDate).getTime() : nowTs
+    // ★ v0819 陈先生需求：至今色条右端必须精确对齐"今天"蓝色竖线
+    //   根因：之前 L514 又写了一遍 const nowTs = Date.now()（局部变量），和 buildOption
+    //   里的 const now = Date.now() 毫秒不同，差几毫秒到几秒，色条右端就会在今天线左边。
+    //   修复：统一读顶层 nowTs ref（applyOption 执行时设置一次），三处 100% 相同毫秒
+    const end = a.endDate ? new Date(a.endDate).getTime() : nowTs.value
     if (isNaN(start) || isNaN(end) || end <= start) continue
 
     const days = Math.max(1, Math.round((end - start) / DAY_MS))
@@ -810,8 +817,10 @@ async function doInitChart() {
 }
 
 function buildOption() {
+  // ★ v0819 设置统一 nowTs（先于所有依赖 computed），保证 end/markLine/xAxis 三处毫秒完全相同
+  nowTs.value = Date.now()
   const tr = timeRange.value
-  const now = Date.now()
+  const now = nowTs.value
   const defaultStart = now - 540 * DAY_MS
   const defaultEnd = now + 60 * DAY_MS
   const bars = ganttBars.value
@@ -821,9 +830,8 @@ function buildOption() {
   const names = yCategories.value
   let maxLen = 0
   for (const n of names) maxLen = Math.max(maxLen, String(n || '').length)
-  // ★ v0810 统一 grid.left 计算公式，header canvas 和 main canvas 完全一致（经验 935613：同轴同域同边距）
-  //   手机端三措施：每中文18px+徽标80+padding40，下限180px，上限340px
-  const gridLeftRec = Math.max(Math.min(maxLen * 18 + 80 + 40, 340), 180)
+  // ★ v0819 统一 grid.left 计算公式，和 computed gridLeftRec 完全一致：14px/字+40+24，下限120，上限240
+  const gridLeftRec = Math.max(Math.min(maxLen * 14 + 40 + 24, 240), 120)
 
   // v0807h 新增 Y 轴映射自检
   const yMapDebug: string[] = []
@@ -1007,13 +1015,14 @@ function buildOption() {
 // 经验 935613：两图同轴同域同边距，才能像素级对齐月份刻度。
 function buildHeaderOption() {
   const tr = timeRange.value
-  const now = Date.now()
+  // ★ v0819 冻结表头统一读 nowTs ref（和 buildOption、ganttBars 相同毫秒）
+  const now = nowTs.value
   const defaultStart = now - 540 * DAY_MS
   const defaultEnd = now + 60 * DAY_MS
   const names = yCategories.value
   let maxLen = 0
   for (const n of names) maxLen = Math.max(maxLen, String(n || '').length)
-  // ★ v0818 冻结表头 grid.left 和主图完全一致（同轴同域同边距）：14px/字+徽标40+padding24，下限120，上限240
+  // ★ v0819 冻结表头 grid.left 和主图、computed 完全一致：14px/字+徽标40+padding24，下限120，上限240
   const gridLeftRec = Math.max(Math.min(maxLen * 14 + 40 + 24, 240), 120)
   const xAxisMax = Math.max(tr.max, now) + 3 * DAY_MS
   const xAxisMin = tr.min
