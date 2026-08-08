@@ -601,4 +601,117 @@ export class StaffAssignmentService {
 
     return { total: items.length, success: results.filter(r => r.ok).length, failed: results.filter(r => !r.ok).length, details: results };
   }
+
+  /**
+   * ★ v0848 快速创建政委用户（换班时新政委不在名单里）
+   * 场景：陈先生换政委时，新政委不在已有名单里（名单里都是在船的），
+   *       需要直接录入姓名+工号就能创建用户，再完成派任。
+   * 逻辑：
+   *   1. 如果有工号 → 先按工号查找已有用户，找到就返回（避免重复创建）
+   *   2. 找不到 → 创建新用户（username=工号 或 自动生成，password=默认123456，
+   *      role=ship_political_instructor，teamCode 从 JWT 获取）
+   *   3. 返回 { id, realName, employeeNo, isNew }
+   */
+  async quickCreateOfficer(
+    teamCode: string,
+    realName: string,
+    employeeNo: string | undefined,
+    operatorId: number = 0,
+  ) {
+    if (!realName || !realName.trim()) {
+      throw new BadRequestException('姓名不能为空');
+    }
+    realName = realName.trim();
+    employeeNo = employeeNo ? employeeNo.trim() : '';
+
+    // 1. 如果有工号，先按工号查找已有用户
+    if (employeeNo) {
+      const existing = await this.prisma.user.findFirst({
+        where: { username: employeeNo },
+      });
+      if (existing) {
+        // 已有用户：更新 realName（防止工号对但名字没填）
+        const updated = await this.prisma.user.update({
+          where: { id: existing.id },
+          data: { realName, employeeNo },
+        });
+        await this.operationLogService.create({
+          userId: operatorId,
+          teamCode,
+          operationType: '新增',
+          operationContent: `快速创建政委（复用已有用户）：${realName}（工号 ${employeeNo}）`,
+        });
+        return {
+          id: updated.id,
+          realName: updated.realName,
+          employeeNo: updated.employeeNo || employeeNo,
+          username: updated.username,
+          isNew: false,
+        };
+      }
+    }
+
+    // 2. 创建新用户
+    const hashedPassword = await bcrypt.hash('123456', 10);
+    // username：有工号用工号，没工号用 officer_ + 时间戳保证唯一
+    const username = employeeNo || `officer_${Date.now()}`;
+
+    // 检查 username 是否已存在（极端情况：工号没查到但 username 冲突）
+    const conflict = await this.prisma.user.findUnique({ where: { username } });
+    if (conflict) {
+      // username 冲突：用 officer_ + 时间戳 兜底
+      const fallbackUsername = `officer_${Date.now()}`;
+      const user = await this.prisma.user.create({
+        data: {
+          username: fallbackUsername,
+          password: hashedPassword,
+          realName,
+          employeeNo: employeeNo || null,
+          teamCode: teamCode as any,
+          role: 'ship_political_instructor' as any,
+          roles: ['ship_political_instructor'] as any,
+        },
+      });
+      await this.operationLogService.create({
+        userId: operatorId,
+        teamCode,
+        operationType: '新增',
+        operationContent: `快速创建政委（新用户）：${realName}（工号 ${employeeNo || '无'}，用户名 ${fallbackUsername}）`,
+      });
+      return {
+        id: user.id,
+        realName: user.realName,
+        employeeNo: user.employeeNo || employeeNo || '',
+        username: user.username,
+        isNew: true,
+      };
+    }
+
+    const user = await this.prisma.user.create({
+      data: {
+        username,
+        password: hashedPassword,
+        realName,
+        employeeNo: employeeNo || null,
+        teamCode: teamCode as any,
+        role: 'ship_political_instructor' as any,
+        roles: ['ship_political_instructor'] as any,
+      },
+    });
+
+    await this.operationLogService.create({
+      userId: operatorId,
+      teamCode,
+      operationType: '新增',
+      operationContent: `快速创建政委（新用户）：${realName}（工号 ${employeeNo || '无'}，用户名 ${username}）`,
+    });
+
+    return {
+      id: user.id,
+      realName: user.realName,
+      employeeNo: user.employeeNo || employeeNo || '',
+      username: user.username,
+      isNew: true,
+    };
+  }
 }

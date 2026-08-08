@@ -1194,6 +1194,9 @@ export const useApi = () => {
       checkOut: (id: number, data: { endDate: string; reason?: string }) => apiFetch(`/staff-assignments/${id}/checkout`, { method: 'POST', body: data }),
       startLeave: (id: number, data: { startDate: string; endDate?: string; reason?: string }) => apiFetch(`/staff-assignments/${id}/leave`, { method: 'POST', body: data }),
       endLeave: (id: number) => apiFetch(`/staff-assignments/${id}/end-leave`, { method: 'POST' }),
+      // ★ v0848 快速创建政委用户（换班时新政委不在名单里）
+      quickCreateOfficer: (data: { realName: string; employeeNo?: string }) =>
+        apiFetch('/staff-assignments/quick-create-officer', { method: 'POST', body: data }),
     },
 
     accounts: {

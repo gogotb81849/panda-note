@@ -38,6 +38,22 @@ export class StaffAssignmentController {
     return this.staffAssignmentService.batchImport(req.user.teamCode, body.items || []);
   }
 
+  /**
+   * ★ v0848 快速创建政委用户（换班时新政委不在名单里的场景）
+   * 接收 realName（必填）+ employeeNo（选填），自动创建 User 并返回 userId
+   * 不需要 admin 权限，岸基主管即可调用
+   */
+  @Post('quick-create-officer')
+  @UseGuards(JwtAuthGuard)
+  async quickCreateOfficer(@Request() req: any, @Body() body: any) {
+    return this.staffAssignmentService.quickCreateOfficer(
+      req.user.teamCode,
+      body.realName,
+      body.employeeNo,
+      req.user.id,
+    );
+  }
+
   @Post()
   @UseGuards(JwtAuthGuard)
   async create(@Request() req: any, @Body() createDto: CreateStaffAssignmentDto) {

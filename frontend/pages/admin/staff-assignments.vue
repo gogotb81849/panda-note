@@ -453,8 +453,16 @@
           <el-input v-model="replaceForm.checkoutReason" type="textarea" :rows="2" placeholder="如：休假换班、公休" />
         </el-form-item>
         <el-divider content-position="left">新政委上船</el-divider>
-        <el-form-item label="新政委" required>
-          <el-select v-model="replaceForm.newUserId" placeholder="选择新政委" class="w-full" filterable>
+        <!-- ★ v0848 模式切换：从名单选择 / 直接录入新政委 -->
+        <el-form-item label="选择方式">
+          <el-radio-group v-model="replaceForm.newOfficerMode">
+            <el-radio-button label="select">从名单选择</el-radio-button>
+            <el-radio-button label="input">直接录入新政委</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+        <!-- 模式A：从已有名单选择 -->
+        <el-form-item v-if="replaceForm.newOfficerMode === 'select'" label="新政委" required>
+          <el-select v-model="replaceForm.newUserId" placeholder="选择新政委" class="w-full" filterable clearable>
             <el-option
               v-for="user in availableNewUsers"
               :key="user.id"
@@ -490,6 +498,15 @@
             </el-option>
           </el-select>
         </el-form-item>
+        <!-- ★ v0848 模式B：直接录入新政委（不在名单里的人） -->
+        <template v-else>
+          <el-form-item label="姓名" required>
+            <el-input v-model="replaceForm.newOfficerName" placeholder="请输入新政委姓名" />
+          </el-form-item>
+          <el-form-item label="工号">
+            <el-input v-model="replaceForm.newOfficerEmployeeNo" placeholder="工号（可选，不填也行）" />
+          </el-form-item>
+        </template>
         <el-form-item label="上船日期" required>
           <el-date-picker
             v-model="replaceForm.boardDate"
@@ -507,8 +524,9 @@
             </div>
           </div>
         </el-form-item>
-        <el-form-item label="派任编号">
-          <el-input v-model="replaceForm.assignmentNo" placeholder="请输入派任编号（可选）" />
+        <!-- ★ v0848 "派任编号"改为"工号"（可选，无星号） -->
+        <el-form-item label="工号">
+          <el-input v-model="replaceForm.assignmentNo" placeholder="工号（可选，不填也行）" />
         </el-form-item>
         <el-form-item label="公司名称">
           <el-select v-model="replaceForm.sourceCompany" placeholder="选择公司" class="w-full" clearable>
@@ -687,6 +705,10 @@ const replaceForm = ref({
   checkoutDate: '',
   checkoutReason: '',
   newUserId: undefined as number | undefined,
+  // ★ v0848 新增：直接录入新政委模式
+  newOfficerMode: 'select' as 'select' | 'input',
+  newOfficerName: '',
+  newOfficerEmployeeNo: '',
   boardDate: '',
   assignmentNo: '',
   sourceCompany: '',
@@ -1130,6 +1152,9 @@ const resetReplaceForm = () => {
     checkoutDate: '',
     checkoutReason: '',
     newUserId: undefined,
+    newOfficerMode: 'select',
+    newOfficerName: '',
+    newOfficerEmployeeNo: '',
     boardDate: '',
     assignmentNo: '',
     sourceCompany: '',
@@ -1137,10 +1162,16 @@ const resetReplaceForm = () => {
 };
 
 const submitReplace = async () => {
-  const { shipId, currentAssignment, checkoutDate, checkoutReason, newUserId, boardDate, assignmentNo, sourceCompany } = replaceForm.value;
+  const { shipId, currentAssignment, checkoutDate, checkoutReason, newUserId, newOfficerMode, newOfficerName, newOfficerEmployeeNo, boardDate, assignmentNo, sourceCompany } = replaceForm.value;
 
   if (!shipId) { ElMessage.warning('请选择船舶'); return; }
-  if (!newUserId) { ElMessage.warning('请选择新政委'); return; }
+  // ★ v0884 按模式校验新政委
+  let finalUserId: number | undefined = newUserId;
+  if (newOfficerMode === 'input') {
+    if (!newOfficerName || !newOfficerName.trim()) { ElMessage.warning('请输入新政委姓名'); return; }
+  } else {
+    if (!newUserId) { ElMessage.warning('请选择新政委'); return; }
+  }
   if (!boardDate) { ElMessage.warning('请填写上船日期'); return; }
   if (currentAssignment && !checkoutDate) { ElMessage.warning('有当前在任政委，请填写下船日期'); return; }
 
@@ -1160,7 +1191,26 @@ const submitReplace = async () => {
     }
   }
 
-  const currentShipOfNew = userCurrentShipMap.value[newUserId];
+  // ★ v0848 如果是"录入新政委"模式，先调用后端创建用户拿到 userId
+  if (newOfficerMode === 'input') {
+    try {
+      const created: any = await api.staffAssignments.quickCreateOfficer({
+        realName: newOfficerName.trim(),
+        employeeNo: newOfficerEmployeeNo || undefined,
+      });
+      finalUserId = created.id;
+      // 创建成功后刷新用户列表，后续可用
+      await loadUsers();
+      ElMessage.success(`新政委「${created.realName}」已创建${created.isNew ? '' : '（复用已有记录）'}`);
+    } catch (e: any) {
+      ElMessage.error('创建新政委失败：' + (e?.message || '未知错误'));
+      return;
+    }
+  }
+
+  if (!finalUserId) { ElMessage.warning('未获取到新政委ID'); return; }
+
+  const currentShipOfNew = userCurrentShipMap.value[finalUserId];
   if (currentShipOfNew) {
     try {
       await ElMessageBox.confirm(
@@ -1175,7 +1225,7 @@ const submitReplace = async () => {
   try {
     if (currentShipOfNew) {
       const newUserAssignments = assignments.value.filter(
-        a => a.userId === newUserId && a.status === 'active' && !a.endDate
+        a => a.userId === finalUserId && a.status === 'active' && !a.endDate
       );
       for (const a of newUserAssignments) {
         await api.staffAssignments.checkOut(a.id, { endDate: checkoutDate || boardDate, reason: '换船派任' });
@@ -1188,7 +1238,7 @@ const submitReplace = async () => {
       });
     }
     await createAssignment({
-      userId: newUserId,
+      userId: finalUserId,
       shipId,
       startDate: boardDate,
       sourceCompany: sourceCompany || undefined,
