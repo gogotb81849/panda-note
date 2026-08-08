@@ -962,8 +962,15 @@ function buildOption() {
   function renderBarDumpTable(limit: number): string {
     const rows = buildBarDumpRows(limit)
     const totalBars = bars.length
-    const todayStr = new Date(nowTs.value).toISOString().slice(0, 10)
-    let s = `<div style="margin-bottom:4px;font-weight:600;color:#2c3e50;">📅 today基准: ${todayStr} | todayNoon基准(色条右端): ${new Date(nowTs.value + 6 * 3600 * 1000).toISOString().slice(0, 10)} | 共 ${totalBars} 条色条（显示前 ${limit} 条，方向=❌=严重错误行红色高亮，在任行右端≠今天也红色）</div>`
+    const now = nowTs.value
+    // ★ v0844 修复：endFinal 故意设为 nowTs+12h（今天下午6点），用来覆盖蓝色今天竖线
+    //   所以不能再机械比较 `endFinal 日期字符串 === today 0点日期`，会全误报红色。
+    //   → 改用时间戳范围判定：endFinal ∈ [今天 00:00, 今天+36小时] 都算「右端正确覆盖今天」
+    const today0 = new Date(now); today0.setHours(0, 0, 0, 0); const today0Ts = today0.getTime()
+    const todayPlus36h = today0Ts + 36 * 3600 * 1000
+    const todayStr = new Date(now).toISOString().slice(0, 10)
+    const barEndStr = new Date(todayPlus36h - 24 * 3600 * 1000 + 12 * 3600 * 1000).toISOString().slice(0, 10) // now+12h 对应日期
+    let s = `<div style="margin-bottom:4px;font-weight:600;color:#2c3e50;">📅 today基准(今0点): ${todayStr} | 色条右端目标(今+12h覆盖今天线): ${barEndStr} | 共 ${totalBars} 条色条（显示前 ${limit} 条，仅 方向❌反向/在任右端<今天0点 才红色高亮）</div>`
     s += `<table style="border-collapse:collapse;font-size:11px;width:100%;min-width:900px;"><tr style="background:#34495e;color:#fff;">
       <th style="border:1px solid #ccc;padding:2px 4px;text-align:left;">政委</th>
       <th style="border:1px solid #ccc;padding:2px 4px;text-align:left;">船名/Y行</th>
@@ -979,8 +986,12 @@ function buildOption() {
     </tr>`
     for (const r of rows) {
       const forward = r.endFinalTs > r.startFinalTs
-      const endIsToday = r.endFinal.slice(0, 10) === todayStr
-      const bad = !forward || (!endIsToday && r.opa >= 0.99) // opa=1=在任且右端不是今天 → 也是错
+      const endTs = r.endFinalTs
+      // 在任（opa>=0.99）且 endFinal 在今天0点~今天+36h → 右端正确（含 now+12h 缓冲区）
+      const activeOk = (r.opa >= 0.99) && (endTs >= today0Ts) && (endTs <= todayPlus36h)
+      // 历史（ended）endFinal 不在这个范围 → 正常
+      // 真错误：反向 或 (在任且右端早于今天0点 = 没到今天)
+      const bad = !forward || ((r.opa >= 0.99) && (endTs < today0Ts))
       s += `<tr style="${bad ? 'background:#ffe0e0;color:#c0392b;font-weight:700;' : ''}">
         <td style="border:1px solid #ccc;padding:2px 4px;">${r.officer}</td>
         <td style="border:1px solid #ccc;padding:2px 4px;">Y${r.yIndex}·${r.shipName}</td>
@@ -988,7 +999,7 @@ function buildOption() {
         <td style="border:1px solid #ccc;padding:2px 4px;">${r.raw?.endDateRaw}</td>
         <td style="border:1px solid #ccc;padding:2px 4px;">${r.raw?.statusRaw}</td>
         <td style="border:1px solid #ccc;padding:2px 4px;">${r.startFinal}</td>
-        <td style="border:1px solid #ccc;padding:2px 4px;">${r.endFinal}${endIsToday ? ' ✅' : ''}</td>
+        <td style="border:1px solid #ccc;padding:2px 4px;">${r.endFinal}${(r.opa >= 0.99) ? (activeOk ? ' ✅' : (endTs < today0Ts ? ' ❌右端没到今天' : '')) : ''}</td>
         <td style="border:1px solid #ccc;padding:2px 4px;text-align:center;">${r.daysNum}</td>
         <td style="border:1px solid #ccc;padding:2px 4px;text-align:center;">${forward ? '✅正向' : '❌反向ERROR'}</td>
         <td style="border:1px solid #ccc;padding:2px 4px;text-align:center;">${r.opa}</td>
@@ -1002,7 +1013,9 @@ function buildOption() {
   // v0836 每船诊断摘要：按船分组显示所有派任
   function renderShipSummary(): string {
     if (!bars.length) return ''
-    const todayStr2 = new Date(nowTs.value).toISOString().slice(0, 10)
+    const now = nowTs.value
+    const today0 = new Date(now); today0.setHours(0, 0, 0, 0); const today0Ts = today0.getTime()
+    const todayPlus36h = today0Ts + 36 * 3600 * 1000
     const byShip = new Map<number, any[]>()
     for (const b of bars) {
       const yIdx = Number(b.value[0])
@@ -1013,7 +1026,7 @@ function buildOption() {
     }
     const ENDED_SET = new Set(['ended', 'offboard', '下船', '离职', '离船', '已下船', '已离船'])
     let s = `<div style="font-weight:600;margin-bottom:4px;">🚢 每船派任诊断（共 ${byShip.size} 艘船，${bars.length} 条色条）</div>`
-    s += `<div style="font-size:11px;margin-bottom:6px;color:#555;">图例: <b>✅</b>在任且右端=今天 | <b style="color:#c0392b;">❌</b>在任但右端≠今天(严重) | <b style="color:#e67e22;">⚠️</b>历史派任(正常，右端=下船日) | 船名后数字=派任数</div>`
+    s += `<div style="font-size:11px;margin-bottom:6px;color:#555;">图例: <b style="color:#27ae60;">✅</b>在任且右端覆盖今天(含+12h缓冲) | <b style="color:#c0392b;">❌</b>在任但右端＜今天(严重错误) | <b style="color:#e67e22;">⚠️</b>历史派任(正常) | 船名后数字=派任数</div>`
     for (const [yIdx, items] of byShip) {
       const shipName = yCategories.value[yIdx] || '(未知船)'
       const sorted = items.sort((a, b2) => Number(a.b.value[1]) - Number(b2.b.value[1]))
@@ -1023,12 +1036,20 @@ function buildOption() {
         const off = bar._labelText?.split('（')?.[0] || '?'
         const st = (asg?.status || '').toLowerCase()
         const isEnded = ENDED_SET.has(st)
-        const endDate = new Date(Number(bar.value[2])).toISOString().slice(0, 10)
-        const endOk = endDate === todayStr2
-        const warnClass = isEnded ? '#e67e22' : (endOk ? '#27ae60' : '#c0392b')
-        const mark = isEnded ? '⚠️历史' : (endOk ? '✅在任→今天' : '❌在任但≠今天')
+        const endTs = Number(bar.value[2])
+        const endDate = new Date(endTs).toISOString().slice(0, 10)
+        // ★ v0844 同上：在任 endFinal 在 [今天0点, 今天+36h] → ✅ 正确
+        let warnClass, mark, bg
+        if (isEnded) {
+          warnClass = '#e67e22'; mark = '⚠️历史'; bg = '#fff5e6'
+        } else {
+          const ok = (endTs >= today0Ts) && (endTs <= todayPlus36h)
+          if (ok) { warnClass = '#27ae60'; mark = '✅在任→今天(覆盖)'; bg = '#e6ffe6' }
+          else if (endTs < today0Ts) { warnClass = '#c0392b'; mark = '❌在任但右端＜今天(严重)'; bg = '#ffe6e6' }
+          else { warnClass = '#7c3aed'; mark = '🔔在任右端超范围(' + endDate + ')'; bg = '#f5f3ff' }
+        }
         const rawEnd = asg?.endDate || '(null)'
-        shipHtml += `<div style="font-size:11px;margin:2px 0;padding:2px 4px;background:${isEnded ? '#fff5e6' : (endOk ? '#e6ffe6' : '#ffe6e6')};border-left:3px solid ${warnClass};">
+        shipHtml += `<div style="font-size:11px;margin:2px 0;padding:2px 4px;background:${bg};border-left:3px solid ${warnClass};">
           <span style="font-weight:600;">${off}</span>
           <span style="color:#888;margin:0 4px;">|</span>
           原始status=<code style="background:#f0f0f0;padding:0 2px;">${st || '(空)'}</code>
