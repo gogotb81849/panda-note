@@ -288,7 +288,9 @@ const gridLeftRec = computed(() => {
   const names = yCategories.value
   let maxLen = 0
   for (const n of names) maxLen = Math.max(maxLen, String(n || '').length)
-  return Math.max(Math.min(maxLen * 16 + 64 + 32, 320), 150)
+  // ★ v0810 陈先生手机端截图：「熊亮」只显示了"熊"半个字→左边被mask裁切。
+  //   三个措施：①每中文18px（原16px）；②徽标80+padding40（原64+32）；③最低180px（原150px），上限340px
+  return Math.max(Math.min(maxLen * 18 + 80 + 40, 340), 180)
 })
 
 // ★ v0807h 终极修复：彻底消灭 Y 轴索引错位（经验 904365 教训：单一数据模型驱动所有渲染）
@@ -387,15 +389,11 @@ const ganttBars = computed(() => {
     const start = new Date(a.startDate).getTime()
     // ★ v0807i 陈先生需求 #2：所有进度条「基本信息应该都是到今天」
     //   - 有 endDate：按 endDate 原样保留（明确下船日期）
-    //   - 没有 endDate：按陈先生要求必须 100% 精确对齐「蓝色今天竖线」
-    //     这里 end 直接 = now（毫秒级精确），配合 xAxis.max = now+3d 把画布右边界推后 3 天，
-    //     ECharts encode bar 末端就会和 markLine data=[{xAxis:now}] 的蓝色今天线像素级重合对齐
-    const nowTs = Date.now()
-    // ★ v0807m 陈先生截图：所有"至今"色条右端没有对齐 8/7 蓝色今天线。
-    //   根因分析：now 是当前真实毫秒，但 ECharts bar encode 的末端渲染会受网格 clip / label 空间 / 画布反走样影响，
-    //   导致视觉上差 1~2 像素。同时加 2 小时（不超过 1 天，所以不会跨过日历格），确保视觉上 100% 延伸到 today 线右侧。
+    //   - 没有 endDate：按陈先生要求必须 100% 视觉覆盖到「蓝色今天竖线」的右侧。
+    //   v0810 手机端截图再次确认：2小时不够（手机端整体缩得窄，2h宽度只有几像素，看起来就像没对齐）。
+    //   改为 +24 小时（一整天），色条右端会明显延伸到今天线右侧 1 格内，视觉上 100% 就是"到今天还在任"。
     //   有 endDate（明确下船日期）的派任保持精确 endDate 不变。
-    const end = a.endDate ? new Date(a.endDate).getTime() : (nowTs + 2 * 3600 * 1000)
+    const end = a.endDate ? new Date(a.endDate).getTime() : (nowTs + 24 * 3600 * 1000)
     if (isNaN(start) || isNaN(end) || end <= start) continue
 
     const days = Math.max(1, Math.round((end - start) / DAY_MS))
@@ -649,8 +647,9 @@ function buildOption() {
   const names = yCategories.value
   let maxLen = 0
   for (const n of names) maxLen = Math.max(maxLen, String(n || '').length)
-  // ★ v0807i 统一 grid.left 计算公式，header canvas 和 main canvas 完全一致（经验 935613：同轴同域同边距）
-  const gridLeftRec = Math.max(Math.min(maxLen * 16 + 64 + 32, 320), 150)
+  // ★ v0810 统一 grid.left 计算公式，header canvas 和 main canvas 完全一致（经验 935613：同轴同域同边距）
+  //   手机端三措施：每中文18px+徽标80+padding40，下限180px，上限340px
+  const gridLeftRec = Math.max(Math.min(maxLen * 18 + 80 + 40, 340), 180)
 
   // v0807h 新增 Y 轴映射自检
   const yMapDebug: string[] = []
@@ -756,9 +755,11 @@ function buildOption() {
       axisLabel: {
         color: '#303133',
         fontSize: 12,
-        // 左侧 Y 轴 label 画在 grid.left 区域内部，grid.left=gridLeftRec 已留足像素，
+        align: 'right',  // ★ v0810 陈先生手机截图：船名左侧第一个字被裁切→右对齐，文字向 grid.left 右边界（也就是色条起点那根竖线）靠拢，左边就会有留白不会被 mask 裁掉
+        margin: 6,
+        // 左侧 Y 轴 label 画在 grid.left 区域内部，grid.left=gridLeftRec 已留足像素（18px/字+徽标80+padding40）
         // 再配合 <div class="y-axis-mask"> 底色遮罩盖住所有进度条左端，船名 100% 不会被进度条盖住
-        padding: [0, 10, 0, 4],
+        padding: [0, 14, 0, 8],
         formatter: (val: string, idx: number) => {
           const shipId = cnShipNameToShipId.value.get(String(val))
           if (shipId !== undefined && vacantIdSet.value.has(shipId)) {
@@ -767,7 +768,7 @@ function buildOption() {
           return `{name|${val}}`
         },
         rich: {
-          name: { color: '#303133', fontSize: 12, padding: [0, 8, 0, 6], lineHeight: 22 },
+          name: { color: '#303133', fontSize: 12, padding: [0, 10, 0, 6], lineHeight: 22, align: 'right' },
           vacant: {
             backgroundColor: 'rgba(245, 108, 108, 0.15)',
             borderColor: '#f56c6c', borderWidth: 1, color: '#c0392b',
@@ -834,7 +835,8 @@ function buildHeaderOption() {
   const names = yCategories.value
   let maxLen = 0
   for (const n of names) maxLen = Math.max(maxLen, String(n || '').length)
-  const gridLeftRec = Math.max(Math.min(maxLen * 16 + 64 + 32, 320), 150)
+  // ★ v0810 冻结表头 grid.left 和主图完全一致（同轴同域同边距）：18px/字+徽标80+padding40，下限180，上限340
+  const gridLeftRec = Math.max(Math.min(maxLen * 18 + 80 + 40, 340), 180)
   const xAxisMax = Math.max(tr.max, now) + 3 * DAY_MS
   const xAxisMin = tr.min
   const curStartValue = dzRange.value?.startValue ?? defaultStart

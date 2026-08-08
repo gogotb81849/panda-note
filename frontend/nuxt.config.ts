@@ -68,7 +68,7 @@ export default defineNuxtConfig({
       clientsClaim: true,
       cleanupOutdatedCaches: true,
       navigateFallback: '/',
-      navigateFallbackDenylist: [/^\/api\//],
+      navigateFallbackDenylist: [/^\/api\//, /^\/__fix_pm2_20260806/],
       // 预缓存关键资源，确保离线可启动
       globPatterns: [
         '**/*.{js,css,html}',
@@ -82,7 +82,7 @@ export default defineNuxtConfig({
           urlPattern: /\/_nuxt\/.*\.(js|css)$/i,
           handler: 'NetworkFirst',
           options: {
-            cacheName: 'app-cache-v11',
+            cacheName: 'app-cache-v12',
             expiration: {
               maxEntries: 200,
               maxAgeSeconds: 60 * 60 * 24 * 30,
@@ -93,7 +93,7 @@ export default defineNuxtConfig({
           urlPattern: /^https:\/\/.*\/api\//i,
           handler: 'NetworkFirst',
           options: {
-            cacheName: 'api-cache-v11',
+            cacheName: 'api-cache-v12',
             expiration: {
               maxEntries: 200,
               maxAgeSeconds: 60 * 60 * 24,
@@ -107,7 +107,7 @@ export default defineNuxtConfig({
           urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp|woff2?)$/,
           handler: 'CacheFirst',
           options: {
-            cacheName: 'static-cache-v11',
+            cacheName: 'static-cache-v12',
             expiration: {
               maxEntries: 100,
               maxAgeSeconds: 60 * 60 * 24 * 30,
@@ -118,8 +118,8 @@ export default defineNuxtConfig({
           urlPattern: ({ request }) => request.mode === 'navigate',
           handler: 'NetworkFirst',
           options: {
-            cacheName: 'pages-cache-v11',
-            networkTimeoutSeconds: 3,
+            cacheName: 'pages-cache-v12',
+            networkTimeoutSeconds: 10,
             expiration: {
               maxEntries: 50,
               maxAgeSeconds: 60 * 60 * 24 * 7,

@@ -1,6 +1,6 @@
 {
   "name": "nav-log-frontend",
-  "version": "1.1.0.0808",
+  "version": "1.1.0.0810",
   "private": true,
   "type": "module",
   "scripts": {
