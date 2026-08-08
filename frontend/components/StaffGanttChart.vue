@@ -283,7 +283,7 @@ function onDblClickWrapper() {
 }
 
 // 冻结表头 + 按钮 + 画布需要用到的常量/尺寸
-const HEADER_H = 64 // ★ v0822 增加高度：原54px在手机端月份标签被裁切→64px留足空间
+const HEADER_H = 96 // ★ v0824 再增高度：顶部含月份label(56px)+dataZoom滑块(30px)+padding(10px) = 96px；滑块移到顶部方便左右滑动
 
 // ★ v0819 HTML 船名图层和 ECharts bar 像素级对齐的两个关键常量：
 //   主图 grid.top = 10，grid.bottom = 72，grid内实际像素 = chartHeight - 10 - 72 = N×44 + 38
@@ -323,78 +323,83 @@ const buildTimeLabel = computed(() => {
 // v0807m 初始化永久可见告警（陈先生手机端能直接看到）
 const initFatalAlert = ref<string | null>(null)
 // 缩放按钮
-// ★ v0822 缩放函数加边界保护：防止多次缩放后范围崩溃（startValue>=endValue 或超出 xAxis min/max）
+// ★ v0824 缩放函数（滑块移到顶部冻结表头）：从 headerChartInstance.getOption().xAxis 读当前范围
+//   主图没有 dataZoom，范围同步全靠 dzRange + syncHeaderZoom
+function getCurrentRange() {
+  if (dzRange.value && dzRange.value.startValue > 0 && dzRange.value.endValue > dzRange.value.startValue) {
+    return [dzRange.value.startValue, dzRange.value.endValue] as [number, number]
+  }
+  // 回退：header 滑块当前值
+  if (headerChartInstance) {
+    try {
+      const h = headerChartInstance.getOption()
+      const dz = (h?.dataZoom || [])[0] || {}
+      const s = Number(dz.startValue) || 0
+      const e = Number(dz.endValue) || 0
+      if (s > 0 && e > s) return [s, e] as [number, number]
+    } catch (_) {}
+  }
+  // 再回退：主图 xAxis
+  if (chartInstance) {
+    try {
+      const o = chartInstance.getOption()
+      const ax = (o?.xAxis || [])[0] || {}
+      const s = Number(ax.min) || 0
+      const e = Number(ax.max) || 0
+      if (s > 0 && e > s) return [s, e] as [number, number]
+    } catch (_) {}
+  }
+  const nw = nowTs.value
+  return [nw - 180 * DAY_MS, nw + 30 * DAY_MS] as [number, number]
+}
 function zoomInRange() {
   if (!chartInstance || !echartsModule) return
-  const opt = chartInstance.getOption()
-  const cur = (opt?.dataZoom || [])[0]
-  let s = Number(cur?.startValue) || 0
-  let e = Number(cur?.endValue) || 0
-  if (!(s > 0 && e > s)) {
-    // 当前范围无效→用默认范围
-    const now = nowTs.value
-    s = now - 180 * DAY_MS
-    e = now + 30 * DAY_MS
-  }
+  const [s, e] = getCurrentRange()
   const mid = (s + e) / 2
   const half = Math.max(14 * DAY_MS, (e - s) / 4) // 最小14天半宽，防止缩到看不见
   const ns = mid - half
   const ne = mid + half
   dzRange.value = { startValue: ns, endValue: ne }
-  chartInstance.dispatchAction({ type: 'dataZoom', startValue: ns, endValue: ne, xAxisIndex: [0] })
   syncHeaderZoom()
 }
 function zoomOutRange() {
   if (!chartInstance || !echartsModule) return
-  const opt = chartInstance.getOption()
-  const cur = (opt?.dataZoom || [])[0]
-  let s = Number(cur?.startValue) || 0
-  let e = Number(cur?.endValue) || 0
-  if (!(s > 0 && e > s)) {
-    const now = nowTs.value
-    s = now - 180 * DAY_MS
-    e = now + 30 * DAY_MS
-  }
+  const [s, e] = getCurrentRange()
   const half = (e - s) // 扩大1倍（当前范围×2）
   const tr = timeRange.value
   const ns = Math.max(tr.min, s - half)
   const ne = Math.min(tr.max, e + half)
   if (ne - ns < 14 * DAY_MS) return // 安全兜底
   dzRange.value = { startValue: ns, endValue: ne }
-  chartInstance.dispatchAction({ type: 'dataZoom', startValue: ns, endValue: ne, xAxisIndex: [0] })
   syncHeaderZoom()
 }
 function resetRange() {
-  const now = Date.now()
+  const now = nowTs.value
   dzRange.value = { startValue: now - 540 * DAY_MS, endValue: now + 60 * DAY_MS }
-  if (chartInstance) {
-    chartInstance.dispatchAction({ type: 'dataZoom', startValue: dzRange.value.startValue, endValue: dzRange.value.endValue, xAxisIndex: [0] })
-  }
   syncHeaderZoom()
 }
 // ★ v0818 回到今天：重置范围到以今天为中心的 6 个月窗口 + 滚动到今天位置
 function goToToday() {
-  const now = Date.now()
+  const now = nowTs.value
   dzRange.value = { startValue: now - 90 * DAY_MS, endValue: now + 90 * DAY_MS }
-  if (chartInstance) {
-    chartInstance.dispatchAction({ type: 'dataZoom', startValue: dzRange.value.startValue, endValue: dzRange.value.endValue, xAxisIndex: [0] })
-  }
   syncHeaderZoom()
 }
 function syncHeaderZoom() {
-  if (!headerChartInstance || !dzRange.value) return
+  if (!dzRange.value) return
   try {
-    // ★ v0812 之前 dispatchAction({type:'dataZoom'}) 是错误用法！
-    //   冻结表头 buildHeaderOption 里根本没有声明 dataZoom 组件，dispatchAction 是找不到
-    //   dataZoom 目标的（静默失败，月份标题永远不跟随缩放）。
-    //   正确做法：直接 setOption 同步 min/max —— header 有独立 xAxis 就能响应。
-    const now = Date.now()
-    const tr = timeRange.value
-    headerChartInstance.setOption({
-      xAxis: { min: dzRange.value.startValue, max: dzRange.value.endValue },
-    }, false)
-    // 顺便刷新整个 header option 对齐主 option 的 gridLeft（如果船名变了）
-    headerChartInstance.setOption(buildHeaderOption(), false)
+    const sv = dzRange.value.startValue
+    const ev = dzRange.value.endValue
+    // ★ v0824 主图没有 dataZoom 了 → 直接 set xAxis min/max 同步时间范围
+    if (chartInstance) {
+      chartInstance.setOption({ xAxis: { min: sv, max: ev } }, false)
+    }
+    // Header：set xAxis min/max 让顶部滑块响应
+    if (headerChartInstance) {
+      headerChartInstance.setOption({
+        xAxis: { min: sv, max: ev },
+        dataZoom: { startValue: sv, endValue: ev },
+      }, false)
+    }
   } catch (_) { /* ignore */ }
 }
 
@@ -584,21 +589,28 @@ const ganttBars = computed(() => {
     if (status === 'leave') continue
 
     const start = new Date(a.startDate).getTime()
-    // ★ v0822 陈先生需求：所有在任政委（status=active）色条必须延伸到今天
-    //   之前只检查 a.endDate 是否存在→如果后端返回了 endDate 但状态仍是 active，
-    //   色条就会停在 endDate 而不是今天。现在强制：active 状态一律 end=nowTs.value
-    //   ended/leave 有 endDate 的按 endDate 原样
-    const isActive = status === 'active' || (status !== 'ended' && !a.endDate)
-    const end = isActive ? nowTs.value : (a.endDate ? new Date(a.endDate).getTime() : nowTs.value)
+    // ★ v0824 陈先生需求：只要没下船的政委，色条必须延伸到今天蓝色竖线
+    //   宽松判定：
+    //     · status 明确是 'ended' 或 endDate < nowTs（真的过了下船日期）→ 按历史 endDate
+    //     · 其他全部算在任 → end = nowTs + 6 小时（覆盖到今天中午12点基准，
+    //       消除 ECharts bar 像素取整导致的"右端比今天线短 1-2 像素"问题）
+    //   为什么+6h不是精确nowTs？ECharts time axis 按像素量化取整，bar encode 末端会
+    //   把「xAxis上精确毫秒」向下取整到最近刻度像素，导致右端视觉短1-2像素。+6h 是
+    //   「今天当天内」的安全冗余值，视觉上色条会延伸到今天线右缘，100% 覆盖今天线。
+    const endTsRaw = a.endDate ? new Date(a.endDate).getTime() : nowTs.value
+    const hasEnded = status === 'ended' || (!!a.endDate && endTsRaw < nowTs.value)
+    const isActive = !hasEnded
+    // 关键：在任色条 = nowTs + 6 小时，视觉 100% 对齐/覆盖今天线
+    const todayNoon = nowTs.value + 6 * 3600 * 1000
+    const end = isActive ? todayNoon : endTsRaw
     if (isNaN(start) || isNaN(end) || end <= start) continue
 
-    const days = Math.max(1, Math.round((end - start) / DAY_MS))
+    const days = Math.max(1, Math.round(((isActive ? nowTs.value : end) - start) / DAY_MS))
     const startStr = new Date(start).toISOString().slice(0, 10)
-    // ★ v0822 label 文案：active 状态一律显示"→至今"（不管后端有没有 endDate）
+    // ★ v0824 label：在任一律「→至今」；历史派任「~MM-DD」
     const endStr = isActive ? '至今' : (a.endDate ? new Date(end).toISOString().slice(0, 10) : '至今')
     const name = a.user?.realName || a.ship?.politicalOfficerName || '未指派'
-    // ★ v0822 只有 status=ended 才降低透明度；active 不降（即使后端有 endDate）
-    const ended = status === 'ended'
+    const ended = hasEnded
     const labelText = `${name}（${days}天）${startStr}${isActive ? '→至今' : '~' + endStr.slice(5)}`
 
     out.push({
@@ -966,14 +978,9 @@ function buildOption() {
       },
       z: 1,
     },
-    dataZoom: [
-      { type: 'slider', xAxisIndex: 0, startValue: curStartValue, endValue: curEndValue, height: 20, bottom: 10, borderColor: '#dcdfe6', brushSelect: false },
-      // ★ v0822 彻底移除 inside dataZoom：ECharts inside 组件即使所有选项=false，
-      //   仍会在 canvas DOM 上注册 touchstart/mousedown 事件监听器并 preventDefault，
-      //   导致 scroll-box 的原生触摸上下拖动被吞掉（陈先生反馈"色条区域上下拖动没反应"）。
-      //   移除后：触摸/鼠标事件不再被 ECharts 拦截→scroll-box 原生纵向滚动100%恢复。
-      //   横向缩放/平移完全由右侧 +/- 按钮和底部 slider 滑块控制。
-    ],
+    // ★ v0824 陈先生要求：滑块移到顶部冻结表头（所有船的上方），主图不再放 slider
+    //   滑块只在 buildHeaderOption 里声明一个，通过 dataZoom 事件双向同步。
+    dataZoom: [],
     series: [{
       name: '政委任职',
       type: 'bar',
@@ -1021,8 +1028,8 @@ function buildOption() {
         //   也显示蓝色今天标识。这里主画布仍然再画一条作为全甘特图贯穿线，
         //   这样滚动到最下方也能看到今天竖线（Excel 冻结标题效果：主区域和标题区均有 today）
         label: { formatter: '今天', position: 'end', color: '#409eff', fontSize: 11 },
-        lineStyle: { color: '#409eff', type: 'solid', width: 1.5 },
-        data: [{ xAxis: now }],
+        lineStyle: { color: '#409eff', type: 'solid', width: 2.5 }, // ★ v0824 加粗到2.5px，主图+表头完全一致
+        data: [{ xAxis: now }], // xAxis 完全相同 nowTs
       },
     }],
   }
@@ -1039,7 +1046,7 @@ function buildHeaderOption() {
   const names = yCategories.value
   let maxLen = 0
   for (const n of names) maxLen = Math.max(maxLen, String(n || '').length)
-  // ★ v0819 冻结表头 grid.left 和主图、computed 完全一致：14px/字+徽标40+padding24，下限120，上限240
+  // ★ v0824 冻结表头 grid.left 和主图、computed 完全一致：14px/字+徽标40+padding24，下限120，上限240
   const gridLeftRec = Math.max(Math.min(maxLen * 14 + 40 + 24, 240), 120)
   const xAxisMax = Math.max(tr.max, now) + 3 * DAY_MS
   const xAxisMin = tr.min
@@ -1051,7 +1058,8 @@ function buildHeaderOption() {
       left: gridLeftRec,  // 必须和主 buildOption 完全一致
       right: 40,          // 同上
       top: 10,
-      bottom: 16,
+      // ★ v0824 滑块移到顶部（bottom=16→50）：grid.bottom = 月份label底 + dataZoom滑块(30px)
+      bottom: 50,
       containLabel: false,
     },
     xAxis: {
@@ -1080,7 +1088,21 @@ function buildHeaderOption() {
       show: false,
     },
     dataZoom: [
-      // ★ v0822 冻结表头也移除 inside（同主图，避免 header canvas 拦截触摸事件）
+      // ★ v0824 陈先生要求：滑块移到顶部冻结表头（所有船的上方），放月份下面、日期上面。
+      //   高度30px，位置 grid.bottom=50 → 视觉在月份label下面紧贴，可左右拖动。
+      {
+        type: 'slider',
+        xAxisIndex: 0,
+        startValue: curStartValue,
+        endValue: curEndValue,
+        height: 26,
+        bottom: 10,
+        borderColor: '#dcdfe6',
+        brushSelect: false,
+        handleIcon: 'M10.7,11.9H9.3c-0.2,0-0.4-0.1-0.5-0.2L4.7,7.5C4.6,7.3,4.6,7.1,4.7,7c0.1-0.1,0.2-0.2,0.4-0.2l4.1-4.1C8.9,2.6,9.1,2.5,9.3,2.5 h1.4c0.2,0,0.4,0.1,0.5,0.2l4.1,4.1c0.1,0.1,0.2,0.2,0.2,0.4s-0.1,0.3-0.2,0.4l-4.1,4.1C11.1,11.8,10.9,11.9,10.7,11.9z',
+        handleStyle: { color: '#409eff' },
+        textStyle: { color: '#606266', fontSize: 10 },
+      },
     ],
     series: [
       // 不画任何数据，只画顶部时间轴 + 蓝色今天 markLine
@@ -1091,8 +1113,8 @@ function buildHeaderOption() {
           silent: true,
           symbol: ['none', 'none'],
           label: { formatter: '今天', position: 'end', color: '#409eff', fontSize: 11 },
-          lineStyle: { color: '#409eff', type: 'solid', width: 1.5 },
-          data: [{ xAxis: now }],
+          lineStyle: { color: '#409eff', type: 'solid', width: 2.5 }, // ★ v0824 和主图 markLine 100%相同宽度/颜色
+          data: [{ xAxis: now }], // 同一 nowTs → 和主图今天线像素级重叠
         },
       },
     ],
@@ -1137,24 +1159,30 @@ function initHeaderChart() {
   }
 }
 
-// 主画布 dataZoom 事件：双向同步冻结表头（拖拽/滚轮/按钮缩放后 header 完全跟进）
+// ★ v0824 双向同步：滑块现在在顶部冻结表头（headerChartInstance）里！
+//   用户拖动顶部滑块 → 监听 headerChartInstance 的 dataZoom 事件 → 同步 dzRange → 再同步主图 xAxis min/max
 function bindChartEvents() {
-  if (!chartInstance) return
-  chartInstance.off('dataZoom')
-  chartInstance.on('dataZoom', (/* e: any */) => {
-    // 用主画布 getOption 的当前值来同步，比 event.startValue/event.endValue 更稳定
-    const opt = chartInstance.getOption()
-    const dz = (opt?.dataZoom || [])[0] || {}
-    const sv = Number(dz.startValue) || 0
-    const ev = Number(dz.endValue) || 0
-    if (sv > 0 && ev > sv) {
-      dzRange.value = { startValue: sv, endValue: ev }
-    }
-    syncHeaderZoom()
-  })
   // 点击甘特图条：保持原有业务跳转
-  chartInstance.off('click')
-  chartInstance.on('click', handleChartClick)
+  if (chartInstance) {
+    chartInstance.off('click')
+    chartInstance.on('click', handleChartClick)
+  }
+  // 顶部滑块的 dataZoom 事件：拖动滑块时同步主图时间范围
+  if (headerChartInstance) {
+    headerChartInstance.off('dataZoom')
+    headerChartInstance.on('dataZoom', () => {
+      const hOpt = headerChartInstance.getOption()
+      const dz = (hOpt?.dataZoom || [])[0] || {}
+      const sv = Number(dz.startValue) || 0
+      const ev = Number(dz.endValue) || 0
+      if (!(sv > 0 && ev > sv)) return
+      dzRange.value = { startValue: sv, endValue: ev }
+      // 同步到主图 xAxis min/max（主图没有 dataZoom，直接 set xAxis）
+      if (chartInstance) {
+        chartInstance.setOption({ xAxis: { min: sv, max: ev } }, false)
+      }
+    })
+  }
 }
 
 // ★ 已移除 chartDomRef 的 watch：现在不依赖 ref，用 getElementById 直接定位
