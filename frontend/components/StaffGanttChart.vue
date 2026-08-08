@@ -283,7 +283,7 @@ function onDblClickWrapper() {
 }
 
 // 冻结表头 + 按钮 + 画布需要用到的常量/尺寸
-const HEADER_H = 54 // ECharts 顶部月份刻度冻结画布高度：28px axisLabel + grid.top 10 + grid.bottom 16 ≈ 54
+const HEADER_H = 64 // ★ v0822 增加高度：原54px在手机端月份标签被裁切→64px留足空间
 
 // ★ v0819 HTML 船名图层和 ECharts bar 像素级对齐的两个关键常量：
 //   主图 grid.top = 10，grid.bottom = 72，grid内实际像素 = chartHeight - 10 - 72 = N×44 + 38
@@ -323,30 +323,43 @@ const buildTimeLabel = computed(() => {
 // v0807m 初始化永久可见告警（陈先生手机端能直接看到）
 const initFatalAlert = ref<string | null>(null)
 // 缩放按钮
+// ★ v0822 缩放函数加边界保护：防止多次缩放后范围崩溃（startValue>=endValue 或超出 xAxis min/max）
 function zoomInRange() {
   if (!chartInstance || !echartsModule) return
   const opt = chartInstance.getOption()
   const cur = (opt?.dataZoom || [])[0]
-  const s = Number(cur?.startValue) || 0
-  const e = Number(cur?.endValue) || 0
-  if (!(s > 0 && e > s)) return
+  let s = Number(cur?.startValue) || 0
+  let e = Number(cur?.endValue) || 0
+  if (!(s > 0 && e > s)) {
+    // 当前范围无效→用默认范围
+    const now = nowTs.value
+    s = now - 180 * DAY_MS
+    e = now + 30 * DAY_MS
+  }
   const mid = (s + e) / 2
-  const half = (e - s) / 4
-  dzRange.value = { startValue: mid - half, endValue: mid + half }
-  chartInstance.dispatchAction({ type: 'dataZoom', startValue: dzRange.value.startValue, endValue: dzRange.value.endValue, xAxisIndex: [0] })
+  const half = Math.max(14 * DAY_MS, (e - s) / 4) // 最小14天半宽，防止缩到看不见
+  const ns = mid - half
+  const ne = mid + half
+  dzRange.value = { startValue: ns, endValue: ne }
+  chartInstance.dispatchAction({ type: 'dataZoom', startValue: ns, endValue: ne, xAxisIndex: [0] })
   syncHeaderZoom()
 }
 function zoomOutRange() {
   if (!chartInstance || !echartsModule) return
   const opt = chartInstance.getOption()
   const cur = (opt?.dataZoom || [])[0]
-  const s = Number(cur?.startValue) || (timeRange.value.min)
-  const e = Number(cur?.endValue) || (timeRange.value.max)
-  if (!(e > s)) return
-  const half = (e - s) / 2
+  let s = Number(cur?.startValue) || 0
+  let e = Number(cur?.endValue) || 0
+  if (!(s > 0 && e > s)) {
+    const now = nowTs.value
+    s = now - 180 * DAY_MS
+    e = now + 30 * DAY_MS
+  }
+  const half = (e - s) // 扩大1倍（当前范围×2）
   const tr = timeRange.value
   const ns = Math.max(tr.min, s - half)
   const ne = Math.min(tr.max, e + half)
+  if (ne - ns < 14 * DAY_MS) return // 安全兜底
   dzRange.value = { startValue: ns, endValue: ne }
   chartInstance.dispatchAction({ type: 'dataZoom', startValue: ns, endValue: ne, xAxisIndex: [0] })
   syncHeaderZoom()
@@ -441,7 +454,8 @@ function getDaysOnBoard(startDate: string, endDate?: string | null): number {
 
 function getBarColor(a: AssignmentItem): string {
   if (a.status === 'leave') return '#a8abb2'
-  if (a.status === 'ended' || a.endDate) return '#b8b8b8'
+  // ★ v0822 只有 status=ended 才灰色；active 即使有 endDate 也用渐变色
+  if (a.status === 'ended') return '#b8b8b8'
   const days = getDaysOnBoard(a.startDate, a.endDate)
   if (days > 330) return '#ad0606'
   if (days > 300) return '#f56c6c'
@@ -570,19 +584,22 @@ const ganttBars = computed(() => {
     if (status === 'leave') continue
 
     const start = new Date(a.startDate).getTime()
-    // ★ v0819 陈先生需求：至今色条右端必须精确对齐"今天"蓝色竖线
-    //   根因：之前 L514 又写了一遍 const nowTs = Date.now()（局部变量），和 buildOption
-    //   里的 const now = Date.now() 毫秒不同，差几毫秒到几秒，色条右端就会在今天线左边。
-    //   修复：统一读顶层 nowTs ref（applyOption 执行时设置一次），三处 100% 相同毫秒
-    const end = a.endDate ? new Date(a.endDate).getTime() : nowTs.value
+    // ★ v0822 陈先生需求：所有在任政委（status=active）色条必须延伸到今天
+    //   之前只检查 a.endDate 是否存在→如果后端返回了 endDate 但状态仍是 active，
+    //   色条就会停在 endDate 而不是今天。现在强制：active 状态一律 end=nowTs.value
+    //   ended/leave 有 endDate 的按 endDate 原样
+    const isActive = status === 'active' || (status !== 'ended' && !a.endDate)
+    const end = isActive ? nowTs.value : (a.endDate ? new Date(a.endDate).getTime() : nowTs.value)
     if (isNaN(start) || isNaN(end) || end <= start) continue
 
     const days = Math.max(1, Math.round((end - start) / DAY_MS))
     const startStr = new Date(start).toISOString().slice(0, 10)
-    const endStr = a.endDate ? new Date(end).toISOString().slice(0, 10) : '至今'
+    // ★ v0822 label 文案：active 状态一律显示"→至今"（不管后端有没有 endDate）
+    const endStr = isActive ? '至今' : (a.endDate ? new Date(end).toISOString().slice(0, 10) : '至今')
     const name = a.user?.realName || a.ship?.politicalOfficerName || '未指派'
-    const ended = status === 'ended' || !!a.endDate
-    const labelText = `${name}（${days}天）${startStr}${a.endDate ? '~' + endStr.slice(5) : '→至今'}`
+    // ★ v0822 只有 status=ended 才降低透明度；active 不降（即使后端有 endDate）
+    const ended = status === 'ended'
+    const labelText = `${name}（${days}天）${startStr}${isActive ? '→至今' : '~' + endStr.slice(5)}`
 
     out.push({
       value: [yIndex, start, end],
@@ -951,11 +968,11 @@ function buildOption() {
     },
     dataZoom: [
       { type: 'slider', xAxisIndex: 0, startValue: curStartValue, endValue: curEndValue, height: 20, bottom: 10, borderColor: '#dcdfe6', brushSelect: false },
-      // ★ v0818 陈先生反馈"上下滑动失效"：根因是 inside 模式的 zoomOnMouseWheel+moveOnMouseMove
-      //   会拦截鼠标滚轮事件，导致 DOM scroll-box 的原生纵向滚动被吞掉。
-      //   修复：inside 只保留"双指缩放"（手机端 pinch），PC 端滚轮不再被 ECharts 拦截→纵向滚动恢复。
-      //   缩放改由右侧 +/- 按钮控制（见 template）。
-      { type: 'inside', xAxisIndex: 0, zoomOnMouseWheel: false, moveOnMouseMove: false, moveOnMouseWheel: false },
+      // ★ v0822 彻底移除 inside dataZoom：ECharts inside 组件即使所有选项=false，
+      //   仍会在 canvas DOM 上注册 touchstart/mousedown 事件监听器并 preventDefault，
+      //   导致 scroll-box 的原生触摸上下拖动被吞掉（陈先生反馈"色条区域上下拖动没反应"）。
+      //   移除后：触摸/鼠标事件不再被 ECharts 拦截→scroll-box 原生纵向滚动100%恢复。
+      //   横向缩放/平移完全由右侧 +/- 按钮和底部 slider 滑块控制。
     ],
     series: [{
       name: '政委任职',
@@ -1063,8 +1080,7 @@ function buildHeaderOption() {
       show: false,
     },
     dataZoom: [
-      // 冻结表头不需要 slider，只有 inside（不操作它）；缩放由主画布 dispatch 给它同步
-      { type: 'inside', xAxisIndex: 0, startValue: curStartValue, endValue: curEndValue, zoomOnMouseWheel: false, moveOnMouseMove: false, moveOnMouseWheel: false },
+      // ★ v0822 冻结表头也移除 inside（同主图，避免 header canvas 拦截触摸事件）
     ],
     series: [
       // 不画任何数据，只画顶部时间轴 + 蓝色今天 markLine
@@ -1160,9 +1176,21 @@ function handleChartClick(params: any) {
   const assignment = assignmentMap.value.get(id)
   if (!assignment) return
   barClickFlag = true
-  // ★ v0818 修复 popover 定位失败：之前传空对象 {}，clientX/clientY 全是 undefined
-  //   ECharts click params.event.event 是原生 MouseEvent，包含真实坐标
-  const realEvent = (params?.event?.event || params?.event || {}) as MouseEvent
+  // ★ v0822 健壮的 popover 定位：ECharts 5.x click 事件 params.event.event 是原生 MouseEvent
+  //   但不同版本/平台可能没有 .event.event，兜底用 chart DOM 中心坐标
+  const nativeEvent = params?.event?.event
+  let realEvent: MouseEvent
+  if (nativeEvent && typeof nativeEvent.clientX === 'number') {
+    realEvent = nativeEvent
+  } else {
+    // 兜底：用 canvas DOM 的 bounding rect 中心
+    const el = document.getElementById(canvasUniqueId)
+    const rect = el?.getBoundingClientRect()
+    realEvent = {
+      clientX: rect ? rect.left + rect.width / 2 : window.innerWidth / 2,
+      clientY: rect ? rect.top + 60 : window.innerHeight / 2,
+    } as MouseEvent
+  }
   emit('bar-click', { assignment: assignment as unknown as StaffAssignment, event: realEvent })
 }
 
