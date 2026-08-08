@@ -161,61 +161,7 @@
       <span style="color:#78350f;">如果您看到的版本号不一致，请立即点击 <b style="color:#dc2626;">【🔧 强制刷新服务端】</b> → 等待 15 秒 → 下拉刷新页面一次。</span>
     </div>
 
-    <!-- ====== 政委卡片（甘特图点击色条后弹出）====== -->
-    <div
-      v-if="popoverVisible"
-      class="gantt-popover-overlay"
-      @click="closePopover"
-    >
-      <div
-        class="gantt-popover"
-        :style="{ top: popoverY + 'px', left: popoverX + 'px' }"
-        @click.stop
-      >
-        <div class="popover-card-header">
-          <el-avatar :size="40" icon="UserFilled" class="popover-avatar" />
-          <div class="popover-card-title">
-            <span class="popover-name">{{ popoverAssignment?.user?.realName || '未指派' }}</span>
-            <span class="popover-ship">{{ popoverAssignment?.ship?.cnShipName }}</span>
-          </div>
-          <el-tag
-            :type="popoverAssignment?.status === 'active' ? 'success' : popoverAssignment?.status === 'leave' ? 'warning' : 'info'"
-            size="small"
-          >{{ statusLabel(popoverAssignment?.status) }}</el-tag>
-        </div>
-        <div class="popover-card-info">
-          <div class="info-row"><span class="info-label">上船日期</span><span class="info-value">{{ formatDate(popoverAssignment?.startDate) }}</span></div>
-          <div v-if="popoverAssignment?.endDate" class="info-row"><span class="info-label">下船日期</span><span class="info-value">{{ formatDate(popoverAssignment?.endDate) }}</span></div>
-          <div v-else class="info-row"><span class="info-label">在船天数</span><span class="info-value">{{ getDaysOnBoard(popoverAssignment) }} 天</span></div>
-        </div>
-        <div class="popover-card-actions">
-          <el-button
-            v-if="popoverAssignment?.status === 'active' && !popoverAssignment?.endDate"
-            type="primary"
-            size="small"
-            class="action-primary"
-            @click="handleReplaceFromPopover"
-          >下船交接</el-button>
-          <el-button size="small" @click="handleEdit(popoverAssignment!)">编辑</el-button>
-          <el-button
-            v-if="popoverAssignment?.status === 'active'"
-            size="small"
-            type="warning"
-            @click="handleLeave(popoverAssignment!)"
-          >休假</el-button>
-          <el-button
-            v-if="popoverAssignment?.status === 'leave'"
-            size="small"
-            type="success"
-            @click="handleEndLeave(popoverAssignment!)"
-          >销假</el-button>
-          <el-button size="small" type="info" @click="showProfileCard">个人卡片</el-button>
-          <el-button size="small" type="danger" @click="handleDelete(popoverAssignment!)">删除</el-button>
-        </div>
-      </div>
-    </div>
-
-    <!-- ====== 政委个人卡片（v0845 统一大卡片：单击色条弹出，内含政委更换操作）====== -->
+    <!-- ====== 政委个人卡片（v0847 统一大卡片：点击色条弹出，内含政委更换操作）====== -->
     <el-dialog v-model="profileCardVisible" title="政委个人卡片" width="560px">
       <div class="profile-card" v-if="popoverAssignment">
         <!-- 头部：头像 + 姓名 + 状态 -->
@@ -746,10 +692,7 @@ const replaceForm = ref({
   sourceCompany: '',
 });
 
-// ====== Popover 编辑菜单 ======
-const popoverVisible = ref(false);
-const popoverX = ref(0);
-const popoverY = ref(0);
+// ====== 政委卡片（v0847 统一大卡片，不再用小 popover）======
 const popoverAssignment = ref<StaffAssignment | null>(null);
 
 // ====== 个人卡片 ======
@@ -1022,15 +965,6 @@ const onEmptyClick = (payload: { shipId: number; date: string }) => {
   showDialog.value = true;
 };
 
-const closePopover = () => {
-  popoverVisible.value = false;
-};
-
-const showProfileCard = () => {
-  popoverVisible.value = false;
-  profileCardVisible.value = true;
-};
-
 // ====== 派任操作（复用原有逻辑）======
 const showCreateDialog = () => {
   editingId.value = null;
@@ -1038,7 +972,6 @@ const showCreateDialog = () => {
 };
 
 const handleEdit = (row: StaffAssignment) => {
-  popoverVisible.value = false;
   editingId.value = row.id;
   formData.value = {
     userId: row.userId,
@@ -1053,7 +986,6 @@ const handleEdit = (row: StaffAssignment) => {
 };
 
 const handleDelete = async (row: StaffAssignment) => {
-  popoverVisible.value = false;
   try {
     await ElMessageBox.confirm('确定删除该派任记录吗？', '提示', { type: 'warning' });
     await deleteAssignment(row.id);
@@ -1063,19 +995,16 @@ const handleDelete = async (row: StaffAssignment) => {
 };
 
 const handleCheckout = (row: StaffAssignment) => {
-  popoverVisible.value = false;
   checkoutForm.value = { id: row.id, endDate: '', reason: '' };
   showCheckoutDialog.value = true;
 };
 
 const handleLeave = (row: StaffAssignment) => {
-  popoverVisible.value = false;
   leaveForm.value = { id: row.id, startDate: '', endDate: '', reason: '' };
   showLeaveDialog.value = true;
 };
 
 const handleEndLeave = async (row: StaffAssignment) => {
-  popoverVisible.value = false;
   try {
     await ElMessageBox.confirm('确认销假？', '提示', { type: 'info' });
     await endLeave(row.id);
@@ -1185,11 +1114,10 @@ const showQuickReplaceDialog = () => {
   showReplaceDialog.value = true;
 };
 
-// 从甘特图 popover 触发换班：自动带入当前船舶
+// 从甘特图大卡片触发换班：自动带入当前船舶
 const handleReplaceFromPopover = () => {
   const a = popoverAssignment.value;
   if (!a?.shipId) return;
-  popoverVisible.value = false;
   replaceForm.value.shipId = a.shipId;
   onReplaceShipChange(a.shipId);
   showReplaceDialog.value = true;

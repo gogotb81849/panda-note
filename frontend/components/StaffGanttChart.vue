@@ -908,6 +908,23 @@ async function doInitChart() {
       window.addEventListener('resize', handleResize)
       pushInitStep('doInitChart[resize 监听 OK]')
     } catch (_) { /* ignore */ }
+    // ★ v0847 关键修复：在主图 init 成功后立即绑定 nativeCanvasClickHandler！
+    //   之前 nativeCanvasClickHandler 只在 bindChartEvents() 里绑定，而
+    //   bindChartEvents() 要求 headerChart 也成功才调用。如果 headerChart
+    //   初始化失败（真实场景常见），nativeCanvasClickHandler 永远不绑定，
+    //   → 点击色条无反应、大卡片弹不出来！现在主图成功就立刻绑，不依赖表头。
+    try {
+      const canvasEl = document.getElementById(canvasUniqueId)
+      if (canvasEl) {
+        canvasEl.removeEventListener('click', nativeCanvasClickHandler as any)
+        canvasEl.addEventListener('click', nativeCanvasClickHandler as any)
+        pushInitStep('doInitChart[nativeCanvasClick 绑定 OK]')
+      } else {
+        pushInitStep('doInitChart[nativeCanvasClick 跳过：canvasEl=null]')
+      }
+    } catch (e3: any) {
+      pushInitStep(`doInitChart[nativeCanvasClick 绑定 FAIL：${String(e3?.message||e3).slice(0,50)}]`)
+    }
     inited = true
     debugInfo.value = {
       ...debugInfo.value,
@@ -1504,6 +1521,9 @@ function handleChartClick(params: any) {
   const assignment = assignmentMap.value.get(id)
   if (!assignment) return
   barClickFlag = true
+  // ★ v0847 防御性重置：handleChartClick 设了 barClickFlag 必须重置，否则
+  //   后续 nativeCanvasClickHandler 会被 if(barClickFlag) return 永久拦截
+  setTimeout(() => { barClickFlag = false }, 250)
   // ★ v0822 健壮的 popover 定位：ECharts 5.x click 事件 params.event.event 是原生 MouseEvent
   //   但不同版本/平台可能没有 .event.event，兜底用 chart DOM 中心坐标
   const nativeEvent = params?.event?.event
@@ -1527,32 +1547,41 @@ function handleChartClick(params: any) {
 //   → 改用 canvas 原生 click + convertFromPixel 反算坐标，找命中的色条，手动 emit。
 //   100% 可靠，不依赖 ECharts custom series 事件机制。
 function nativeCanvasClickHandler(e: MouseEvent) {
-  if (!chartInstance) return
+  const log: any = { step: 'enter', hasChart: !!chartInstance, barClickFlag }
+  if (!chartInstance) { (window as any).__nativeClickLog = log; return }
   // 防重复：ECharts click 若也触发，200ms 内忽略
-  if (barClickFlag) { return }
+  if (barClickFlag) { (window as any).__nativeClickLog = { step: 'dup-skip', barClickFlag }; return }
   const target = e.currentTarget as HTMLElement
   const rect = target.getBoundingClientRect()
   const px = e.clientX - rect.left
   const py = e.clientY - rect.top
+  log.px = px; log.py = py
   let ts = NaN, yVal = NaN
   try {
     ts = chartInstance.convertFromPixel({ xAxisIndex: 0 }, px) as number
     yVal = chartInstance.convertFromPixel({ yAxisIndex: 0 }, py) as number
-  } catch { return }
-  if (isNaN(ts) || isNaN(yVal)) return
+    log.ts = ts; log.yVal = yVal
+  } catch (err:any) { log.err = String(err); (window as any).__nativeClickLog = log; return }
+  if (isNaN(ts) || isNaN(yVal)) { log.step = 'nan'; (window as any).__nativeClickLog = log; return }
   const yIdx = Math.round(yVal)
+  log.yIdx = yIdx
   // 在 ganttBars 里找：yIndex 匹配 且 ts 落在 [start, end] 区间
   const bar = ganttBars.value.find(b =>
     Number(b.value[0]) === yIdx &&
     Number(b.value[1]) <= ts &&
     Number(b.value[2]) >= ts
   )
-  if (!bar) return
+  log.barFound = !!bar
+  log.barsCount = ganttBars.value.length
+  if (!bar) { log.step = 'no-bar'; (window as any).__nativeClickLog = log; return }
   const id = bar._assignmentId
   const assignment = assignmentMap.value.get(id)
-  if (!assignment) return
+  log.aid = id; log.hasAsg = !!assignment
+  if (!assignment) { log.step = 'no-asg'; (window as any).__nativeClickLog = log; return }
   barClickFlag = true
   setTimeout(() => { barClickFlag = false }, 250)
+  log.step = 'emit'
+  ;(window as any).__nativeClickLog = log
   emit('bar-click', { assignment: assignment as unknown as StaffAssignment, event: e })
 }
 
