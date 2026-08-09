@@ -4,19 +4,7 @@
       <p>{{ loading ? '加载中...' : '暂无船舶数据' }}</p>
     </div>
     <div v-else>
-      <!-- ★ v0807m 醒目代码版本条：红黄渐变+黑粗字体，陈先生一打开页面立刻判断是不是最新代码，
-           不再需要反复问"我看不到版本号、页面没更新"——DOM上移到最前、scroll-box 外部，绝对不会被滚动遮住 -->
-      <div style="margin:6px 0 8px;padding:8px 14px;border-radius:8px;
-                 background:linear-gradient(135deg,#fff7ed,#fef2f2);
-                 border:1px solid #fde68a;font-weight:700;font-size:13px;color:#7c2d12;
-                 display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-        <span style="font-size:16px;">🚢</span>
-        <span>熊猫笔记 · 政委任职甘特图 <span style="color:#c2410c;">代码版本 {{ APP_VERSION_SHORT }}</span> · TAG <span style="color:#15803d;">{{ APP_VERSION }}</span></span>
-        <span style="margin-left:auto;color:#9a3412;">构建时间：{{ buildTimeLabel }}</span>
-        <span style="color:#6b7280;font-weight:500;font-size:12px;">（如果您看到的版本号低于 {{ APP_VERSION_SHORT }} → 请先点顶部工具栏【🔧 强制刷新服务端】按钮，15 秒后下拉刷新页面）</span>
-      </div>
-
-      <!-- v0807m echarts 初始化失败告警（非 debug，永久可见，确保陈先生能看到 init 失败原因） -->
+      <!-- v0850 echarts 初始化失败告警（非 debug，永久可见，确保陈先生能看到 init 失败原因） -->
       <div v-if="initFatalAlert" style="margin:0 0 8px;padding:10px 14px;border-radius:8px;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;font-weight:600;font-size:13px;">
         ⚠️ 甘特图初始化告警：{{ initFatalAlert }}（请点顶部工具栏【🔧 强制刷新服务端】，或截图发 IT 协助排查）
       </div>
@@ -96,8 +84,9 @@
                 lineHeight: actualRowH + 'px',
               }"
             >
+              <!-- ★ v0850 陈先生要求：空缺标识放船名左边「（空缺）华川」，不是「华川（空缺）」 -->
+              <span v-if="vacantIdSet.has(Number(ship.id))" class="vacant-badge" style="margin-right:4px;">空缺</span>
               <span class="ship-cn-name" :title="ship.cnShipName">{{ ship.cnShipName }}</span>
-              <span v-if="vacantIdSet.has(Number(ship.id))" class="vacant-badge">空缺</span>
             </div>
           </div>
           <!-- ④ 分割竖线（最上层 z9） -->
@@ -307,17 +296,16 @@ function onDblClickWrapper() {
 }
 
 // 冻结表头 + 按钮 + 画布需要用到的常量/尺寸
-const HEADER_H = 96 // ★ v0824 再增高度：顶部含月份label(56px)+dataZoom滑块(30px)+padding(10px) = 96px；滑块移到顶部方便左右滑动
+const HEADER_H = 64 // ★ v0850 缩高度：去掉可见 dataZoom slider 后只剩月份label(40px)+padding(24px) = 64px，顶部更紧凑
 
 // ★ v0819 HTML 船名图层和 ECharts bar 像素级对齐的两个关键常量：
-//   主图 grid.top = 10，grid.bottom = 72，grid内实际像素 = chartHeight - 10 - 72 = N×44 + 38
-//   每个 category 实际行高 = ((N×44 + 38) - 8*(N-1)) / N ？ 不对 —— ECharts splitArea 会均匀
-//   地把 （grid内像素 - splitAreaSpacing） / N。我们直接算出实际行高，不再写死 44。
+// ★ v0850 更新：主图 grid.bottom 从 72 缩到 24（去掉底部xAxis），冻结表头 grid.bottom 从 16 缩到 28（对应 buildHeaderOption 实际值）
+//   grid内实际像素 = chartHeight - GRID_TOP - GRID_BOTTOM_MAIN
 const GRID_TOP = 10
-const GRID_BOTTOM_MAIN = 72
+const GRID_BOTTOM_MAIN = 24
 const GRID_TOP_HEADER = 10
-const GRID_BOTTOM_HEADER = 16
-// 精确的 HTML ROW_H = (chartHeight - 10 - 72) / N（= 每个 category 在 grid 内真实像素）
+const GRID_BOTTOM_HEADER = 28
+// 精确的 HTML ROW_H = (chartHeight - 10 - 24) / N（= 每个 category 在 grid 内真实像素）
 const actualRowH = computed(() => {
   const n = Math.max(1, safeShips.value.length)
   const innerH = chartHeight.value - GRID_TOP - GRID_BOTTOM_MAIN
@@ -481,23 +469,34 @@ function getDaysOnBoard(startDate: string, endDate?: string | null): number {
   return Math.floor((end - start) / DAY_MS)
 }
 
-// ★ v0838 色条颜色：与 ganttBars 统一规则，只有 ended集合 才算历史；其他一律在任→到今天算天数
+// ★ v0850 色条颜色：严格按陈先生的直观规则
+//   1. 已下船（ended集合）→ 深灰色（绝对不能和背景 #f5f5f5 融合，要一眼看出是历史派任）
+//      - 颜色：#6e7681（Element Plus的neutral-dark中性深灰，不是#b8b8b8那种浅灰）
+//      - 透明度：0.85（稍微有点透，但仍保持清晰，不会被背景吃掉）
+//   2. 在任（6个月内=180天内）→ 绿色 #67c23a
+//      6-8月 → 浅橙 #e6a23c
+//      8-10月 → 深橙 #f89a3c
+//      10-11月 → 浅红 #f56c6c
+//      11月+  → 深红 #ad0606（违规）
+//   3. 休假 status=leave → 灰色 #a8abb2（与历史派任深灰区分）
+//   判定顺序：先判 ended / leave（互斥），再算在任的天数渐变。绝不允许 ended 被天数覆盖。
 function getBarColor(a: AssignmentItem): string {
   const status = (a.status || '').toLowerCase()
-  if (status === 'leave') return '#a8abb2'
   const ENDED_SET = new Set(['ended', 'offboard', '下船', '离职', '离船', '已下船', '已离船'])
   const hasEnded = ENDED_SET.has(status)
+  // ★ 优先级1：已下船 → 深灰色（不透明或微透，绝对不被背景 #f5f5f5 淹没）
+  if (hasEnded) return '#6e7681'
+  // ★ 优先级2：休假 → 浅灰（与历史派任深灰区分，避免混淆）
+  if (status === 'leave') return '#a8abb2'
+  // ★ 优先级3：在任 → 按到今天的天数算渐变（陈先生原话：6个月内正常绿色）
   const startTs = new Date(a.startDate).getTime()
-  const endTs = hasEnded && a.endDate
-    ? new Date(a.endDate).getTime()
-    : Date.now() // 在任→今天
+  const endTs = Date.now() // 在任→今天
   const days = Math.max(1, Math.floor((endTs - startTs) / DAY_MS))
-  if (hasEnded) return '#b8b8b8' // 历史派任灰色
-  if (days > 330) return '#ad0606'
-  if (days > 300) return '#f56c6c'
-  if (days > 240) return '#f89a3c'
-  if (days > 180) return '#e6a23c'
-  return '#67c23a'
+  if (days > 330) return '#ad0606'  // >11月 深红违规
+  if (days > 300) return '#f56c6c'  // 10-11月 浅红
+  if (days > 240) return '#f89a3c'  // 8-10月 深橙（预警）
+  if (days > 180) return '#e6a23c'  // 6-8月 浅橙（关注）
+  return '#67c23a'                   // ≤6月 绿色（正常）
 }
 
 function formatDate(date?: string | null): string {
@@ -677,13 +676,17 @@ const ganttBars = computed(() => {
       continue
     }
 
+    // ★ v0850 历史派任的深灰 #6e7681 本身就暗，opacity = 0.9（而不是 0.65）
+    //   这样在交替行的白底 / 浅灰底上都清晰可见，不会被背景 #f5f5f5 融合得看不清。
+    //   在任派任 opacity = 1（不透明），保证颜色 100% 饱满显示。
+    const barOpacity = hasEnded ? 0.9 : 1
     out.push({
       value: [yIndex, startFinal, endFinal],  // ★ v0838：绝对不搞任何 min/max 调换，100% 按 [y, start, end]
       _assignmentId: a.id,
       _labelText: labelText,
       itemStyle: {
         color: getBarColor(a),
-        opacity: hasEnded ? 0.65 : 1,
+        opacity: barOpacity,
         borderRadius: [3, 3, 3, 3],
         borderColor: 'transparent',
         borderWidth: 0,
@@ -1197,26 +1200,21 @@ function buildOption() {
     },
     grid: {
       // ★ v0807i containLabel=false（经验 935613：上下两图必须固定 grid.left/right，避免自适应差异造成错位）
-      //   左侧 Y 轴 label 现在完全在 grid.left（=gridLeftRec）像素内绘制，gridLeftRec 已经
-      //   预留了『最长船名 ×16 + 徽标 64 + padding 32』，足够所有 label+徽标。
+      // ★ v0850 陈先生要求月份只放顶部、底部不要辅助刻度 → grid.bottom 从 72 缩到 24（只留少许 padding）
+      //   色条纵向可视区域更大（之前 72 像素给底部辅助刻度浪费掉了）
       left: gridLeftRec,
       right: 40,
-      top: 10,   // 主画布顶部不再画 xAxis（月份在冻结表头），只留 10px 小 padding
-      bottom: 72, // 底部 xAxis（辅助刻度）+ dataZoom slider（20px）+ 间距
+      top: 10,
+      bottom: 24,
       containLabel: false,
     },
-    // ★ 陈先生需求 #3：月份必须放在顶部 —— 但顶部月份刻度现在已经由「独立冻结表头 canvas」承担
-    //   （经验 446971 冻结表头结构）。主画布 xAxis 只画底部的"辅助刻度"，方便上下对照。
-    //   顶部 xAxis 画在 headerChartInstance 里（下方 buildHeaderOption 单独构造）
+    // ★ v0850 陈先生需求：月份时间只放在顶部（冻结表头 canvas 里），主图不画底部刻度
+    //   之前底部 xAxis（position:bottom 辅助刻度）已不需要，整体关闭。
     xAxis: {
       type: 'time',
       min: xAxisMin,
       max: xAxisMax,
-      position: 'bottom',
-      axisLine: { lineStyle: { color: '#dcdfe6' } },
-      axisLabel: { color: '#909399', hideOverlap: true, fontSize: 10 },
-      axisTick: { show: false },
-      splitLine: { show: true, lineStyle: { color: '#f0f0f0' } },
+      show: false,
     },
     yAxis: {
       type: 'category',
@@ -1358,8 +1356,9 @@ function buildHeaderOption() {
       left: gridLeftRec,  // 必须和主 buildOption 完全一致
       right: 40,          // 同上
       top: 10,
-      // ★ v0824 滑块移到顶部（bottom=16→50）：grid.bottom = 月份label底 + dataZoom滑块(30px)
-      bottom: 50,
+      // ★ v0850 陈先生要求：去掉顶部那个可见的放大缩小条（slider），换成纯手势 inside 模式
+      //   grid.bottom 从 50 缩到 28，只够月份 label 的高度（11px）+ 小 padding，顶部更清爽
+      bottom: 28,
       containLabel: false,
     },
     xAxis: {
@@ -1388,20 +1387,20 @@ function buildHeaderOption() {
       show: false,
     },
     dataZoom: [
-      // ★ v0824 陈先生要求：滑块移到顶部冻结表头（所有船的上方），放月份下面、日期上面。
-      //   高度30px，位置 grid.bottom=50 → 视觉在月份label下面紧贴，可左右拖动。
+      // ★ v0850 陈先生要求：去掉顶部可见的放大缩小条（slider），用 inside 手势模式
+      //   用户直接在顶部月份 canvas 上：
+      //     · 单指按住左右拖动 → 平移时间范围（等价于拖滑块左右）
+      //     · 2 指捏合 / 张合 → 放大 / 缩小时间粒度
+      //   视觉上只有月份刻度和今天线，非常干净
       {
-        type: 'slider',
+        type: 'inside',
         xAxisIndex: 0,
         startValue: curStartValue,
         endValue: curEndValue,
-        height: 26,
-        bottom: 10,
-        borderColor: '#dcdfe6',
-        brushSelect: false,
-        handleIcon: 'M10.7,11.9H9.3c-0.2,0-0.4-0.1-0.5-0.2L4.7,7.5C4.6,7.3,4.6,7.1,4.7,7c0.1-0.1,0.2-0.2,0.4-0.2l4.1-4.1C8.9,2.6,9.1,2.5,9.3,2.5 h1.4c0.2,0,0.4,0.1,0.5,0.2l4.1,4.1c0.1,0.1,0.2,0.2,0.2,0.4s-0.1,0.3-0.2,0.4l-4.1,4.1C11.1,11.8,10.9,11.9,10.7,11.9z',
-        handleStyle: { color: '#409eff' },
-        textStyle: { color: '#606266', fontSize: 10 },
+        zoomOnMouseWheel: true,   // PC 端鼠标滚轮也能缩放（方便陈先生）
+        moveOnMouseMove: true,    // PC 端鼠标按住拖动平移
+        moveOnMouseWheel: false,  // 滚轮只缩放、不平移
+        preventDefaultMouseMove: true,
       },
     ],
     series: [
