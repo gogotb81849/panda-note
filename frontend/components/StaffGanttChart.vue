@@ -1082,6 +1082,8 @@ function buildOption() {
       shipHtml += `<b style="font-size:13px;">🚢 ${shipName} (Y${yIdx})</b> <span style="color:#888;font-size:11px;">派任${sorted.length}条</span>`
       for (const { b: bar, a: asg } of sorted) {
         const off = bar._labelText?.split('（')?.[0] || '?'
+        // ★ v0855 修复：st 变量必须定义，否则会 ReferenceError 导致整个图表渲染失败
+        const st = (asg?.status || '').toLowerCase()
         // ★ v0852 用统一的 isAssignmentEnded 判断（endDate已过也算已下船）
         const isEnded = asg ? isAssignmentEnded(asg) : false
         const endTs = Number(bar.value[2])
