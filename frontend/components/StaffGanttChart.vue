@@ -461,52 +461,60 @@ const emit = defineEmits<{
 //   - timeRange computed max 也取 nowTs
 const nowTs = ref<number>(Date.now())
 
+// ★ v0860 关键修复：响应式「今天0点」时间戳
+//   之前的根因：isAssignmentEnded/getBarColor 里用了 Date.now()（非响应式），
+//   ganttBars 是 computed，Vue 只收集响应式依赖 → Date.now() 变化不触发重算 → 跨天后色条颜色不更新！
+//   修复：用 today0Ts ref 替代 Date.now()，在 applyOption 时更新 → computed 依赖响应式 → 跨天自动重算
+const today0Ts = ref<number>(new Date().setHours(0, 0, 0, 0))
+
 const DAY_MS = 1000 * 60 * 60 * 24
 
+// ★ v0860 统一日期解析：解决 iOS Safari 下 new Date('YYYY-MM-DD') 返回 NaN 的问题
+//   用 split + new Date(y, m-1, d) 构造本地时区日期，避免 UTC 时区漂移
+function parseLocalDate(str?: string | null): number {
+  if (!str) return NaN
+  // 兼容 '2026-08-08' / '2026-08-08T00:00:00.000Z' / '2026-08-08 12:00:00'
+  const datePart = String(str).split('T')[0].split(' ')[0]
+  const parts = datePart.split('-').map(Number)
+  if (parts.length !== 3 || parts.some(isNaN)) return NaN
+  const [y, m, d] = parts
+  return new Date(y, m - 1, d, 0, 0, 0, 0).getTime()
+}
+
 function getDaysOnBoard(startDate: string, endDate?: string | null): number {
-  const start = new Date(startDate).getTime()
-  const end = endDate ? new Date(endDate).getTime() : Date.now()
+  const start = parseLocalDate(startDate)
+  const end = endDate ? parseLocalDate(endDate) : today0Ts.value
   return Math.floor((end - start) / DAY_MS)
 }
 
-// ★ v0850 色条颜色：严格按陈先生的直观规则
-//   1. 已下船（ended集合）→ 深灰色（绝对不能和背景 #f5f5f5 融合，要一眼看出是历史派任）
-//      - 颜色：#6e7681（Element Plus的neutral-dark中性深灰，不是#b8b8b8那种浅灰）
-//      - 透明度：0.85（稍微有点透，但仍保持清晰，不会被背景吃掉）
-//   2. 在任（6个月内=180天内）→ 绿色 #67c23a
-//      6-8月 → 浅橙 #e6a23c
-//      8-10月 → 深橙 #f89a3c
-//      10-11月 → 浅红 #f56c6c
-//      11月+  → 深红 #ad0606（违规）
-//   3. 休假 status=leave → 灰色 #a8abb2（与历史派任深灰区分）
-//   判定顺序：先判 ended / leave（互斥），再算在任的天数渐变。绝不允许 ended 被天数覆盖。
-// ★ v0852 判断派任是否已下船（已下船 = 历史派任 → 灰色）
-//   不再只看 status 字段！两个条件满足任一即判定为已下船：
-//   1. status ∈ ended集合（后端 checkOutShip 会设 'ended'）
-//   2. endDate 不为空且已经过去（endDate < 今天 0点）
-//   这样即使通过"编辑派任"只设了 endDate 没改 status，也能正确显示灰色
+// ★ v0860 色条颜色：严格按陈先生的直观规则
+//   1. 已下船（ended集合 或 endDate已过）→ 深灰色 #6e7681 + opacity 0.9
+//   2. 休假 status=leave → 灰色 #a8abb2
+//   3. 在任 → 按天数渐变：≤6月绿→6-8月浅橙→8-10月深橙→10-11月浅红→11月+深红
+//   判定顺序：先 ended → 再 leave → 最后天数渐变。ended 绝不被天数覆盖。
+// ★ v0860 关键修复：isAssignmentEnded 和 getBarColor 全部用 today0Ts.value（响应式）
+//   不再用 Date.now()（非响应式，导致 computed 缓存不更新）
 function isAssignmentEnded(a: AssignmentItem): boolean {
   const status = (a.status || '').toLowerCase()
   const ENDED_SET = new Set(['ended', 'offboard', '下船', '离职', '离船', '已下船', '已离船'])
   if (ENDED_SET.has(status)) return true
-  // ★ 关键补充：endDate 不为空且已过去 → 也算已下船
+  // ★ endDate 不为空且已过（用响应式 today0Ts，不用 Date.now()）
   if (a.endDate) {
-    const endTs = new Date(a.endDate).getTime()
-    if (!isNaN(endTs) && endTs < Date.now()) return true
+    const endTs = parseLocalDate(a.endDate)
+    if (!isNaN(endTs) && endTs < today0Ts.value) return true
   }
   return false
 }
 
 function getBarColor(a: AssignmentItem): string {
-  // ★ v0852 优先级1：已下船 → 深灰色（status=ended 或 endDate已过）
+  // ★ 优先级1：已下船 → 深灰色
   if (isAssignmentEnded(a)) return '#6e7681'
-  // ★ 优先级2：休假 → 浅灰（与历史派任深灰区分，避免混淆）
+  // ★ 优先级2：休假 → 浅灰
   const status = (a.status || '').toLowerCase()
   if (status === 'leave') return '#a8abb2'
-  // ★ 优先级3：在任 → 按到今天的天数算渐变（陈先生原话：6个月内正常绿色）
-  const startTs = new Date(a.startDate).getTime()
-  const endTs = Date.now() // 在任→今天
-  const days = Math.max(1, Math.floor((endTs - startTs) / DAY_MS))
+  // ★ 优先级3：在任 → 按到今天的天数算渐变（用响应式 today0Ts，不用 Date.now()）
+  const startTs = parseLocalDate(a.startDate)
+  const days = Math.max(1, Math.floor((today0Ts.value - startTs) / DAY_MS))
   if (days > 330) return '#ad0606'  // >11月 深红违规
   if (days > 300) return '#f56c6c'  // 10-11月 浅红
   if (days > 240) return '#f89a3c'  // 8-10月 深橙（预警）
@@ -596,9 +604,9 @@ const timeRange = computed(() => {
   let maxT = -Infinity
   const now = nowTs.value // ★ v0819 用统一 nowTs ref（避免和 buildOption/ganttBars 内 Date.now() 时间差）
   for (const a of safeAssignments.value) {
-    const s = new Date(a.startDate).getTime()
+    const s = parseLocalDate(a.startDate)
     if (!isNaN(s)) { minT = Math.min(minT, s); maxT = Math.max(maxT, s) }
-    const eTs = a.endDate ? new Date(a.endDate).getTime() : now
+    const eTs = a.endDate ? parseLocalDate(a.endDate) : now
     if (!isNaN(eTs)) maxT = Math.max(maxT, eTs)
   }
   if (minT === Infinity || maxT === -Infinity) {
@@ -639,8 +647,8 @@ const ganttBars = computed(() => {
     const hasEnded = isAssignmentEnded(a)
     const isActive = !hasEnded
 
-    // 规则1：左端 = 原始 a.startDate，不要任何处理
-    const __start = new Date(a.startDate).getTime()
+    // 规则1：左端 = 原始 a.startDate（用 parseLocalDate 统一解析，兼容 iOS Safari）
+    const __start = parseLocalDate(a.startDate)
 
     // 规则2：右端 = status 决定
     // ★ v0840 关键修复：ECharts time axis 画 bar 时，末端像素会被向下取整到网格刻度
@@ -653,9 +661,9 @@ const ganttBars = computed(() => {
       // 非 ended → 一定在任 → 右端=今天下午6点（绝对覆盖 markLine）
       __end = nowTs.value + BAR_END_BUFFER_MS
     } else {
-      // ended → 按原始 endDate
+      // ended → 按原始 endDate（用 parseLocalDate 统一解析）
       if (a.endDate) {
-        __end = new Date(a.endDate).getTime()
+        __end = parseLocalDate(a.endDate)
       } else {
         __end = __start + DAY_MS // 没有 endDate 的 ended 派任：至少显示1天
       }
@@ -975,6 +983,9 @@ async function doInitChart() {
 function buildOption() {
   // ★ v0819 设置统一 nowTs（先于所有依赖 computed），保证 end/markLine/xAxis 三处毫秒完全相同
   nowTs.value = Date.now()
+  // ★ v0860 同步更新 today0Ts（响应式今天0点）→ isAssignmentEnded/getBarColor 依赖它
+  //   这样每次 applyOption 都会刷新「今天0点」→ ganttBars computed 重新计算 → 色条颜色跨天自动更新
+  today0Ts.value = new Date().setHours(0, 0, 0, 0)
   const tr = timeRange.value
   const now = nowTs.value
   const defaultStart = now - 540 * DAY_MS
@@ -1600,6 +1611,7 @@ function nativeCanvasClickHandler(e: MouseEvent) {
 }
 
 let retryTimer: any = null
+let dayCheckTimer: any = null
 
 onMounted(() => {
   // ★ 只保留一条稳定的重试路径：setInterval 每 300ms 串行尝试
@@ -1610,6 +1622,32 @@ onMounted(() => {
   // 主画布 init 成功之后，表头也同步初始化（可能延迟到下一轮 setInterval，没关系）
   initHeaderChart()
   window.addEventListener('resize', syncAll)
+
+  // ★ v0860 跨天自动刷新：每 60 秒检查一次今天0点是否变了
+  //   如果跨了天（比如用户半夜 0 点后还在页面上），today0Ts 更新 → ganttBars 重算 → 色条颜色自动变
+  let lastDay = new Date().getDate()
+  dayCheckTimer = setInterval(() => {
+    const curDay = new Date().getDate()
+    if (curDay !== lastDay) {
+      lastDay = curDay
+      today0Ts.value = new Date().setHours(0, 0, 0, 0)
+      nextTick(() => applyOption())
+    }
+  }, 60000)
+
+  // ★ v0860 页面可见性检测：用户切回页面时立刻刷新 today0Ts（比等 60 秒快）
+  //   场景：陈先生晚上看了页面（色条正确），第二天早上切回页面 → 立刻刷新
+  const onVisChange = () => {
+    if (document.visibilityState === 'visible') {
+      const newTs = new Date().setHours(0, 0, 0, 0)
+      if (newTs !== today0Ts.value) {
+        today0Ts.value = newTs
+        nextTick(() => applyOption())
+      }
+    }
+  }
+  document.addEventListener('visibilitychange', onVisChange)
+  ;(window as any).__ganttVisChange = onVisChange
 
   // 持续重试兜底：每 300ms 重试一次，共 60 次 = 18 秒（比之前多给 6 秒时间余地）
   let retryCount = 0
@@ -1652,6 +1690,9 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   if (retryTimer) { clearInterval(retryTimer); retryTimer = null }
+  if (dayCheckTimer) { clearInterval(dayCheckTimer); dayCheckTimer = null }
+  const visHandler = (window as any).__ganttVisChange
+  if (visHandler) { document.removeEventListener('visibilitychange', visHandler); (window as any).__ganttVisChange = null }
   window.removeEventListener('resize', syncAll)
   chartInstance?.dispose()
   chartInstance = null

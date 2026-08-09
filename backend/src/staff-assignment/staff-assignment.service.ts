@@ -174,6 +174,21 @@ export class StaffAssignmentService {
       data.assignmentNo = updateDto.assignmentNo;
     }
 
+    // ★ v0860 关键修复：编辑派任时设了 endDate 且是过去日期 → 自动 status='ended'
+    //   之前根因：通过"编辑派任"只设了 endDate 没改 status，status 仍='active'
+    //   → 前端 isAssignmentEnded 只能靠 endDate < Date.now() 判断（受 computed 缓存影响）
+    //   → 现在后端主动同步：endDate 已过 → status='ended'，前端条件①直接命中 → 灰色
+    if (data.endDate !== undefined && data.endDate !== null) {
+      const now = new Date();
+      const endTs = new Date(data.endDate).getTime();
+      if (!isNaN(endTs) && endTs < now.getTime()) {
+        // endDate 已过 → 强制 status='ended'（除非用户显式设了其他非 active 状态）
+        if (data.status === undefined || data.status === 'active') {
+          data.status = 'ended';
+        }
+      }
+    }
+
     // 判断更新后，这条派任是否还"在船活跃"
     const willBeActive = (
       (data.status === undefined ? existing.status : data.status) === 'active' &&
