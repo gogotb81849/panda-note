@@ -1215,13 +1215,19 @@ function buildOption() {
       bottom: 24,
       containLabel: false,
     },
-    // ★ v0850 陈先生需求：月份时间只放在顶部（冻结表头 canvas 里），主图不画底部刻度
-    //   之前底部 xAxis（position:bottom 辅助刻度）已不需要，整体关闭。
+    // ★ v0853 关键修复：xAxis 不能用 show:false（会导致 custom series 的 api.coord 失效 → 色条全消失）
+    //   改为 show:true 保留坐标系，但隐藏所有视觉元素（axisLine/axisLabel/axisTick/splitLine 全 show:false）
+    //   这样底部不画任何刻度，但坐标系正常工作，custom series 的 api.coord 能正确计算坐标
     xAxis: {
       type: 'time',
       min: xAxisMin,
       max: xAxisMax,
-      show: false,
+      position: 'bottom',
+      show: true,
+      axisLine: { show: false },
+      axisLabel: { show: false },
+      axisTick: { show: false },
+      splitLine: { show: false },
     },
     yAxis: {
       type: 'category',
