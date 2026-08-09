@@ -480,13 +480,28 @@ function getDaysOnBoard(startDate: string, endDate?: string | null): number {
 //      11月+  → 深红 #ad0606（违规）
 //   3. 休假 status=leave → 灰色 #a8abb2（与历史派任深灰区分）
 //   判定顺序：先判 ended / leave（互斥），再算在任的天数渐变。绝不允许 ended 被天数覆盖。
-function getBarColor(a: AssignmentItem): string {
+// ★ v0852 判断派任是否已下船（已下船 = 历史派任 → 灰色）
+//   不再只看 status 字段！两个条件满足任一即判定为已下船：
+//   1. status ∈ ended集合（后端 checkOutShip 会设 'ended'）
+//   2. endDate 不为空且已经过去（endDate < 今天 0点）
+//   这样即使通过"编辑派任"只设了 endDate 没改 status，也能正确显示灰色
+function isAssignmentEnded(a: AssignmentItem): boolean {
   const status = (a.status || '').toLowerCase()
   const ENDED_SET = new Set(['ended', 'offboard', '下船', '离职', '离船', '已下船', '已离船'])
-  const hasEnded = ENDED_SET.has(status)
-  // ★ 优先级1：已下船 → 深灰色（不透明或微透，绝对不被背景 #f5f5f5 淹没）
-  if (hasEnded) return '#6e7681'
+  if (ENDED_SET.has(status)) return true
+  // ★ 关键补充：endDate 不为空且已过去 → 也算已下船
+  if (a.endDate) {
+    const endTs = new Date(a.endDate).getTime()
+    if (!isNaN(endTs) && endTs < Date.now()) return true
+  }
+  return false
+}
+
+function getBarColor(a: AssignmentItem): string {
+  // ★ v0852 优先级1：已下船 → 深灰色（status=ended 或 endDate已过）
+  if (isAssignmentEnded(a)) return '#6e7681'
   // ★ 优先级2：休假 → 浅灰（与历史派任深灰区分，避免混淆）
+  const status = (a.status || '').toLowerCase()
   if (status === 'leave') return '#a8abb2'
   // ★ 优先级3：在任 → 按到今天的天数算渐变（陈先生原话：6个月内正常绿色）
   const startTs = new Date(a.startDate).getTime()
@@ -618,16 +633,10 @@ const ganttBars = computed(() => {
     const status = (a.status || '').toLowerCase()
     if (status === 'leave') continue
 
-    // ★ v0838 终极修复（陈先生原话：「所有的船舶都把上船日期当成了下船日期」）
-    //   彻底删掉所有复杂判定、min/max 调换操作。就三条死规则：
-    //   1. 左端 = 100% 原始 a.startDate 时间戳
-    //   2. 右端：
-    //      - 如果 status ∈ ended集合 → 原始 a.endDate（没有就start+1天）
-    //      - 其他一切（空/active/脏）→ 今天中午 12 点 (nowTs + 6h)
-    //   3. 最终保险：右端 < 左端 → 右端强制 = 左端 + 1天（保证不反向 / 不被 ECharts 自动丢弃）
-    //   不再猜测「是不是 min 搞错了」「是不是 max 搞反了」——一切按最直觉的写。
-    const ENDED_STATUSES = new Set(['ended', 'offboard', '下船', '离职', '离船', '已下船', '已离船'])
-    const hasEnded = ENDED_STATUSES.has(status)
+    // ★ v0852 关键修复：用统一的 isAssignmentEnded 判断是否已下船
+    //   不再只看 status 字段！endDate 不为空且已过去也算已下船
+    //   这样通过"编辑派任"只设了 endDate 没改 status 的记录也能正确显示灰色
+    const hasEnded = isAssignmentEnded(a)
     const isActive = !hasEnded
 
     // 规则1：左端 = 原始 a.startDate，不要任何处理
@@ -1064,7 +1073,6 @@ function buildOption() {
       const a = id ? assignmentMap.value.get(id) : null
       byShip.get(yIdx)!.push({ b, a })
     }
-    const ENDED_SET = new Set(['ended', 'offboard', '下船', '离职', '离船', '已下船', '已离船'])
     let s = `<div style="font-weight:600;margin-bottom:4px;">🚢 每船派任诊断（共 ${byShip.size} 艘船，${bars.length} 条色条）</div>`
     s += `<div style="font-size:11px;margin-bottom:6px;color:#555;">图例: <b style="color:#27ae60;">✅</b>在任且右端覆盖今天(含+12h缓冲) | <b style="color:#c0392b;">❌</b>在任但右端＜今天(严重错误) | <b style="color:#e67e22;">⚠️</b>历史派任(正常) | 船名后数字=派任数</div>`
     for (const [yIdx, items] of byShip) {
@@ -1074,8 +1082,8 @@ function buildOption() {
       shipHtml += `<b style="font-size:13px;">🚢 ${shipName} (Y${yIdx})</b> <span style="color:#888;font-size:11px;">派任${sorted.length}条</span>`
       for (const { b: bar, a: asg } of sorted) {
         const off = bar._labelText?.split('（')?.[0] || '?'
-        const st = (asg?.status || '').toLowerCase()
-        const isEnded = ENDED_SET.has(st)
+        // ★ v0852 用统一的 isAssignmentEnded 判断（endDate已过也算已下船）
+        const isEnded = asg ? isAssignmentEnded(asg) : false
         const endTs = Number(bar.value[2])
         const endDate = new Date(endTs).toISOString().slice(0, 10)
         // ★ v0844 同上：在任 endFinal 在 [今天0点, 今天+36h] → ✅ 正确
@@ -1177,10 +1185,9 @@ function buildOption() {
         if (!a) return ''
         const shipName = a.ship?.cnShipName || safeShips.value.find((s) => s.id === a.shipId)?.cnShipName || '-'
         const officer = a.user?.realName || a.ship?.politicalOfficerName || '未指派'
-        // ★ v0830 hover tooltip 状态判定：只有明确ended才算历史，其他一律在任
+        // ★ v0852 hover tooltip 状态判定：用统一的 isAssignmentEnded（endDate已过也算已下船）
         const statusRaw = (a.status || '').toLowerCase()
-        const ENDED_SET = new Set(['ended', 'offboard', '下船', '离职', '离船', '已下船', '已离船'])
-        const hasEnded = ENDED_SET.has(statusRaw)
+        const hasEnded = isAssignmentEnded(a)
         const isOnBoard = !hasEnded && statusRaw !== 'leave'
         const days = hasEnded && a.endDate
           ? getDaysOnBoard(a.startDate, a.endDate)
