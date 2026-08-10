@@ -501,7 +501,7 @@ function isAssignmentEnded(a: AssignmentItem): boolean {
   // ★ endDate 不为空且已过（用响应式 today0Ts，不用 Date.now()）
   if (a.endDate) {
     const endTs = parseLocalDate(a.endDate)
-    if (!isNaN(endTs) && endTs < today0Ts.value) return true
+    if (!isNaN(endTs) && endTs <= today0Ts.value) return true
   }
   return false
 }

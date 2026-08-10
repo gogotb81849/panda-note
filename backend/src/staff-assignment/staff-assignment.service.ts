@@ -92,6 +92,19 @@ export class StaffAssignmentService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      // ★ v0862 关键修复：创建时若endDate已过或为今天，自动设status='ended'
+      let autoStatus = createDto.status || 'active';
+      if (createDto.endDate) {
+        const endTs = new Date(createDto.endDate).getTime();
+        if (!isNaN(endTs)) {
+          const now = new Date();
+          const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).getTime();
+          if (endTs <= todayEnd && (!createDto.status || createDto.status === 'active')) {
+            autoStatus = 'ended';
+          }
+        }
+      }
+
       const result = await tx.staffAssignment.create({
         data: {
           userId: createDto.userId,
@@ -99,7 +112,7 @@ export class StaffAssignmentService {
           teamCode: teamCode as any,
           startDate: new Date(createDto.startDate),
           endDate: createDto.endDate ? new Date(createDto.endDate) : null,
-          status: createDto.status || 'active',
+          status: autoStatus,
           sourceCompany: createDto.sourceCompany,
           assignmentNo: createDto.assignmentNo,
           remark: createDto.remark,
@@ -237,6 +250,27 @@ export class StaffAssignmentService {
    * 获取全团队所有派任记录（供岸基主管使用）
    */
   async getAllByTeamCode(teamCode: string) {
+    // ★ v0862 关键修复：查询时自动同步已过期派任的status
+    //   解决根因：历史派任endDate已过但status仍='active'，前端isAssignmentEnded依赖status判断
+    //   每次查询时自动将endDate<=今天且status='active'的记录更新为status='ended'
+    const now = new Date();
+    const todayTs = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).getTime();
+    const expiredActive = await this.prisma.staffAssignment.findMany({
+      where: {
+        teamCode: teamCode as any,
+        status: 'active',
+        endDate: { lte: new Date(todayTs) },
+      },
+      select: { id: true },
+    });
+    if (expiredActive.length > 0) {
+      const ids = expiredActive.map(a => a.id);
+      await this.prisma.staffAssignment.updateMany({
+        where: { id: { in: ids } },
+        data: { status: 'ended' },
+      });
+    }
+
     return this.prisma.staffAssignment.findMany({
       where: { teamCode: teamCode as any },
       include: {
