@@ -696,13 +696,19 @@ const ganttBars = computed(() => {
     // ★ v0850 历史派任的深灰 #6e7681 本身就暗，opacity = 0.9（而不是 0.65）
     //   这样在交替行的白底 / 浅灰底上都清晰可见，不会被背景 #f5f5f5 融合得看不清。
     //   在任派任 opacity = 1（不透明），保证颜色 100% 饱满显示。
+    const barColor = getBarColor(a)
     const barOpacity = hasEnded ? 0.9 : 1
     out.push({
       value: [yIndex, startFinal, endFinal],  // ★ v0838：绝对不搞任何 min/max 调换，100% 按 [y, start, end]
       _assignmentId: a.id,
       _labelText: labelText,
+      // ★ v0863 关键修复：ECharts custom series 的 renderItem 中 params.data.itemStyle 不可靠
+      //   会被 ECharts 内部消费掉，导致 renderItem 取不到 color，所有色条回退为默认绿色 #67c23a
+      //   → 颜色和透明度必须用自定义属性传递，ECharts 不会消费 _barColor / _barOpacity
+      _barColor: barColor,
+      _barOpacity: barOpacity,
       itemStyle: {
-        color: getBarColor(a),
+        color: barColor,
         opacity: barOpacity,
         borderRadius: [3, 3, 3, 3],
         borderColor: 'transparent',
@@ -733,8 +739,8 @@ watchEffect(() => {
       startFinalTs: Number(b.value[1]),
       endFinalTs: Number(b.value[2]),
       daysNum: Math.max(1, Math.round((Number(b.value[2]) - Number(b.value[1])) / DAY_MS)),
-      opa: b.itemStyle?.opacity ?? 1,
-      color: b.itemStyle?.color ?? '?',
+      opa: b._barOpacity ?? b.itemStyle?.opacity ?? 1,
+      color: b._barColor ?? b.itemStyle?.color ?? '?',
       raw: a ? {
         startDateRaw: a.startDate || '(NULL)',
         endDateRaw: a.endDate || '(NULL)',
@@ -1301,8 +1307,10 @@ function buildOption() {
           const y0 = sp[1] - barH / 2
           const w = Math.max(2, ep[0] - sp[0])
           const d = params.data
-          const color = d?.itemStyle?.color || '#67c23a'
-          const opa = d?.itemStyle?.opacity ?? 1
+          // ★ v0863 关键修复：ECharts custom series 会消费 itemStyle，导致 params.data.itemStyle 不可用
+          //   所有色条都回退为默认绿色 #67c23a。改用自定义属性 _barColor / _barOpacity 传递颜色
+          const color = d?._barColor || d?.itemStyle?.color || '#67c23a'
+          const opa = d?._barOpacity ?? d?.itemStyle?.opacity ?? 1
           const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
           const children: any[] = [
             {
