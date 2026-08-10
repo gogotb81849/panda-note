@@ -616,7 +616,12 @@ const timeRange = computed(() => {
 })
 
 // 生成甘特图数据
+// ★ v0863 barMetaList：与 ganttBars 同步生成的元数据数组
+//   ECharts custom series renderItem 中 params.data 会丢失所有自定义属性
+//   → 颜色、透明度、标签文字必须通过 params.dataIndex 从这里查找
+const barMetaList: any[] = []
 const ganttBars = computed(() => {
+  barMetaList.length = 0  // 每次重算前清空
   const out: any[] = []
   const shipsMap = shipIdToYIndex.value
 
@@ -698,22 +703,17 @@ const ganttBars = computed(() => {
     //   在任派任 opacity = 1（不透明），保证颜色 100% 饱满显示。
     const barColor = getBarColor(a)
     const barOpacity = hasEnded ? 0.9 : 1
+    // ★ v0863 终极修复：ECharts custom series renderItem 中 params.data 会丢失所有自定义属性
+    //   （_barColor、_labelText、itemStyle 全部被 ECharts 内部消费/剥离）
+    //   → 必须用 params.dataIndex 从外部数组 barMetaList 查找颜色和标签
+    barMetaList.push({
+      color: barColor,
+      opacity: barOpacity,
+      labelText,
+      assignmentId: a.id,
+    })
     out.push({
-      value: [yIndex, startFinal, endFinal],  // ★ v0838：绝对不搞任何 min/max 调换，100% 按 [y, start, end]
-      _assignmentId: a.id,
-      _labelText: labelText,
-      // ★ v0863 关键修复：ECharts custom series 的 renderItem 中 params.data.itemStyle 不可靠
-      //   会被 ECharts 内部消费掉，导致 renderItem 取不到 color，所有色条回退为默认绿色 #67c23a
-      //   → 颜色和透明度必须用自定义属性传递，ECharts 不会消费 _barColor / _barOpacity
-      _barColor: barColor,
-      _barOpacity: barOpacity,
-      itemStyle: {
-        color: barColor,
-        opacity: barOpacity,
-        borderRadius: [3, 3, 3, 3],
-        borderColor: 'transparent',
-        borderWidth: 0,
-      },
+      value: [yIndex, startFinal, endFinal],
     })
   }
   return out
@@ -726,12 +726,14 @@ const debugBarsDump = ref<any[]>([])
 watchEffect(() => {
   const bars = ganttBars.value
   const out: any[] = []
-  for (const b of bars) {
-    const id = Number(b._assignmentId)
+  for (let i = 0; i < bars.length; i++) {
+    const b = bars[i]
+    const meta = barMetaList[i] || {}
+    const id = Number(meta.assignmentId)
     const a = id ? assignmentMap.value.get(id) : null
     out.push({
       id,
-      officer: b._labelText?.split('（')?.[0] || '?',
+      officer: (meta.labelText || '').split('（')[0] || '?',
       yIndex: Number(b.value[0]),
       shipName: yCategories.value[Number(b.value[0])] || '(未知船)',
       startFinal: new Date(Number(b.value[1])).toISOString().slice(0, 10),
@@ -739,8 +741,8 @@ watchEffect(() => {
       startFinalTs: Number(b.value[1]),
       endFinalTs: Number(b.value[2]),
       daysNum: Math.max(1, Math.round((Number(b.value[2]) - Number(b.value[1])) / DAY_MS)),
-      opa: b._barOpacity ?? b.itemStyle?.opacity ?? 1,
-      color: b._barColor ?? b.itemStyle?.color ?? '?',
+      opa: meta.opacity ?? 1,
+      color: meta.color ?? '?',
       raw: a ? {
         startDateRaw: a.startDate || '(NULL)',
         endDateRaw: a.endDate || '(NULL)',
@@ -1000,12 +1002,14 @@ function buildOption() {
   // ★ v0836 调试表格：直接从 bars 同步计算，不依赖 watchEffect timing（彻底解决时序问题）
   function buildBarDumpRows(limit: number) {
     const rows: any[] = []
-    for (const b of bars) {
-      const id = Number(b._assignmentId)
+    for (let i = 0; i < bars.length; i++) {
+      const b = bars[i]
+      const meta = barMetaList[i] || {}
+      const id = Number(meta.assignmentId)
       const a = id ? assignmentMap.value.get(id) : null
       rows.push({
         id,
-        officer: b._labelText?.split('（')?.[0] || '?',
+        officer: (meta.labelText || '').split('（')[0] || '?',
         yIndex: Number(b.value[0]),
         shipName: yCategories.value[Number(b.value[0])] || '(未知船)',
         startFinal: new Date(Number(b.value[1])).toISOString().slice(0, 10),
@@ -1013,8 +1017,8 @@ function buildOption() {
         startFinalTs: Number(b.value[1]),
         endFinalTs: Number(b.value[2]),
         daysNum: Math.max(1, Math.round((Number(b.value[2]) - Number(b.value[1])) / DAY_MS)),
-        opa: b.itemStyle?.opacity ?? 1,
-        color: b.itemStyle?.color ?? '?',
+        opa: meta.opacity ?? 1,
+        color: meta.color ?? '?',
         raw: a ? {
           startDateRaw: a.startDate || '(NULL)',
           endDateRaw: a.endDate || '(NULL)',
@@ -1083,12 +1087,14 @@ function buildOption() {
     const today0 = new Date(now); today0.setHours(0, 0, 0, 0); const today0Ts = today0.getTime()
     const todayPlus36h = today0Ts + 36 * 3600 * 1000
     const byShip = new Map<number, any[]>()
-    for (const b of bars) {
+    for (let i = 0; i < bars.length; i++) {
+      const b = bars[i]
       const yIdx = Number(b.value[0])
       if (!byShip.has(yIdx)) byShip.set(yIdx, [])
-      const id = Number(b._assignmentId)
+      const meta = barMetaList[i] || {}
+      const id = Number(meta.assignmentId)
       const a = id ? assignmentMap.value.get(id) : null
-      byShip.get(yIdx)!.push({ b, a })
+      byShip.get(yIdx)!.push({ b, a, meta })
     }
     let s = `<div style="font-weight:600;margin-bottom:4px;">🚢 每船派任诊断（共 ${byShip.size} 艘船，${bars.length} 条色条）</div>`
     s += `<div style="font-size:11px;margin-bottom:6px;color:#555;">图例: <b style="color:#27ae60;">✅</b>在任且右端覆盖今天(含+12h缓冲) | <b style="color:#c0392b;">❌</b>在任但右端＜今天(严重错误) | <b style="color:#e67e22;">⚠️</b>历史派任(正常) | 船名后数字=派任数</div>`
@@ -1097,8 +1103,8 @@ function buildOption() {
       const sorted = items.sort((a, b2) => Number(a.b.value[1]) - Number(b2.b.value[1]))
       let shipHtml = `<div style="border:1px solid #ccc;border-radius:4px;padding:4px 6px;margin-bottom:4px;background:#fff;">`
       shipHtml += `<b style="font-size:13px;">🚢 ${shipName} (Y${yIdx})</b> <span style="color:#888;font-size:11px;">派任${sorted.length}条</span>`
-      for (const { b: bar, a: asg } of sorted) {
-        const off = bar._labelText?.split('（')?.[0] || '?'
+      for (const { b: bar, a: asg, meta } of sorted) {
+        const off = (meta?.labelText || '').split('（')[0] || '?'
         // ★ v0855 修复：st 变量必须定义，否则会 ReferenceError 导致整个图表渲染失败
         const st = (asg?.status || '').toLowerCase()
         // ★ v0852 用统一的 isAssignmentEnded 判断（endDate已过也算已下船）
@@ -1199,7 +1205,10 @@ function buildOption() {
     tooltip: {
       trigger: 'item',
       formatter: (params: any) => {
-        const id = params?.data?._assignmentId
+        // ★ v0864 终极修复：tooltip params.data 也会被 ECharts 标准化，自定义属性丢失
+        //   → 用 params.dataIndex 从 barMetaList 取 assignmentId（和 renderItem 同源）
+        const di = params?.dataIndex ?? 0
+        const id = Number(barMetaList[di]?.assignmentId) || 0
         const a = id ? assignmentMap.value.get(id) : null
         if (!a) return ''
         const shipName = a.ship?.cnShipName || safeShips.value.find((s) => s.id === a.shipId)?.cnShipName || '-'
@@ -1306,11 +1315,13 @@ function buildOption() {
           const x0 = sp[0]
           const y0 = sp[1] - barH / 2
           const w = Math.max(2, ep[0] - sp[0])
-          const d = params.data
-          // ★ v0863 关键修复：ECharts custom series 会消费 itemStyle，导致 params.data.itemStyle 不可用
-          //   所有色条都回退为默认绿色 #67c23a。改用自定义属性 _barColor / _barOpacity 传递颜色
-          const color = d?._barColor || d?.itemStyle?.color || '#67c23a'
-          const opa = d?._barOpacity ?? d?.itemStyle?.opacity ?? 1
+          // ★ v0863 终极修复：ECharts custom series renderItem 中 params.data 丢失所有自定义属性
+          //   （_barColor、_labelText、itemStyle 全部被剥离）
+          //   → 用 params.dataIndex 从外部 barMetaList 查找颜色、透明度和标签
+          const di = params.dataIndex ?? 0
+          const meta = barMetaList[di] || {}
+          const color = meta.color || '#67c23a'
+          const opa = meta.opacity ?? 1
           const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
           const children: any[] = [
             {
@@ -1319,8 +1330,8 @@ function buildOption() {
               style: { fill: color, opacity: opa },
             },
           ]
-          // label：色条内部左侧白色文字（复用原 _labelText + 手机端压缩逻辑）
-          let txt = String(d?._labelText || '')
+          // label：色条内部左侧白色文字
+          let txt = String(meta.labelText || '')
           if (txt) {
             if (isMobile) {
               txt = txt
@@ -1539,17 +1550,11 @@ watch(chartHeight, () => {
 let barClickFlag = false
 
 function handleChartClick(params: any) {
-  // ★ v0845 排查 custom series 点击：custom series 的 click 事件 params.data
-  //   应为 series.data[dataIndex]（含 _assignmentId）。加日志便于定位"卡片跳不出来"。
-  console.log('[gantt-click v0845]', { componentType: params?.componentType, seriesType: params?.seriesType, dataIndex: params?.dataIndex, hasData: !!params?.data, hasId: !!params?.data?._assignmentId })
-  // custom series：params.data 即原始数据项；兼容 data 可能在 params.data.value 的情况
-  let id = params?.data?._assignmentId
-  // 兜底：若 params.data 缺失，尝试用 dataIndex 从 ganttBars 取
-  if (!id && typeof params?.dataIndex === 'number') {
-    const bar = ganttBars.value[params.dataIndex]
-    id = bar?._assignmentId
-    console.log('[gantt-click v0845] fallback dataIndex→bar', { dataIndex: params.dataIndex, foundId: id })
-  }
+  // ★ v0864 终极修复：custom series 的 params.data 会被 ECharts 标准化，自定义属性丢失
+  //   → 统一用 params.dataIndex 从 barMetaList 取 assignmentId（和 renderItem 同源）
+  console.log('[gantt-click v0864]', { componentType: params?.componentType, seriesType: params?.seriesType, dataIndex: params?.dataIndex })
+  const di = typeof params?.dataIndex === 'number' ? params.dataIndex : 0
+  const id = Number(barMetaList[di]?.assignmentId) || 0
   if (!id) return
   const assignment = assignmentMap.value.get(id)
   if (!assignment) return
@@ -1599,15 +1604,21 @@ function nativeCanvasClickHandler(e: MouseEvent) {
   const yIdx = Math.round(yVal)
   log.yIdx = yIdx
   // 在 ganttBars 里找：yIndex 匹配 且 ts 落在 [start, end] 区间
-  const bar = ganttBars.value.find(b =>
-    Number(b.value[0]) === yIdx &&
-    Number(b.value[1]) <= ts &&
-    Number(b.value[2]) >= ts
-  )
+  // ★ v0864 同步修复：barMetaList 与 ganttBars 同索引，找到 bar 的同时记录 index
+  let barIdx = -1
+  const bar = ganttBars.value.find((b, i) => {
+    if (Number(b.value[0]) === yIdx &&
+        Number(b.value[1]) <= ts &&
+        Number(b.value[2]) >= ts) {
+      barIdx = i
+      return true
+    }
+    return false
+  })
   log.barFound = !!bar
   log.barsCount = ganttBars.value.length
-  if (!bar) { log.step = 'no-bar'; (window as any).__nativeClickLog = log; return }
-  const id = bar._assignmentId
+  if (!bar || barIdx < 0) { log.step = 'no-bar'; (window as any).__nativeClickLog = log; return }
+  const id = Number(barMetaList[barIdx]?.assignmentId) || 0
   const assignment = assignmentMap.value.get(id)
   log.aid = id; log.hasAsg = !!assignment
   if (!assignment) { log.step = 'no-asg'; (window as any).__nativeClickLog = log; return }
