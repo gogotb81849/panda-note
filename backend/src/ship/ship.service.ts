@@ -1097,6 +1097,13 @@ export class ShipService {
 
   /**
    * 批量更新船舶动态字段（船工主管确认后调用）
+   *
+   * 业务规则（陈先生 2026-08-10 确认，方案A 完全覆盖）：
+   * 1. 同一次粘贴里，同一艘船出现多条记录时，保留最后一条（晚报覆盖早报），其余丢弃。
+   * 2. 完全覆盖：这次粘贴的船，所有动态字段都用新数据替换；
+   *    新数据未解析出的字段一律清空（设为 null），避免新旧信息混杂。
+   * 3. 没粘贴到的船保持原样不动。
+   *
    * @param updates [{ shipId, parsed: {...字段} }]
    */
   async batchUpdateDynamic(
@@ -1106,10 +1113,20 @@ export class ShipService {
     ipAddress?: string,
     userAgent?: string,
   ) {
+    // === 步骤1：同次粘贴同船多条去重（保留最后一条）===
+    // 用 Map 按 shipId 去重，后出现的覆盖先出现的（晚报覆盖早报）
+    const dedupMap = new Map<number, { shipId: number; parsed: any }>();
+    for (const item of updates) {
+      if (item && item.shipId != null) {
+        dedupMap.set(item.shipId, item);
+      }
+    }
+    const dedupedUpdates = Array.from(dedupMap.values());
+
     const results: any[] = [];
     const now = new Date();
 
-    for (const item of updates) {
+    for (const item of dedupedUpdates) {
       const { shipId, parsed } = item;
       try {
         // 校验船舶归属当前团队
@@ -1119,8 +1136,8 @@ export class ShipService {
           continue;
         }
 
-        // 组装更新数据（只更新非空字段）
-        const data: any = { dynamicSource: 'supervisor', dynamicUpdatedAt: now };
+        // === 步骤2：完全覆盖（未解析字段清空为 null）===
+        // 字段映射：parsedKey -> dbKey
         const fieldMap: Record<string, string> = {
           voyage: 'currentVoyage',
           currentLocation: 'currentLocation',
@@ -1138,6 +1155,14 @@ export class ShipService {
           otherNotes: 'otherNotes',
         };
 
+        // 先把所有动态字段置 null（完全清空旧值），再用新数据覆盖
+        const data: any = { dynamicSource: 'supervisor', dynamicUpdatedAt: now };
+        for (const dbKey of Object.values(fieldMap)) {
+          data[dbKey] = null;
+        }
+        data.eta = null;
+
+        // 写入新数据（非空字段覆盖 null）
         for (const [parsedKey, dbKey] of Object.entries(fieldMap)) {
           const val = parsed[parsedKey];
           if (val !== null && val !== undefined && val !== '') {
@@ -1145,7 +1170,7 @@ export class ShipService {
           }
         }
 
-        // ETA 单独处理（转 DateTime）
+        // ETA 单独处理（转 DateTime，未解析出则保持 null）
         if (parsed.eta) {
           const etaDate = new Date(parsed.eta);
           if (!isNaN(etaDate.getTime())) {
@@ -1155,14 +1180,20 @@ export class ShipService {
 
         // 根据目的港自动计算区域标识（五眼联盟/欧洲/海盗区）
         if (parsed.etaPort) {
-          data.etaPort = parsed.etaPort;
           const region = this.detectRegion(parsed.etaPort);
           data.etaPortRegion = region;
           if (region === 'piracy') {
             data.piracyZone = true;
+          } else {
+            // 非海盗区，重置海盗标记（完全覆盖语义）
+            data.piracyZone = false;
           }
+        } else {
+          // 未解析出目的港，清空区域标记
+          data.etaPortRegion = null;
+          data.piracyZone = false;
         }
-        // 报告中明确提及"海盗区"也置为海盗区
+        // 报告中明确提及"海盗区"也置为海盗区（覆盖上面的判断）
         if (parsed.piracyZone !== undefined && parsed.piracyZone !== null) {
           data.piracyZone = parsed.piracyZone;
         } else {
@@ -1310,6 +1341,13 @@ export class ShipService {
 
   /**
    * 批量更新政委报告字段（船工主管确认后调用）
+   *
+   * 业务规则（陈先生 2026-08-10 确认，方案A 完全覆盖）：
+   * 1. 同一次粘贴里，同一艘船出现多条记录时，保留最后一条，其余丢弃。
+   * 2. 完全覆盖：这次粘贴的船，所有政委报告字段都用新数据替换；
+   *    新数据未解析出的字段一律清空（设为 null），避免新旧信息混杂。
+   * 3. 没粘贴到的船保持原样不动。
+   *
    * @param updates [{ shipId, parsed: {...字段} }]
    */
   async batchUpdatePolitical(
@@ -1319,10 +1357,19 @@ export class ShipService {
     ipAddress?: string,
     userAgent?: string,
   ) {
+    // === 步骤1：同次粘贴同船多条去重（保留最后一条）===
+    const dedupMap = new Map<number, { shipId: number; parsed: any }>();
+    for (const item of updates) {
+      if (item && item.shipId != null) {
+        dedupMap.set(item.shipId, item);
+      }
+    }
+    const dedupedUpdates = Array.from(dedupMap.values());
+
     const results: any[] = [];
     const now = new Date();
 
-    for (const item of updates) {
+    for (const item of dedupedUpdates) {
       const { shipId, parsed } = item;
       try {
         const ship = await this.prisma.ship.findFirst({ where: { id: shipId, teamCode } });
@@ -1331,7 +1378,8 @@ export class ShipService {
           continue;
         }
 
-        const data: any = { politicalUpdatedAt: now, dynamicSource: 'political' };
+        // === 步骤2：完全覆盖（未解析字段清空为 null）===
+        // 字段映射：parsedKey -> dbKey
         const fieldMap: Record<string, string> = {
           voyage: 'politicalVoyage',
           status: 'politicalStatus',
@@ -1345,6 +1393,26 @@ export class ShipService {
           eta: 'politicalOtherNotes',
         };
 
+        // 先把所有政委报告字段置 null（完全清空旧值），再用新数据覆盖
+        const data: any = { politicalUpdatedAt: now, dynamicSource: 'political' };
+        const politicalKeysToReset = [
+          'politicalVoyage',
+          'politicalStatus',
+          'politicalLocation',
+          'politicalWeather',
+          'politicalSeaCondition',
+          'politicalStaffChange',
+          'politicalFocusPoints',
+          'politicalOtherNotes',
+          'politicalETA',
+          'politicalETD',
+          'politicalETAPort',
+        ];
+        for (const dbKey of politicalKeysToReset) {
+          data[dbKey] = null;
+        }
+
+        // 写入新数据（非空字段覆盖 null）
         for (const [parsedKey, dbKey] of Object.entries(fieldMap)) {
           const val = parsed[parsedKey];
           if (val !== null && val !== undefined && val !== '') {
@@ -1369,6 +1437,10 @@ export class ShipService {
         if (parsed.etaPort || parsed.arrivalPort) {
           data.politicalETAPort = parsed.etaPort || parsed.arrivalPort;
           data.etaPortRegion = this.detectRegion(data.politicalETAPort);
+        } else {
+          // 未解析出目的港，清空区域标记（注意：etaPortRegion 是与船舶报告共享字段，
+          // 此处仅清空政委报告侧的目的港区域，避免误清船舶报告已识别的区域）
+          // 不重置 etaPortRegion，保留船舶报告侧的判断
         }
 
         if (parsed.piracyZone !== undefined && parsed.piracyZone !== null) {
