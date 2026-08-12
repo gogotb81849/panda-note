@@ -8,7 +8,8 @@ const pkg = JSON.parse(readFileSync(join(__dirname, 'package.json'), 'utf-8'))
 
 export default defineNuxtConfig({
   compatibilityDate: '2024-04-03',
-  devtools: { enabled: true },
+  devtools: { enabled: false },
+  sourcemap: { server: false, client: false },
   // 将 /api 请求代理到后端服务（SSR和客户端都可用）
   routeRules: {
     '/api/**': {
@@ -185,13 +186,21 @@ export default defineNuxtConfig({
     },
   },
   vite: {
+    resolve: {
+      alias: {
+        // element-plus Nuxt 模块客户端会 `import "dayjs"`（通过 .nuxt/dist 自动注入），
+        // dayjs 包的 main=dayjs.min.js 没有 ESM default 导出，导致浏览器报：
+        //   "does not provide an export named 'default'"
+        // 这里强制把 dayjs 指向真正的 ESM 入口，确保 SSR 与客户端一致
+        dayjs: 'dayjs/esm/index.js',
+      },
+    },
     optimizeDeps: {
-      include: ['@fullcalendar/core', '@fullcalendar/daygrid', '@fullcalendar/interaction', '@fullcalendar/vue3'],
+      include: ['dayjs', '@fullcalendar/core', '@fullcalendar/daygrid', '@fullcalendar/interaction', '@fullcalendar/vue3'],
     },
     ssr: {
-      // 将 CommonJS 依赖打包进 SSR 产物，避免 ESM/CJS 互操作错误
-      // （Element Plus 间接依赖 @popperjs/core，其为 CommonJS 模块）
-      noExternal: ['@popperjs/core'],
+      // 将 CommonJS / ESM 异常依赖打包进 SSR 产物，避免 ESM/CJS 互操作错误
+      noExternal: ['dayjs', '@popperjs/core'],
     },
   },
 });

@@ -274,33 +274,75 @@ function getSolarFestival(month: number, day: number) {
   return festivals[key] || ''
 }
 
-// 历史事件纪念日（按月-日 → 事件名）
-// 来源：船舶政工系统常用纪念日（建党/建军/建国/抗战胜利/烈士纪念日/辛亥革命等）
+// 历史事件纪念日（按月-日 → 事件名）【华为风格短版，≤6字】
+// 来源：船舶政工系统常用纪念日
 const historicalEvents: Record<string, string> = {
-  '0207': '京汉铁路罢工',
-  '0308': '国际劳动妇女节',
-  '0312': '孙中山逝世纪念日',
-  '0314': '马克思逝世纪念日',
+  '0207': '二七大罢工',
+  '0308': '妇女节',
+  '0312': '孙中山逝世',
+  '0314': '马克思逝世',
   '0424': '中国航天日',
   '0504': '五四运动',
   '0505': '马克思诞辰',
-  '0601': '国际儿童节',
-  '0701': '中国共产党成立纪念日',
+  '0601': '儿童节',
+  '0701': '建党纪念日',
   '0707': '七七事变',
-  '0801': '八一南昌起义',
-  '0815': '日本宣布无条件投降',
-  '0903': '中国人民抗日战争胜利纪念日',
-  '0909': '毛泽东逝世纪念日',
+  '0801': '建军节',
+  '0815': '日本投降日',
+  '0903': '抗战胜利纪念',
+  '0909': '毛泽东逝世',
   '0918': '九一八事变',
   '0930': '烈士纪念日',
-  '1001': '中华人民共和国成立',
-  '1010': '辛亥革命纪念日',
-  '1019': '抗美援朝出国作战纪念日',
+  '1001': '国庆节',
+  '1010': '辛亥革命',
+  '1019': '抗美援朝',
   '1112': '孙中山诞辰',
-  '1201': '世界艾滋病日',
-  '1209': '一二·九运动',
-  '1213': '南京大屠杀死难者国家公祭日',
+  '1201': '世界艾滋病',
+  '1209': '一二九运动',
+  '1213': '南京大屠杀',
   '1226': '毛泽东诞辰',
+}
+
+// ===== 三伏天数据（按"夏至三庚便入伏"的实际公开数据维护2024-2030） =====
+// 每10天一个庚日。简化为每年的 [初伏日, 中伏日, 末伏日] 三元组，格式 MMDD
+const SANFU_DATA: Record<number, [string, string, string]> = {
+  2024: ['0715', '0725', '0814'],
+  2025: ['0720', '0730', '0819'],
+  2026: ['0716', '0726', '0814'], // ← 与华为截图8月14日"末伏"对得上
+  2027: ['0721', '0731', '0820'],
+  2028: ['0716', '0726', '0815'],
+  2029: ['0720', '0730', '0819'],
+  2030: ['0715', '0725', '0814'],
+}
+
+/**
+ * 获得指定日期的三伏标签（初伏 / 中伏 / 末伏 / 空串）
+ * 范围未命中时，按 7月中旬/下旬、8月中旬估算（兜底）
+ */
+function getSanFu(date: Date): string {
+  const y = date.getFullYear()
+  const md = `${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`
+  const data = SANFU_DATA[y]
+  if (data) {
+    const [s1, s2, s3] = data
+    const num = parseInt(md, 10)
+    const start1 = parseInt(s1, 10)
+    const start2 = parseInt(s2, 10)
+    const start3 = parseInt(s3, 10)
+    // 初伏：10天；中伏：20天（多数年）；末伏：10天
+    if (num >= start1 && num < start2) return '初伏'
+    if (num >= start2 && num < start3) return '中伏'
+    if (num >= start3 && num < start3 + 10) return '末伏'
+    return ''
+  }
+  // 兜底近似：7.12初伏/7.22中伏/8.11末伏
+  const m = date.getMonth() + 1
+  const d = date.getDate()
+  if (m === 7 && d >= 12 && d < 22) return '初伏'
+  if (m === 7 && d >= 22) return '中伏'
+  if (m === 8 && d < 11) return '中伏'
+  if (m === 8 && d >= 11 && d < 21) return '末伏'
+  return ''
 }
 
 // 获取历史事件纪念日
@@ -387,13 +429,11 @@ const holidayData: Record<string, Record<string, HolidayEntry>> = {
     '1003': { type: 'holiday', name: '国庆节' },
     '1004': { type: 'holiday', name: '国庆节' },
     '1005': { type: 'holiday', name: '国庆节' },
-    '1006': { type: 'holiday', name: '国庆节' },
+    '1006': { type: 'holiday', name: '中秋国庆' }, // 中秋国庆连休
     '1007': { type: 'holiday', name: '国庆节' },
     '1008': { type: 'holiday', name: '国庆节' },
     '0928': { type: 'workday' }, // 国庆调休上班
     '1011': { type: 'workday' }, // 国庆调休上班
-    '1006': { type: 'holiday', name: '中秋节' }, // 中秋国庆连休
-    '1007': { type: 'holiday', name: '中秋节' },
   },
   '2026': {
     '0101': { type: 'holiday', name: '元旦' },
@@ -425,7 +465,6 @@ const holidayData: Record<string, Record<string, HolidayEntry>> = {
     '0621': { type: 'holiday', name: '端午节' },
     '0925': { type: 'holiday', name: '中秋节' },
     '0926': { type: 'holiday', name: '中秋节' },
-    '0927': { type: 'holiday', name: '中秋节' },
     '1001': { type: 'holiday', name: '国庆节' },
     '1002': { type: 'holiday', name: '国庆节' },
     '1003': { type: 'holiday', name: '国庆节' },
@@ -492,7 +531,7 @@ export function useLunar() {
     }
   }
 
-  // 完整农历信息（含节气、历史事件、休班标记），供华为日历组件使用
+  // 完整农历信息（含节气、三伏、历史事件、休班标记），供华为日历组件使用
   function getLunarInfo(date: Date) {
     const lunar = toLunar(date)
     const lunarMonthName = getLunarMonthName(lunar.month, lunar.isLeap)
@@ -503,21 +542,25 @@ export function useLunar() {
     const solarFestival = getSolarFestival(date.getMonth() + 1, date.getDate())
     const solarTerm = getSolarTermByDate(date)
     const historicalEvent = getHistoricalEvent(date.getMonth() + 1, date.getDate())
+    const fu = getSanFu(date)
     const holidayInfo = getHolidayInfo(date)
 
     const holiday = lunarFestival || solarFestival || ''
     const lunarStr = `${lunarMonthName}${lunarDayName}`
+    const isFirstOrFifteen = lunar.day === 1 || lunar.day === 15
 
     return {
       lunar: lunarStr,
       ganZhi,
       animal,
-      holiday,             // 节日（公历+农历，显示用，节气独立）
-      solarTerm,           // 24节气（如"立春"，无则空串）
-      historicalEvent,     // 历史事件纪念日（如"七七事变"，无则空串）
-      isHoliday: holidayInfo.isHoliday, // 是否休（含周末+法定假日）
-      isWorkday: holidayInfo.isWorkday, // 是否调休上班（周末补班）
-      holidayName: holidayInfo.name,    // 假日名称（如"春节"）
+      holiday,             // 节日（公历+农历）
+      solarTerm,           // 24节气
+      historicalEvent,     // 历史事件纪念日（短版）
+      fu,                  // 三伏：初伏/中伏/末伏
+      isFirstOrFifteen,    // 是否农历初一或十五（月视图日期数字标红用）
+      isHoliday: holidayInfo.isHoliday, // 休
+      isWorkday: holidayInfo.isWorkday, // 调休上班
+      holidayName: holidayInfo.name,    // 假日名称
       lunarYear: lunar.year,
       lunarMonth: lunar.month,
       lunarDay: lunar.day,
@@ -525,19 +568,34 @@ export function useLunar() {
     }
   }
 
-  // 月格主显示文案：节日 > 节气 > 历史事件 > 农历日
-  // 用于月视图日期格子底部一行小字（华为日历风格）
-  function getDayCaption(date: Date): string {
+  // 月格主显示文案：节日 > 三伏 > 节气 > 历史事件 > 初一显示月名 > 农历日
+  // 并返回文案类型（华为月视图用 caption 类型决定灰底条颜色/是否显示）
+  type CaptionType = 'festival' | 'fu' | 'solarTerm' | 'historical' | 'lunarDay' | 'lunarMonth'
+  interface CaptionResult {
+    text: string
+    type: CaptionType
+  }
+  function getDayCaption(date: Date): string
+  function getDayCaption(date: Date, withType: true): CaptionResult
+  function getDayCaption(date: Date, withType = false): any {
     const info = getLunarInfo(date)
-    if (info.holiday) return info.holiday
-    if (info.solarTerm) return info.solarTerm
-    if (info.historicalEvent) return info.historicalEvent
-    // 初一显示农历月名（如"正月"），其他日显示农历日（如"初二"）
-    if (info.lunarDay === 1) {
+    let text = ''
+    let type: CaptionType = 'lunarDay'
+
+    if (info.holiday)      { text = info.holiday;      type = 'festival' }
+    else if (info.fu)      { text = info.fu;          type = 'fu' }
+    else if (info.solarTerm)     { text = info.solarTerm;     type = 'solarTerm' }
+    else if (info.historicalEvent) { text = info.historicalEvent; type = 'historical' }
+    else if (info.lunarDay === 1) {
       const lunar = toLunar(date)
-      return getLunarMonthName(lunar.month, lunar.isLeap)
+      text = getLunarMonthName(lunar.month, lunar.isLeap)
+      type = 'lunarMonth'
+    } else {
+      text = info.lunar
+      type = 'lunarDay'
     }
-    return info.lunar
+
+    return withType ? { text, type } : text
   }
 
   // 计算指定日期是当年第几周（按 ISO 8601 标准，周一为一周开始）
