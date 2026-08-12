@@ -584,4 +584,193 @@ export class ScheduleService {
 
     return { success: true };
   }
+
+  /**
+   * 一句话智能解析（对标华为日历"一句话智能创建日程"）
+   * 输入："明天下午3点开会" → 输出 { recordDate, startTime, endTime, eventDetail }
+   * 纯规则解析，无AI调用，稳定快速。前端拿到后预填到新建弹窗。
+   */
+  smartParse(text: string): {
+    recordDate: string;
+    startTime: string | null;
+    endTime: string | null;
+    eventDetail: string;
+    matched: boolean;
+  } {
+    const now = new Date();
+    const result = {
+      recordDate: '',
+      startTime: null as string | null,
+      endTime: null as string | null,
+      eventDetail: text,
+      matched: false,
+    };
+
+    if (!text || !text.trim()) return result;
+
+    // === 1. 解析日期关键词 ===
+    let targetDate = new Date(now);
+    let dateMatched = false;
+
+    if (/今天|今日/.test(text)) {
+      dateMatched = true;
+    } else if (/明天|明日/.test(text)) {
+      targetDate.setDate(targetDate.getDate() + 1);
+      dateMatched = true;
+    } else if (/后天/.test(text)) {
+      targetDate.setDate(targetDate.getDate() + 2);
+      dateMatched = true;
+    } else if (/大后天/.test(text)) {
+      targetDate.setDate(targetDate.getDate() + 3);
+      dateMatched = true;
+    } else if (/下周[一二三四五六日天]/.test(text)) {
+      const m = text.match(/下周([一二三四五六日天])/);
+      if (m) {
+        const map: Record<string, number> = { '日': 0, '天': 0, '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6 };
+        const targetDow = map[m[1]];
+        const curDow = now.getDay();
+        let diff = (targetDow - curDow + 7) % 7;
+        diff = diff === 0 ? 7 : diff; // "下周一"如果今天是周一，则指下下周一
+        targetDate.setDate(targetDate.getDate() + diff);
+        dateMatched = true;
+      }
+    } else if (/本周[一二三四五六日天]/.test(text) || /这周[一二三四五六日天]/.test(text)) {
+      const m = text.match(/[本这]周([一二三四五六日天])/);
+      if (m) {
+        const map: Record<string, number> = { '日': 0, '天': 0, '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6 };
+        const targetDow = map[m[1]];
+        const curDow = now.getDay();
+        let diff = (targetDow - curDow + 7) % 7;
+        targetDate.setDate(targetDate.getDate() + diff);
+        dateMatched = true;
+      }
+    } else if (/周[一二三四五六日天]/.test(text)) {
+      const m = text.match(/周([一二三四五六日天])/);
+      if (m) {
+        const map: Record<string, number> = { '日': 0, '天': 0, '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6 };
+        const targetDow = map[m[1]];
+        const curDow = now.getDay();
+        let diff = (targetDow - curDow + 7) % 7;
+        targetDate.setDate(targetDate.getDate() + diff);
+        dateMatched = true;
+      }
+    } else if (/\d{1,2}月\d{1,2}日?/.test(text)) {
+      const m = text.match(/(\d{1,2})月(\d{1,2})日?/);
+      if (m) {
+        targetDate.setMonth(Number(m[1]) - 1);
+        targetDate.setDate(Number(m[2]));
+        dateMatched = true;
+      }
+    } else if (/\d{4}[-\/]\d{1,2}[-\/]\d{1,2}/.test(text)) {
+      const m = text.match(/(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+      if (m) {
+        targetDate = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+        dateMatched = true;
+      }
+    }
+
+    result.recordDate = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}-${String(targetDate.getDate()).padStart(2, '0')}`;
+
+    // === 2. 解析时间关键词 ===
+    let startHour: number | null = null;
+    let startMinute: number | null = null;
+
+    // "下午3点" "下午15点" "下午3点半" "15:30" "下午三点"
+    const timePatterns = [
+      { re: /(上午|早上|早晨)?(\d{1,2})[点时:：](\d{1,2})?分?/, handler: (m: RegExpMatchArray) => {
+        let h = Number(m[2]);
+        const min = m[3] ? Number(m[3]) : 0;
+        if (m[1] && /上午|早上|早晨/.test(m[1]) && h <= 12) {
+          // 上午保持
+        }
+        return { hour: h, minute: min };
+      }},
+      { re: /(下午|中午|傍晚|晚上|晚)(\d{1,2})[点时:：](\d{1,2})?分?/, handler: (m: RegExpMatchArray) => {
+        let h = Number(m[2]);
+        const min = m[3] ? Number(m[3]) : 0;
+        if (h < 12) h += 12;
+        return { hour: h, minute: min };
+      }},
+      { re: /(\d{1,2}):(\d{1,2})/, handler: (m: RegExpMatchArray) => {
+        return { hour: Number(m[1]), minute: Number(m[2]) };
+      }},
+      { re: /(上午|早上|早晨)(\d{1,2})[点时]/, handler: (m: RegExpMatchArray) => {
+        return { hour: Number(m[2]), minute: 0 };
+      }},
+      { re: /(下午|中午|傍晚|晚上|晚)(\d{1,2})[点时]/, handler: (m: RegExpMatchArray) => {
+        let h = Number(m[2]);
+        if (h < 12) h += 12;
+        return { hour: h, minute: 0 };
+      }},
+      { re: /(\d{1,2})[点时]半/, handler: (m: RegExpMatchArray) => {
+        return { hour: Number(m[1]), minute: 30 };
+      }},
+      { re: /(下午|中午|傍晚|晚上|晚)(\d{1,2})半/, handler: (m: RegExpMatchArray) => {
+        let h = Number(m[2]);
+        if (h < 12) h += 12;
+        return { hour: h, minute: 30 };
+      }},
+    ];
+
+    for (const tp of timePatterns) {
+      const m = text.match(tp.re);
+      if (m) {
+        const r = tp.handler(m);
+        if (r.hour !== null && r.hour >= 0 && r.hour <= 23 && r.minute >= 0 && r.minute <= 59) {
+          startHour = r.hour;
+          startMinute = r.minute;
+          break;
+        }
+      }
+    }
+
+    // 中文数字转换
+    if (startHour === null) {
+      const cnMap: Record<string, number> = { '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '十': 10, '十一': 11, '十二': 12 };
+      const m1 = text.match(/下午([一二三四五六七八九十]+)点/);
+      if (m1) {
+        const h = cnMap[m1[1]];
+        if (h) { startHour = h < 12 ? h + 12 : h; startMinute = 0; }
+      }
+      if (startHour === null) {
+        const m2 = text.match(/上午([一二三四五六七八九十]+)点/);
+        if (m2) {
+          const h = cnMap[m2[1]];
+          if (h) { startHour = h; startMinute = 0; }
+        }
+      }
+    }
+
+    if (startHour !== null && startMinute !== null) {
+      const startTime = new Date(targetDate);
+      startTime.setHours(startHour, startMinute, 0, 0);
+      const endTime = new Date(startTime);
+      endTime.setHours(endTime.getHours() + 1); // 默认1小时
+      result.startTime = `${result.recordDate} ${String(startHour).padStart(2, '0')}:${String(startMinute).padStart(2, '0')}:00`;
+      result.endTime = `${result.recordDate} ${String(endTime.getHours()).padStart(2, '0')}:${String(endTime.getMinutes()).padStart(2, '0')}:00`;
+    }
+
+    // === 3. 解析事件详情（去掉日期时间关键词后剩下的文本） ===
+    let detail = text
+      .replace(/今天|今日|明天|明日|后天|大后天/g, '')
+      .replace(/下周[一二三四五六日天]/g, '')
+      .replace(/[本这]周[一二三四五六日天]/g, '')
+      .replace(/周[一二三四五六日天]/g, '')
+      .replace(/\d{4}[-\/]\d{1,2}[-\/]\d{1,2}/g, '')
+      .replace(/\d{1,2}月\d{1,2}日?/g, '')
+      .replace(/(上午|早上|早晨|下午|中午|傍晚|晚上|晚)/g, '')
+      .replace(/\d{1,2}[点时:：]\d{1,2}分?/g, '')
+      .replace(/\d{1,2}:\d{1,2}/g, '')
+      .replace(/\d{1,2}[点时]半/g, '')
+      .replace(/\d{1,2}[点时]/g, '')
+      .replace(/(下午|中午|傍晚|晚上|晚)([一二三四五六七八九十]+)半/g, '')
+      .replace(/下午([一二三四五六七八九十]+)点/g, '')
+      .replace(/上午([一二三四五六七八九十]+)点/g, '')
+      .replace(/[，,。、\s]+/g, ' ')
+      .trim();
+    result.eventDetail = detail || text;
+
+    result.matched = dateMatched || startHour !== null;
+    return result;
+  }
 }

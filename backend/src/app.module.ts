@@ -53,6 +53,9 @@ import { MagazineModule } from './magazine/magazine.module';
 import { MockDataModule } from './mock-data/mock-data.module';
 import { ShipNoteModule } from './ship-note/ship-note.module';
 import { DiaryBlockModule } from './diary-block/diary-block.module';
+import { ImportantDateModule } from './important-date/important-date.module';
+import { ScheduleReminderModule } from './schedule-reminder/schedule-reminder.module';
+import { ScheduleSettingsModule } from './schedule-settings/schedule-settings.module';
 
 @Module({
   imports: [
@@ -109,6 +112,9 @@ import { DiaryBlockModule } from './diary-block/diary-block.module';
     MockDataModule,
     ShipNoteModule,
     DiaryBlockModule,
+    ImportantDateModule,
+    ScheduleReminderModule,
+    ScheduleSettingsModule,
   ],
   controllers: [HealthController],
   providers: [],

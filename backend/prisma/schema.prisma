@@ -102,6 +102,9 @@ model User {
   recurringScheduleTemplatesAssigned RecurringScheduleTemplate[] @relation("RecurringScheduleAssignedTo")
   recurringScheduleTemplatesCreated RecurringScheduleTemplate[] @relation("RecurringScheduleCreatedBy")
   diaryBlocks  DiaryBlock[]
+  importantDates ImportantDate[]
+  scheduleReminders ScheduleReminder[]
+  scheduleSettings ScheduleSettings?
 
   @@index([username])
 }
@@ -264,6 +267,7 @@ model Schedule {
   // 反向关联：一条日程可被多条日记引用
   relatedDiaries DiaryScheduleRelation[]
   diaryBlocks  DiaryBlock[]
+  reminders ScheduleReminder[]
 
   @@index([teamCode, recordDate])
   @@index([teamCode, shipId])
@@ -273,6 +277,78 @@ model Schedule {
   // P0优化新增：为统计优化的组合索引
   @@index([teamCode, firstType, secondType])
   @@index([teamCode, finishStatus, recordDate])
+}
+
+// ============================================
+// 重要日（生日/纪念日/考试等，对标华为日历"重要日"Tab）
+// ============================================
+model ImportantDate {
+  id           Int      @id @default(autoincrement())
+  teamCode     TeamCode
+  userId       Int     // 创建者
+  name         String  // 名称（考试、生日、重要日...）
+  date         DateTime // 日期
+  repeatType   String   @default("none") // none/yearly/monthly/weekly
+  description  String?  @db.Text
+  attachments  Json?    // 附件列表（URL数组）
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user         User     @relation(fields: [userId], references: [id])
+
+  @@index([teamCode, date])
+  @@index([teamCode, userId])
+  @@index([teamCode, repeatType])
+}
+
+// ============================================
+// 日程提醒（对标华为日历"提醒：10分钟前"）
+// ============================================
+model ScheduleReminder {
+  id           Int      @id @default(autoincrement())
+  teamCode     TeamCode
+  scheduleId   Int      // 关联日程
+  userId       Int     // 创建者
+  remindBefore Int     // 提前多少分钟
+  remindUnit   String   @default("minute") // minute/hour/day
+  isImportant  Boolean  @default(false) // 重要提醒
+  firedAt      DateTime? // 已触发时间（null=未触发）
+
+  createdAt    DateTime @default(now())
+
+  schedule     Schedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  user         User     @relation(fields: [userId], references: [id])
+
+  @@index([teamCode, scheduleId])
+  @@index([teamCode, userId])
+  @@index([teamCode, firedAt])
+}
+
+// ============================================
+// 用户日历偏好设置（对标华为日历"设置"面板）
+// ============================================
+model ScheduleSettings {
+  id                   Int      @id @default(autoincrement())
+  teamCode             TeamCode
+  userId               Int      @unique // 一个用户一条设置
+
+  showLunar            Boolean  @default(true)   // 显示农历
+  showWeekNumber       Boolean  @default(false)  // 显示周数
+  showHolidayRest      Boolean  @default(true)   // 显示节假日休班
+  showHistoricalEvents Boolean  @default(true)   // 显示历史事件
+  weekStartDay         Int      @default(0)      // 一周开始日（0=周日, 1=周一）
+  syncTodo             Boolean  @default(false)  // 同步待办
+  showImportantDate    Boolean  @default(true)   // 显示重要日
+  recommendSubscribe   Boolean  @default(true)   // 推荐订阅
+  otherCalendar        String   @default("chinese_lunar") // 其他历法
+
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  user                 User     @relation(fields: [userId], references: [id])
+
+  @@index([teamCode, userId])
 }
 
 // 操作日志表

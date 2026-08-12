@@ -64,6 +64,12 @@ export interface Ship {
   updatedAt?: string;
 }
 
+// 日程优先级（四象限）
+export type Priority = 'urgent_important' | 'urgent' | 'important' | 'normal' | 'low';
+
+// 日程完成状态
+export type ScheduleStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
+
 export interface Schedule {
   id: number;
   teamCode: string;

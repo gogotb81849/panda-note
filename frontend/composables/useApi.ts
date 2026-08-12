@@ -847,6 +847,42 @@ export const useApi = () => {
       },
       // 批量创建
       bulkCreate: (items: any[]) => apiFetch('/schedules/bulk-create', { method: 'POST', body: { items } }),
+      // 一句话智能创建（自然语言→日程字段）
+      smartParse: (text: string) => apiFetch('/schedules/smart-parse', { method: 'POST', body: { text } }),
+    },
+
+    // 重要日（对标华为日历"重要日"Tab：生日/纪念日/考试等）
+    importantDates: {
+      getAll: (startDate?: string, endDate?: string) => {
+        const params = new URLSearchParams();
+        if (startDate) params.append('startDate', startDate);
+        if (endDate) params.append('endDate', endDate);
+        return apiFetch(`/important-dates?${params.toString()}`);
+      },
+      create: (data: any) => apiFetch('/important-dates', { method: 'POST', body: data }),
+      update: (id: number, data: any) => apiFetch(`/important-dates/${id}`, { method: 'PATCH', body: data }),
+      delete: (id: number) => apiFetch(`/important-dates/${id}`, { method: 'DELETE' }),
+    },
+
+    // 日程提醒（对标华为日历"提醒：10分钟前"）
+    scheduleReminders: {
+      getPending: (startDate?: string, endDate?: string) => {
+        const params = new URLSearchParams();
+        if (startDate) params.append('startDate', startDate);
+        if (endDate) params.append('endDate', endDate);
+        return apiFetch(`/schedule-reminders?${params.toString()}`);
+      },
+      getBySchedule: (scheduleId: number) => apiFetch(`/schedule-reminders/by-schedule/${scheduleId}`),
+      create: (data: any) => apiFetch('/schedule-reminders', { method: 'POST', body: data }),
+      update: (id: number, data: any) => apiFetch(`/schedule-reminders/${id}`, { method: 'PATCH', body: data }),
+      delete: (id: number) => apiFetch(`/schedule-reminders/${id}`, { method: 'DELETE' }),
+      removeAllBySchedule: (scheduleId: number) => apiFetch(`/schedule-reminders/by-schedule/${scheduleId}`, { method: 'DELETE' }),
+    },
+
+    // 日历偏好设置（对标华为日历"设置"面板）
+    scheduleSettings: {
+      get: () => apiFetch('/schedule-settings'),
+      update: (data: any) => apiFetch('/schedule-settings', { method: 'PATCH', body: data }),
     },
 
     dict: {

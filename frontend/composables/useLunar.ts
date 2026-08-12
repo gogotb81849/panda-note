@@ -39,17 +39,83 @@ const nStr1 = ['日','一','二','三','四','五','六','七','八','九','十'
 const nStr2 = ['初','十','廿','']
 const monthName = ['正','二','三','四','五','六','七','八','九','十','冬','腊']
 
-// 二十四节气
+// 二十四节气名称（按公历月份顺序，每月2个）
 const solarTermNames = [
   '小寒','大寒','立春','雨水','惊蛰','春分','清明','谷雨',
   '立夏','小满','芒种','夏至','小暑','大暑','立秋','处暑',
   '白露','秋分','寒露','霜降','立冬','小雪','大雪','冬至'
 ]
 
-const solarTermBase = [
-  [0,21208],[42467,611],[42467,611],[42367,611],[42367,611],[42367,611],[42367,611],
-  [42367,611],[42367,611],[42367,611],[42367,611],[42367,611]
+// 24 节气 C 值表（20世纪 / 21世纪），用于寿星通用公式
+// 公式: Y * 0.2422 + C - floor(Y/4) - floor((Y-1)/4)（结果取整数日 = 当月节气日）
+// 节气序号 0-23 对应小寒..冬至；按月份 + 上/下节气排列
+// C 值来源：[20世纪, 21世纪]，参考《新编万年历》
+const solarTermCValues: Array<[number, number]> = [
+  [5.4055, 5.4055],   // 小寒 1月
+  [20.12, 20.12],     // 大寒 1月
+  [4.1549, 3.87],     // 立春 2月（21世纪修正）
+  [19.0198, 18.73],   // 雨水 2月
+  [6.2322, 5.63],     // 惊蛰 3月
+  [20.946, 20.646],   // 春分 3月
+  [5.528, 4.81],      // 清明 4月
+  [20.332, 20.1],     // 谷雨 4月
+  [6.318, 5.52],      // 立夏 5月
+  [21.232, 21.04],    // 小满 5月
+  [6.5, 5.678],       // 芒种 6月
+  [22.028, 21.87],    // 夏至 6月
+  [7.928, 7.108],     // 小暑 7月
+  [23.232, 22.83],    // 大暑 7月
+  [8.428, 7.5],       // 立秋 8月
+  [23.628, 23.13],    // 处暑 8月
+  [8.528, 7.646],     // 白露 9月
+  [23.928, 23.45],    // 秋分 9月
+  [9.328, 8.318],     // 寒露 10月
+  [24.028, 23.438],   // 霜降 10月
+  [8.328, 7.438],     // 立冬 11月
+  [22.828, 22.36],    // 小雪 11月
+  [7.628, 7.18],      // 大雪 12月
+  [22.728, 21.94],    // 冬至 12月
 ]
+
+// 计算某年的 24 节气日期表（返回 24 个 Date 对象，对应序号 0..23）
+function computeSolarTermsOfYear(year: number): Date[] {
+  const result: Date[] = []
+  const century = year >= 2000 ? 1 : 0
+  for (let i = 0; i < 24; i++) {
+    const month = Math.floor(i / 2) + 1 // 1..12
+    const c = solarTermCValues[i][century]
+    // 公式: Y * 0.2422 + C - floor(Y/4) - floor((Y-1)/4)
+    // 其中 Y 是年份后两位
+    const y2 = year % 100
+    let day = Math.floor(y2 * 0.2422 + c - Math.floor(y2 / 4) - Math.floor((y2 - 1) / 4))
+    // 21世纪某些节气有特殊修正，简化处理：限制在 1-31 之间
+    if (day < 1) day = 1
+    if (day > 31) day = 30
+    result.push(new Date(year, month - 1, day))
+  }
+  return result
+}
+
+// 缓存：年份 -> Map<"MM-DD", 节气名>
+const solarTermCache = new Map<number, Map<string, string>>()
+
+function getSolarTermMap(year: number): Map<string, string> {
+  if (solarTermCache.has(year)) return solarTermCache.get(year)!
+  const terms = computeSolarTermsOfYear(year)
+  const map = new Map<string, string>()
+  terms.forEach((d, i) => {
+    const key = `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    map.set(key, solarTermNames[i])
+  })
+  solarTermCache.set(year, map)
+  return map
+}
+
+// 获取指定日期的节气名（无则返回空串）
+function getSolarTermByDate(date: Date): string {
+  const key = `${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+  return getSolarTermMap(date.getFullYear()).get(key) || ''
+}
 
 // 节日
 const festivals: Record<string, string> = {
@@ -208,6 +274,195 @@ function getSolarFestival(month: number, day: number) {
   return festivals[key] || ''
 }
 
+// 历史事件纪念日（按月-日 → 事件名）
+// 来源：船舶政工系统常用纪念日（建党/建军/建国/抗战胜利/烈士纪念日/辛亥革命等）
+const historicalEvents: Record<string, string> = {
+  '0207': '京汉铁路罢工',
+  '0308': '国际劳动妇女节',
+  '0312': '孙中山逝世纪念日',
+  '0314': '马克思逝世纪念日',
+  '0424': '中国航天日',
+  '0504': '五四运动',
+  '0505': '马克思诞辰',
+  '0601': '国际儿童节',
+  '0701': '中国共产党成立纪念日',
+  '0707': '七七事变',
+  '0801': '八一南昌起义',
+  '0815': '日本宣布无条件投降',
+  '0903': '中国人民抗日战争胜利纪念日',
+  '0909': '毛泽东逝世纪念日',
+  '0918': '九一八事变',
+  '0930': '烈士纪念日',
+  '1001': '中华人民共和国成立',
+  '1010': '辛亥革命纪念日',
+  '1019': '抗美援朝出国作战纪念日',
+  '1112': '孙中山诞辰',
+  '1201': '世界艾滋病日',
+  '1209': '一二·九运动',
+  '1213': '南京大屠杀死难者国家公祭日',
+  '1226': '毛泽东诞辰',
+}
+
+// 获取历史事件纪念日
+function getHistoricalEvent(month: number, day: number): string {
+  const key = String(month).padStart(2, '0') + String(day).padStart(2, '0')
+  return historicalEvents[key] || ''
+}
+
+// 法定节假日与调休数据（按年份维护，参考国务院放假安排）
+// 字段：'holiday' = 法定假日；'workday' = 周末调休上班；未列入的按周末默认判断
+// 维护说明：每年国务院发布放假安排后追加新一年数据
+interface HolidayEntry {
+  type: 'holiday' | 'workday'
+  name?: string // 假日名称
+}
+const holidayData: Record<string, Record<string, HolidayEntry>> = {
+  '2024': {
+    '0101': { type: 'holiday', name: '元旦' },
+    '0210': { type: 'holiday', name: '春节' },
+    '0211': { type: 'holiday', name: '春节' },
+    '0212': { type: 'holiday', name: '春节' },
+    '0213': { type: 'holiday', name: '春节' },
+    '0214': { type: 'holiday', name: '春节' },
+    '0215': { type: 'holiday', name: '春节' },
+    '0216': { type: 'holiday', name: '春节' },
+    '0217': { type: 'holiday', name: '春节' },
+    '0204': { type: 'workday' }, // 春节调休上班
+    '0218': { type: 'workday' }, // 春节调休上班
+    '0404': { type: 'holiday', name: '清明节' },
+    '0405': { type: 'holiday', name: '清明节' },
+    '0406': { type: 'holiday', name: '清明节' },
+    '0407': { type: 'workday' }, // 清明调休上班
+    '0501': { type: 'holiday', name: '劳动节' },
+    '0502': { type: 'holiday', name: '劳动节' },
+    '0503': { type: 'holiday', name: '劳动节' },
+    '0504': { type: 'holiday', name: '劳动节' },
+    '0505': { type: 'holiday', name: '劳动节' },
+    '0428': { type: 'workday' }, // 五一调休上班
+    '0511': { type: 'workday' }, // 五一调休上班
+    '0610': { type: 'holiday', name: '端午节' },
+    '0611': { type: 'holiday', name: '端午节' },
+    '0612': { type: 'holiday', name: '端午节' },
+    '0915': { type: 'holiday', name: '中秋节' },
+    '0916': { type: 'holiday', name: '中秋节' },
+    '0917': { type: 'holiday', name: '中秋节' },
+    '0914': { type: 'workday' }, // 中秋调休上班
+    '0929': { type: 'workday' }, // 国庆调休上班
+    '0930': { type: 'workday' }, // 国庆调休上班
+    '1001': { type: 'holiday', name: '国庆节' },
+    '1002': { type: 'holiday', name: '国庆节' },
+    '1003': { type: 'holiday', name: '国庆节' },
+    '1004': { type: 'holiday', name: '国庆节' },
+    '1005': { type: 'holiday', name: '国庆节' },
+    '1006': { type: 'holiday', name: '国庆节' },
+    '1007': { type: 'holiday', name: '国庆节' },
+    '1012': { type: 'workday' }, // 国庆调休上班
+  },
+  '2025': {
+    '0101': { type: 'holiday', name: '元旦' },
+    '0128': { type: 'holiday', name: '春节' },
+    '0129': { type: 'holiday', name: '春节' },
+    '0130': { type: 'holiday', name: '春节' },
+    '0131': { type: 'holiday', name: '春节' },
+    '0201': { type: 'holiday', name: '春节' },
+    '0202': { type: 'holiday', name: '春节' },
+    '0203': { type: 'holiday', name: '春节' },
+    '0204': { type: 'holiday', name: '春节' },
+    '0126': { type: 'workday' }, // 春节调休上班
+    '0208': { type: 'workday' }, // 春节调休上班
+    '0404': { type: 'holiday', name: '清明节' },
+    '0405': { type: 'holiday', name: '清明节' },
+    '0406': { type: 'holiday', name: '清明节' },
+    '0501': { type: 'holiday', name: '劳动节' },
+    '0502': { type: 'holiday', name: '劳动节' },
+    '0503': { type: 'holiday', name: '劳动节' },
+    '0504': { type: 'holiday', name: '劳动节' },
+    '0505': { type: 'holiday', name: '劳动节' },
+    '0427': { type: 'workday' }, // 五一调休上班
+    '0531': { type: 'holiday', name: '端午节' },
+    '0601': { type: 'holiday', name: '端午节' },
+    '0602': { type: 'holiday', name: '端午节' },
+    '1001': { type: 'holiday', name: '国庆节' },
+    '1002': { type: 'holiday', name: '国庆节' },
+    '1003': { type: 'holiday', name: '国庆节' },
+    '1004': { type: 'holiday', name: '国庆节' },
+    '1005': { type: 'holiday', name: '国庆节' },
+    '1006': { type: 'holiday', name: '国庆节' },
+    '1007': { type: 'holiday', name: '国庆节' },
+    '1008': { type: 'holiday', name: '国庆节' },
+    '0928': { type: 'workday' }, // 国庆调休上班
+    '1011': { type: 'workday' }, // 国庆调休上班
+    '1006': { type: 'holiday', name: '中秋节' }, // 中秋国庆连休
+    '1007': { type: 'holiday', name: '中秋节' },
+  },
+  '2026': {
+    '0101': { type: 'holiday', name: '元旦' },
+    '0102': { type: 'holiday', name: '元旦' },
+    '0103': { type: 'holiday', name: '元旦' },
+    // 2026 春节：2 月 17 日（农历正月初一）
+    '0217': { type: 'holiday', name: '春节' },
+    '0218': { type: 'holiday', name: '春节' },
+    '0219': { type: 'holiday', name: '春节' },
+    '0220': { type: 'holiday', name: '春节' },
+    '0221': { type: 'holiday', name: '春节' },
+    '0222': { type: 'holiday', name: '春节' },
+    '0223': { type: 'holiday', name: '春节' },
+    '0224': { type: 'holiday', name: '春节' },
+    '0215': { type: 'workday' }, // 春节调休上班
+    '0228': { type: 'workday' }, // 春节调休上班
+    '0405': { type: 'holiday', name: '清明节' },
+    '0406': { type: 'holiday', name: '清明节' },
+    '0407': { type: 'holiday', name: '清明节' },
+    '0501': { type: 'holiday', name: '劳动节' },
+    '0502': { type: 'holiday', name: '劳动节' },
+    '0503': { type: 'holiday', name: '劳动节' },
+    '0504': { type: 'holiday', name: '劳动节' },
+    '0505': { type: 'holiday', name: '劳动节' },
+    '0426': { type: 'workday' }, // 五一调休上班
+    '0509': { type: 'workday' }, // 五一调休上班
+    '0619': { type: 'holiday', name: '端午节' },
+    '0620': { type: 'holiday', name: '端午节' },
+    '0621': { type: 'holiday', name: '端午节' },
+    '0925': { type: 'holiday', name: '中秋节' },
+    '0926': { type: 'holiday', name: '中秋节' },
+    '0927': { type: 'holiday', name: '中秋节' },
+    '1001': { type: 'holiday', name: '国庆节' },
+    '1002': { type: 'holiday', name: '国庆节' },
+    '1003': { type: 'holiday', name: '国庆节' },
+    '1004': { type: 'holiday', name: '国庆节' },
+    '1005': { type: 'holiday', name: '国庆节' },
+    '1006': { type: 'holiday', name: '国庆节' },
+    '1007': { type: 'holiday', name: '国庆节' },
+    '1008': { type: 'holiday', name: '国庆节' },
+    '0927': { type: 'workday' }, // 国庆调休上班（占位，以国务院公告为准）
+    '1010': { type: 'workday' }, // 国庆调休上班（占位，以国务院公告为准）
+  },
+}
+
+// 获取指定日期的休班类型
+// 返回：{ isHoliday: boolean, isWorkday: boolean, name: string }
+// 优先级：holidayData > 周末默认判断 > 工作日
+function getHolidayInfo(date: Date): { isHoliday: boolean; isWorkday: boolean; name: string } {
+  const yearStr = String(date.getFullYear())
+  const mdKey = `${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`
+  const yearData = holidayData[yearStr]
+  if (yearData && yearData[mdKey]) {
+    const entry = yearData[mdKey]
+    return {
+      isHoliday: entry.type === 'holiday',
+      isWorkday: entry.type === 'workday',
+      name: entry.name || '',
+    }
+  }
+  // 默认：周末休班
+  const dow = date.getDay()
+  return {
+    isHoliday: dow === 0 || dow === 6,
+    isWorkday: false,
+    name: '',
+  }
+}
+
 export function useLunar() {
   function getLunarDate(date: Date) {
     const lunar = toLunar(date)
@@ -237,6 +492,7 @@ export function useLunar() {
     }
   }
 
+  // 完整农历信息（含节气、历史事件、休班标记），供华为日历组件使用
   function getLunarInfo(date: Date) {
     const lunar = toLunar(date)
     const lunarMonthName = getLunarMonthName(lunar.month, lunar.isLeap)
@@ -245,17 +501,23 @@ export function useLunar() {
     const animal = getAnimal(lunar.year)
     const lunarFestival = getLunarFestival(lunar.month, lunar.day, lunar.isLeap, lunar.year)
     const solarFestival = getSolarFestival(date.getMonth() + 1, date.getDate())
+    const solarTerm = getSolarTermByDate(date)
+    const historicalEvent = getHistoricalEvent(date.getMonth() + 1, date.getDate())
+    const holidayInfo = getHolidayInfo(date)
 
     const holiday = lunarFestival || solarFestival || ''
     const lunarStr = `${lunarMonthName}${lunarDayName}`
-    const solarTerm = '' // 节气计算较复杂，暂时留空
 
     return {
       lunar: lunarStr,
       ganZhi,
       animal,
-      holiday,
-      solarTerm,
+      holiday,             // 节日（公历+农历，显示用，节气独立）
+      solarTerm,           // 24节气（如"立春"，无则空串）
+      historicalEvent,     // 历史事件纪念日（如"七七事变"，无则空串）
+      isHoliday: holidayInfo.isHoliday, // 是否休（含周末+法定假日）
+      isWorkday: holidayInfo.isWorkday, // 是否调休上班（周末补班）
+      holidayName: holidayInfo.name,    // 假日名称（如"春节"）
       lunarYear: lunar.year,
       lunarMonth: lunar.month,
       lunarDay: lunar.day,
@@ -263,8 +525,34 @@ export function useLunar() {
     }
   }
 
+  // 月格主显示文案：节日 > 节气 > 历史事件 > 农历日
+  // 用于月视图日期格子底部一行小字（华为日历风格）
+  function getDayCaption(date: Date): string {
+    const info = getLunarInfo(date)
+    if (info.holiday) return info.holiday
+    if (info.solarTerm) return info.solarTerm
+    if (info.historicalEvent) return info.historicalEvent
+    // 初一显示农历月名（如"正月"），其他日显示农历日（如"初二"）
+    if (info.lunarDay === 1) {
+      const lunar = toLunar(date)
+      return getLunarMonthName(lunar.month, lunar.isLeap)
+    }
+    return info.lunar
+  }
+
+  // 计算指定日期是当年第几周（按 ISO 8601 标准，周一为一周开始）
+  function getWeekOfYear(date: Date): number {
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
+    const dayNum = d.getUTCDay() || 7
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum)
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
+    return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7)
+  }
+
   return {
     getLunarDate,
     getLunarInfo,
+    getDayCaption,
+    getWeekOfYear,
   }
 }

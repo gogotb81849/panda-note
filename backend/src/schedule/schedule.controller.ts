@@ -119,6 +119,17 @@ export class ScheduleController {
     return this.scheduleService.bulkCreate(body.items, userId, teamCode, req.user.role, getClientIp(req), userAgent);
   }
 
+  /**
+   * 一句话智能创建日程（对标华为日历"一句话智能创建日程"）
+   * 前端传入自然语言文本（如"明天下午3点开会"），后端解析为日程字段
+   * 解析逻辑：基于规则的正则匹配 + 时间推断，不依赖外部AI服务（稳定快速）
+   * 返回结构化字段供前端预填到新建弹窗，用户可再调整后保存
+   */
+  @Post('smart-parse')
+  smartParse(@Body() body: { text: string }) {
+    return this.scheduleService.smartParse(body.text || '');
+  }
+
   @Delete(':id')
   @Roles(UserRole.shore_crew_supervisor)
   remove(@Param('id') id: string, @Request() req, @Headers('user-agent') userAgent: string) {
