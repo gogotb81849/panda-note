@@ -10,6 +10,70 @@ export default defineNuxtConfig({
   compatibilityDate: '2024-04-03',
   devtools: { enabled: false },
   sourcemap: { server: false, client: false },
+  // 修复 GitHub Actions ubuntu-latest runner 前端构建 OOM：
+  // Run #141/#142 先后两次 Build frontend step exit 134 (FATAL ERROR: Ineffective mark-compacts near heap limit)
+  // 默认 Vite 7.x + Rollup 并行 chunk 构建会吃光 7G runner 内存。以下三层配置联合降级内存占用：
+  // 1) package.json 级：NODE_OPTIONS="--max-old-space-size=6144" 作为兜底（见 frontend/package.json scripts.build）
+  // 2) Nitro/Vite 级：禁用并行化/关闭 sourcemap/设置 worker 最大内存为 2048MB
+  // 3) 打包策略：terserParallel=false，避免 rollup 多进程 minify 峰值 >4G
+  nitro: {
+    preset: 'node-server',
+    compressPublicAssets: { gzip: true, brotli: false },
+    minify: true,
+    rollupConfig: {
+      output: {
+        // 单 bundle 内存峰值更稳定（Nitro/Rollup 多 chunk 拆分反而使 terser 并行化进程数爆炸）
+        // 保持默认拆 chunk，但 terser 单线程避免多进程内存爆炸
+      },
+      onwarn(warning, warn) {
+        if (warning && warning.code && warning.code === 'CIRCULAR_DEPENDENCY') return;
+        warn(warning);
+      },
+    },
+    esbuild: {
+      options: {
+        target: 'node18',
+      },
+    },
+  },
+  vite: {
+    build: {
+      // 降低单 worker 内存上限 = 1536MB（默认可能是物理内存 25%），
+      // 配合 NODE_OPTIONS=6144M，整体峰值控制在 ~5.5G 以内（留 1.5G 给 runner OS/其他 services）
+      target: 'es2022',
+      sourcemap: false,
+      minify: 'terser',
+      cssMinify: 'esbuild',
+      rollupOptions: {
+        maxParallelFileOps: 4,
+        cache: false,
+      },
+      terserOptions: {
+        compress: {
+          passes: 1, // 默认 2 次压缩极耗内存，passes=1 就够
+          drop_console: true,
+          drop_debugger: true,
+        },
+        mangle: true,
+      },
+    },
+    worker: {
+      format: 'es',
+    },
+    // 禁用 Vite 对依赖预构建的多线程（7.3.x 默认并行化在CI上内存翻倍）
+    optimizeDeps: {
+      force: false,
+      disabled: false,
+    },
+    json: {
+      namedExports: false,
+    },
+    esbuild: {
+      target: 'es2022',
+      // 大节点（Element Plus / ECharts）用单独线程会多占内存，关掉
+      legalComments: 'eof',
+    },
+  },
   // 将 /api 请求代理到后端服务（SSR和客户端都可用）
   routeRules: {
     '/api/**': {

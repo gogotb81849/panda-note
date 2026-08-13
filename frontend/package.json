@@ -6,11 +6,11 @@
   "scripts": {
     "dev": "nuxt dev",
     "prebuild": "node ../scripts/bump-version.js",
-    "build": "nuxt build",
-    "generate": "nuxt generate",
+    "build": "NODE_OPTIONS=\"--max-old-space-size=6144\" nuxt build",
+    "generate": "NODE_OPTIONS=\"--max-old-space-size=6144\" nuxt generate",
     "preview": "nuxt preview",
     "electron:dev": "NODE_ENV=development electron electron/main.js",
-    "electron:build": "nuxt build && electron-builder --config electron-builder.yml",
+    "electron:build": "NODE_OPTIONS=\"--max-old-space-size=6144\" nuxt build && electron-builder --config electron-builder.yml",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
