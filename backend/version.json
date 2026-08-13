@@ -1,10 +1,10 @@
 {
-  "version": "1.1.0.0848",
-  "previous_version": "1.1.0.0802c",
-  "buildTime": "2026-08-08T13:08:32.393Z",
+  "version": "1.1.0.0813",
+  "previous_version": "1.1.0.0848",
+  "buildTime": "2026-08-13T00:00:00.000Z",
   "environment": "production",
   "nodeVersion": "auto",
   "changes": [
-    "【数据流修正】移除人员派任页'初始化派任数据'按钮及后端initialize-from-ships接口：政委数据首次已从船舶资料硬复制到派任表作为初始值，后续派任表为唯一权威源，船舶表通过派任表变更自动同步。保留初始化入口会造成'船舶表→派任表→船舶表'死循环，违背权威源原则，故彻底移除前端按钮、API调用、Controller接口和Service方法"
+    "【工具箱集成】新增海上菜篮子工具箱联动服务 ShipPlantToolService：① PANDA_TO_SHIP_VERSION_MAP 版本绑定表（熊猫笔记 1.1.0.0813 ↔ 海上菜篮子 v1.6.2）；② /api/pandanote/manifest 握手响应 5 分钟缓存；③ 健康检查接口；④ 提供 POST /api/toolbox/ship-plant/sync 手动触发服务器联动更新脚本，将海上菜篮子同步更新到绑定 TAG（默认不自动触发，避免熊猫笔记每一次发版都重启海上菜篮子容器）。详细架构与剥离SOP见 haishang-shucai-zhongzhi/003文档第九章。"
   ]
 }
