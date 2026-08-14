@@ -1,5 +1,6 @@
-import { Controller, Post, Body, UseGuards, Request, Headers } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Request, Headers, Get, Query } from '@nestjs/common';
 import { ToolboxService } from './toolbox.service';
+import { ShipPlantSimpleEngineService, KnowledgeAnswer, PlanRotationResponse, SupplyDemandResponse } from './ship-plant-simple-engine.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { UserId, UserTeam } from '../auth/user.decorator';
 import { TeamCode } from '@prisma/client';
@@ -30,7 +31,10 @@ interface ImageCompressionResult {
 @Controller('toolbox')
 @UseGuards(JwtAuthGuard)
 export class ToolboxController {
-  constructor(private readonly toolboxService: ToolboxService) {}
+  constructor(
+    private readonly toolboxService: ToolboxService,
+    private readonly shipPlant: ShipPlantSimpleEngineService,
+  ) {}
 
   /**
    * PDF智能双轨压缩
@@ -87,5 +91,44 @@ export class ToolboxController {
     });
 
     return result;
+  }
+
+  // ========== 海上菜篮子（内嵌版 Node 简化引擎） ==========
+  // 说明：为了让陈先生今天就看到实际效果、不用额外部署 Java/Docker/MySQL，
+  // 轮作算法、产能供需、知识库问答都作为熊猫笔记后端的普通 endpoint 直接运行。
+  // 将来如果要独立交付给客户部署，使用 POST /api/admin/ship-plant/export-standalone 一键导出。
+
+  @Post('ship-plant/plan-rotation')
+  async shipPlantPlanRotation(
+    @Body() body: { horizonDays: number; crew: number; startDate: string; slotsSnapshot?: any[]; vegDefs?: any[] },
+  ): Promise<{ success: boolean; data: PlanRotationResponse }> {
+    const data = await this.shipPlant.planRotation({
+      horizonDays: body.horizonDays ?? 90,
+      crew: body.crew ?? 22,
+      startDate: body.startDate ?? new Date().toISOString().slice(0, 10),
+      slotsSnapshot: body.slotsSnapshot,
+      vegDefs: body.vegDefs,
+    });
+    return { success: true, data };
+  }
+
+  @Post('ship-plant/calc-supply-demand')
+  async shipPlantSupplyDemand(
+    @Body() body: { crew: number; today?: string; slotsSnapshot: any[] },
+  ): Promise<{ success: boolean; data: SupplyDemandResponse }> {
+    const data = await this.shipPlant.calcSupplyDemand({
+      crew: body.crew ?? 22,
+      today: body.today,
+      slotsSnapshot: body.slotsSnapshot ?? [],
+    });
+    return { success: true, data };
+  }
+
+  @Get('ship-plant/knowledge')
+  async shipPlantKnowledge(
+    @Query('q') q: string,
+  ): Promise<{ success: boolean; data: KnowledgeAnswer }> {
+    const data = await this.shipPlant.answerKnowledge({ question: q ?? '' });
+    return { success: true, data };
   }
 }

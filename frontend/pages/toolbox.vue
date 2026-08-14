@@ -65,6 +65,16 @@
           <el-button type="primary" class="tool-btn">开始训练</el-button>
         </div>
       </el-card>
+
+      <!-- 海上菜篮子（内嵌版，和熊猫笔记本就是一体！） -->
+      <el-card class="tool-card tool-card-highlight cursor-pointer hover:shadow-lg transition-shadow" @click="openShipPlant">
+        <div class="tool-content">
+          <div class="tool-icon">🌱</div>
+          <h3>海上菜篮子</h3>
+          <p>密闭舱室蔬菜智能规划：3D货架、轮作、知识库、大屏</p>
+          <el-button type="success" class="tool-btn">进入菜篮子</el-button>
+        </div>
+      </el-card>
     </div>
     
     <!-- PDF压缩对话框 -->
@@ -125,6 +135,12 @@ const openMagazine = () => {
 
 const openShipQuiz = () => {
   router.push('/training/ship-quiz')
+}
+
+const openShipPlant = () => {
+  // 完全内嵌版本（和熊猫笔记就是一体！不走 iframe、不用额外部署）
+  // 架构说明见 003 文档第十章『嵌入一体化 + 一键剥离导出』路线
+  router.push('/toolbox/ship-plant')
 }
 </script>
 
@@ -188,6 +204,17 @@ const openShipQuiz = () => {
 
 .tool-btn {
   width: 100%;
+}
+
+.tool-card-highlight {
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 55%, #bbf7d0 100%);
+  border: 1px solid #86efac;
+  box-shadow: 0 8px 24px -12px rgba(34, 197, 94, 0.35);
+  transition: transform .2s ease, box-shadow .2s ease;
+}
+.tool-card-highlight:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 18px 40px -16px rgba(22, 163, 74, 0.45) !important;
 }
 
 @media (max-width: 768px) {

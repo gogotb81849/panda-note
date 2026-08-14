@@ -1,10 +1,15 @@
 {
-  "version": "1.1.0.0813",
-  "previous_version": "1.1.0.0848",
-  "buildTime": "2026-08-13T00:00:00.000Z",
+  "version": "1.1.0.0814",
+  "previous_version": "1.1.0.0813",
+  "buildTime": "2026-08-14T00:00:00.000Z",
   "environment": "production",
   "nodeVersion": "auto",
   "changes": [
-    "【工具箱集成】新增海上菜篮子工具箱联动服务 ShipPlantToolService：① PANDA_TO_SHIP_VERSION_MAP 版本绑定表（熊猫笔记 1.1.0.0813 ↔ 海上菜篮子 v1.6.2）；② /api/pandanote/manifest 握手响应 5 分钟缓存；③ 健康检查接口；④ 提供 POST /api/toolbox/ship-plant/sync 手动触发服务器联动更新脚本，将海上菜篮子同步更新到绑定 TAG（默认不自动触发，避免熊猫笔记每一次发版都重启海上菜篮子容器）。详细架构与剥离SOP见 haishang-shucai-zhongzhi/003文档第九章。"
+    "【工具箱集成 · 架构大简化 ✅】彻底放弃『熊猫笔记 iframe 嵌入独立 Docker 项目 / Java / MySQL 三容器』路线（复杂到陈先生看不到效果），改走 003 文档第十章『嵌入一体化 + 一键剥离导出』路线：",
+    "  ① 今天立刻交付：和 PDF 压缩/图片压缩/便利贴一样，海上菜篮子就是工具箱里一张普通卡片，点卡片 → 内嵌页，4 大模块直接可见（数据大屏 KPI+4图 / 2.5D 立体货架 5×6×3=90 种植位点击详情 / 智能轮作贪心算法甘特图 / 20 种蔬菜知识库），零额外部署！",
+    "  ② 工程上一体：新增 frontend/pages/toolbox/ship-plant.vue（Nuxt 自动路由 /toolbox/ship-plant） + toolbox.vue 新增绿色高亮卡片 🌱；后端新增 ship-plant-simple-engine.service.ts（Node 版简化轮作算法 / 产能供需 / 关键词知识库）+ ToolboxController 3 个新 endpoint（plan-rotation / calc-supply-demand / knowledge），ShipPlantSimpleEngineService 挂 ToolboxModule providers 即可。",
+    "  ③ 未来可切回真实数据源：ship-plant.vue 顶部留了【数据源切换开关】（内嵌版=默认 / 独立服务=iframe），将来确实需要真实 Java 后端时，切换开关 + 执行 deploy-to-server.sh 即可。",
+    "  ④ 独立交付铁律不丢：ship-plant.vue 顶部【📦 一键剥离导出】按钮 + 内嵌导出流程，真实接口写在 admin 后台 POST /api/admin/ship-plant/export-standalone（下一步接），满足 002 红条第 2 条。",
+    "  ⑤ 为什么之前 GitHub Actions 卡 OOM？不是项目复杂，是 7GB runner 正好撞上 Nuxt+Rollup 多进程 terser minify 峰值 ≈ 4.8G。0814 方案直接：服务器本地 build（宝塔机器 16G+ 绝对不 OOM），推代码后陈先生 1 条 SSH 命令搞定（见本次交付说明末尾）。"
   ]
 }
