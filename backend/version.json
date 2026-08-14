@@ -1,15 +1,15 @@
 {
-  "version": "1.1.0.0814",
-  "previous_version": "1.1.0.0813",
-  "buildTime": "2026-08-14T00:00:00.000Z",
+  "version": "1.1.0.0814b",
+  "previous_version": "1.1.0.0814",
+  "buildTime": "2026-08-14T12:00:00.000Z",
   "environment": "production",
   "nodeVersion": "auto",
   "changes": [
-    "【工具箱集成 · 架构大简化 ✅】彻底放弃『熊猫笔记 iframe 嵌入独立 Docker 项目 / Java / MySQL 三容器』路线（复杂到陈先生看不到效果），改走 003 文档第十章『嵌入一体化 + 一键剥离导出』路线：",
-    "  ① 今天立刻交付：和 PDF 压缩/图片压缩/便利贴一样，海上菜篮子就是工具箱里一张普通卡片，点卡片 → 内嵌页，4 大模块直接可见（数据大屏 KPI+4图 / 2.5D 立体货架 5×6×3=90 种植位点击详情 / 智能轮作贪心算法甘特图 / 20 种蔬菜知识库），零额外部署！",
-    "  ② 工程上一体：新增 frontend/pages/toolbox/ship-plant.vue（Nuxt 自动路由 /toolbox/ship-plant） + toolbox.vue 新增绿色高亮卡片 🌱；后端新增 ship-plant-simple-engine.service.ts（Node 版简化轮作算法 / 产能供需 / 关键词知识库）+ ToolboxController 3 个新 endpoint（plan-rotation / calc-supply-demand / knowledge），ShipPlantSimpleEngineService 挂 ToolboxModule providers 即可。",
-    "  ③ 未来可切回真实数据源：ship-plant.vue 顶部留了【数据源切换开关】（内嵌版=默认 / 独立服务=iframe），将来确实需要真实 Java 后端时，切换开关 + 执行 deploy-to-server.sh 即可。",
-    "  ④ 独立交付铁律不丢：ship-plant.vue 顶部【📦 一键剥离导出】按钮 + 内嵌导出流程，真实接口写在 admin 后台 POST /api/admin/ship-plant/export-standalone（下一步接），满足 002 红条第 2 条。",
-    "  ⑤ 为什么之前 GitHub Actions 卡 OOM？不是项目复杂，是 7GB runner 正好撞上 Nuxt+Rollup 多进程 terser minify 峰值 ≈ 4.8G。0814 方案直接：服务器本地 build（宝塔机器 16G+ 绝对不 OOM），推代码后陈先生 1 条 SSH 命令搞定（见本次交付说明末尾）。"
+    "【内嵌菜篮子 · 深色科技大屏重写 ✅】对原版海上菜篮子做了全维度对标，把第一版『白底简陋表格』重写为深色科技大屏：",
+    "  ① 视觉对齐原版：5 区布局（顶部通栏 KPI / 左列航次档案+货架配置+伙食需求 / 中列 2.5D 货架+仪表盘+甘特图+60 天产出曲线 / 右列任务清单+采摘预测+品种结构饼图 / 底部统计+导出）。深色科技蓝青配色（#00c8ff / #00ff9d / #ffbc00 / #ff3d48），霓虹边框+流光进度条+滚动告警+脉冲呼吸点全部还原。",
+    "  ② 功能补齐：90 个种植位全部可点击查看详情（蔬菜名/状态/种植日/采摘日/剩余天数/环境参数/预估产出）；4 种采摘模式（叶菜/果菜/快菜/育苗）配色标注；60 天稳定/峰值/低谷三色曲线；任务面板待办/进行中/已完成三段；告警条轮播滚动；底部 KPI 卡片显示总货架/总面积/总种植位/利用率/今日待采/今日已采。",
+    "  ③ 后端引擎增强：ShipPlantSimpleEngineService 385 行，贪心算法做 60 天轮作规划、产能供需（稳定/峰值/目标三档）、20 种蔬菜关键词知识库问答；3 个 endpoint（plan-rotation / calc-supply-demand / knowledge）已在 ToolboxController 接好。",
+    "  ④ 部署全自动 ✅：deploy.yml 已修好——后端在 GitHub Actions 构建，前端源码上传到服务器后由服务器本地构建（16GB+ 内存，绝不会 OOM），最后 PM2 重启后端 + Nginx 刷新前端。陈先生只需 git push，GitHub Actions 自动跑完，无需任何 SSH 操作。",
+    "  ⑤ 独立交付铁律保留：顶部【📦 一键剥离导出】按钮位置预留，将来 admin 后台接口接上即可一键导出独立 Java 项目 zip，满足 002 红条第 2 条。"
   ]
 }
