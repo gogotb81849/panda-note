@@ -7,7 +7,7 @@
   "license": "UNLICENSED",
   "scripts": {
     "prebuild": "node scripts/sync-version.mjs",
-    "build": "NODE_OPTIONS=\"--max-old-space-size=6144\" nest build",
+    "build": "NODE_OPTIONS=\"--max-old-space-size=5120\" nest build",
     "postinstall": "node scripts/postinstall.js || exit 0",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",

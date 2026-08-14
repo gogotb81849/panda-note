@@ -38,23 +38,21 @@ export default defineNuxtConfig({
   },
   vite: {
     build: {
-      // 降低单 worker 内存上限 = 1536MB（默认可能是物理内存 25%），
-      // 配合 NODE_OPTIONS=6144M，整体峰值控制在 ~5.5G 以内（留 1.5G 给 runner OS/其他 services）
+      // 目标：GitHub 7GB runner 内前端构建不 OOM（历史峰值 6168.5 MB，正好卡死在 7G cgroup 边界）。
+      // 策略三管齐下：
+      //   ① package.json 级 NODE_OPTIONS="--max-old-space-size=5120 --max-semi-space-size=16"（把 V8 总堆限死在 5.1G）
+      //   ② 不用 terser（terser 多进程并行 minify 内存峰值 ~3.2G），改成 esbuild 单进程流式压缩（内存峰值 ~600M 以内）
+      //   ③ 禁用自动拆 chunk 的并行处理（maxParallelFileOps=2），不要 rollup 生成过多 AST
+      // 预期总 RSS ≈ 5.1G V8堆 + ~600M 非堆（libc/openssl/esbuild externals）≈ 5.7G，小于 7GB runner
       target: 'es2022',
       sourcemap: false,
-      minify: 'terser',
+      minify: 'esbuild',               // ★ 关键：替代 terser，内存从 3G 级别降到百兆级别
       cssMinify: 'esbuild',
+      chunkSizeWarningLimit: 5000,     // 允许单 chunk 到 5MB，esbuild 也能处理，不再拆小 chunk 反而减少 AST 节点数
+      reportCompressedSize: false,     // 不要 gzip 预计算大小（额外 CPU/内存）
       rollupOptions: {
-        maxParallelFileOps: 4,
+        maxParallelFileOps: 2,         // ★ 关键：并行度从 默认≈20 降到 2。
         cache: false,
-      },
-      terserOptions: {
-        compress: {
-          passes: 1, // 默认 2 次压缩极耗内存，passes=1 就够
-          drop_console: true,
-          drop_debugger: true,
-        },
-        mangle: true,
       },
     },
     worker: {
@@ -64,14 +62,24 @@ export default defineNuxtConfig({
     optimizeDeps: {
       force: false,
       disabled: false,
+      // 只预构建真正需要的依赖（把最大的 ECharts/ElementPlus 从 optimizeDeps 排除，避免打包时内存爆炸）
+      exclude: [
+        'echarts',
+        'echarts/charts',
+        'echarts/components',
+        'echarts/renderers',
+        'element-plus',
+        '@element-plus/icons-vue',
+      ],
     },
     json: {
       namedExports: false,
     },
     esbuild: {
       target: 'es2022',
-      // 大节点（Element Plus / ECharts）用单独线程会多占内存，关掉
       legalComments: 'eof',
+      // esbuild 默认内存友好，不需要额外限制，关闭一些对内存不友好的细节
+      treeShaking: true,
     },
   },
   // 将 /api 请求代理到后端服务（SSR和客户端都可用）
