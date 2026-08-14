@@ -6,25 +6,31 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 const pkg = JSON.parse(readFileSync(join(__dirname, 'package.json'), 'utf-8'))
 
-// ★ CI 内存自救：如果 NODE_OPTIONS 里带了 --expose-gc（见 .npmrc），则每 45s 主动 global.gc() 一次，
-// 避免 Nuxt/Vite/Rollup 在 ~4.5G 左右 AST 老年代堆积触发 Mark-Compact 扫全堆（Run#141-145 峰值≈4.8G）。
-// 只有在 process.env.CI || process.env.GITHUB_ACTIONS 里才开启，本地 dev 不跑。
+// ★ CI 内存自救：如果 NODE_OPTIONS 里带了 --expose-gc（见 .npmrc），则每 30s 主动 global.gc() 一次
+// （之前 45s 间隔过长，老年代堆积到 2.5G+ 才触发 Mark-Compact，改为 30s 更积极回收）
 try {
   const shouldGc = (!!(process as any).env.CI || !!(process as any).env.GITHUB_ACTIONS) && typeof (globalThis as any).gc === 'function';
   if (shouldGc) {
-    (setInterval as any)(() => { try { (globalThis as any).gc(); } catch (_) {} }, 45000);
-    (console as any).log('[nuxt.config.ts][ci-mem-saver] global.gc interval armed (45s)');
+    (setInterval as any)(() => { try { (globalThis as any).gc(); } catch (_) {} }, 30000);
+    (console as any).log('[nuxt.config.ts][ci-mem-saver] global.gc interval armed (30s)');
   }
 } catch (_) {}
+
+// ★ v0814c CI 时禁用 PWA：@vite-pwa/nuxt 做 workbox precache manifest + SW gen + glob 扫描时额外吃 ~400M 内存，
+//   CI 构建不需要 PWA（生产环境上线时用户首次访问会自动注册 SW），省多少算多少
+const isCI = !!(process as any).env.CI || !!(process as any).env.GITHUB_ACTIONS || !!(process as any).env.NUXT_DISABLE_PWA_IN_CI;
+const modulesList: any[] = ['@nuxtjs/tailwindcss', '@element-plus/nuxt', '@pinia/nuxt'];
+if (!isCI) { modulesList.push('@vite-pwa/nuxt'); }
+(console as any).log(`[nuxt.config.ts] isCI=${isCI} → modules=${modulesList.join(', ')} (PWA ${isCI ? 'SKIPPED' : 'ENABLED'})`);
 
 export default defineNuxtConfig({
   compatibilityDate: '2024-04-03',
   devtools: { enabled: false },
   sourcemap: { server: false, client: false },
-  // 【CI 内存终极优化 v0814b】单一 nitro 定义（之前重复定义两次，后者覆盖前者，造成歧义）
+  // 【CI 内存终极优化 v0814c】单一 nitro 定义
   nitro: {
     preset: 'node-server',
-    compressPublicAssets: { gzip: true, brotli: false },
+    compressPublicAssets: isCI ? false : { gzip: true, brotli: false }, // CI 时跳过 gzip 预压缩，省 ~100M
     minify: true,
     inlineDynamicImports: false,
     rollupConfig: {
@@ -38,16 +44,19 @@ export default defineNuxtConfig({
   },
   vite: {
     build: {
-      // 策略：V8 堆限死 4GB（见 .npmrc + ci-build-frontend.mjs），配合 esbuild 单线程压缩，
-      //   预期 RSS ≈ 4G + ~500M ≈ 4.5G，7GB runner 绝对安全
+      // 策略：.npmrc + ci-build-frontend.mjs 统一限定 max-old-space-size=3072 (3GB)，
+      //   + esbuild 单线程压缩（minify css+js 都 esbuild，~600M 内存）
+      //   + maxParallelFileOps=1（完全串行）
+      //   + CI 时禁用 PWA (~400M)、跳过 gzip 预压缩 (~100M)
+      // 预期 RSS ≈ 3G + ~400M ≈ 3.4G，7GB runner 安全值
       target: 'es2022',
       sourcemap: false,
-      minify: 'esbuild',              // ★ 替代 terser：内存 3G→600M
+      minify: 'esbuild',
       cssMinify: 'esbuild',
-      chunkSizeWarningLimit: 10000,     // 尽量少拆 chunk，减少 Rollup AST 节点数
-      reportCompressedSize: false,     // 跳过 gzip 预计算（省 CPU 和内存）
+      chunkSizeWarningLimit: 15000,     // 再放宽，尽量少拆 chunk 少 Rollup AST
+      reportCompressedSize: false,      // 跳过 gzip 预计算大小（省 CPU+内存）
       rollupOptions: {
-        maxParallelFileOps: 1,         // ★ v0814b 从 2 → 1：完全串行，避免 OOM
+        maxParallelFileOps: 1,          // ★ 完全串行，不并行
         cache: false,
         onwarn(warning, warn) {
           if (warning && warning.code && warning.code === 'CIRCULAR_DEPENDENCY') return;
@@ -55,7 +64,7 @@ export default defineNuxtConfig({
         },
       },
     },
-    worker: { format: 'es' },
+    worker: isCI ? { format: 'es' as any } : { format: 'es' as any },
     optimizeDeps: {
       force: false,
       disabled: false,
@@ -98,17 +107,12 @@ export default defineNuxtConfig({
       swr: false,
     },
   },
-  modules: [
-    '@nuxtjs/tailwindcss',
-    '@element-plus/nuxt',
-    '@pinia/nuxt',
-    '@vite-pwa/nuxt',
-  ],
+  modules: modulesList,
   elementPlus: {
     importStyle: 'css',
     themes: ['dark'],
   },
-  pwa: {
+  pwa: isCI ? {} : {
     registerType: 'autoUpdate',
     injectRegister: 'auto',
     manifest: {

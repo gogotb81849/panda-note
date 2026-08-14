@@ -48,10 +48,13 @@ for (const d of cacheDirs) {
 log('Step 1/3: Run nuxt build (max-old-space-size=4096, no-parallel)...');
 const buildEnv = {
   ...process.env,
-  NODE_OPTIONS: '--max-old-space-size=4096 --max-semi-space-size=16 --expose-gc',
+  NODE_OPTIONS: '--max-old-space-size=3072 --max-semi-space-size=16 --expose-gc',
   NUXT_TELEMETRY_DISABLED: '1',
   DISABLE_OPENCOLLECTIVE: '1',
   NEXT_TELEMETRY_DISABLED: '1',
+  // ★ v0814c：CI 时临时禁用 PWA 模块（workbox pre-cache + SW manifest 生成额外吃 ~400M）
+  NUXT_DISABLE_PWA_IN_CI: '1',
+  CI: 'true',
 };
 const child = spawn('npx', ['nuxt', 'build'], {
   cwd: FRONTEND_DIR,
