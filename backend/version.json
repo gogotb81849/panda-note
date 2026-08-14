@@ -1,15 +1,15 @@
 {
-  "version": "1.1.0.0814b",
-  "previous_version": "1.1.0.0814",
-  "buildTime": "2026-08-14T12:00:00.000Z",
+  "version": "1.1.0.0814c",
+  "previous_version": "1.1.0.0814b",
+  "buildTime": "2026-08-14T16:30:00.000Z",
   "environment": "production",
   "nodeVersion": "auto",
   "changes": [
-    "【内嵌菜篮子 · 深色科技大屏重写 ✅】对原版海上菜篮子做了全维度对标，把第一版『白底简陋表格』重写为深色科技大屏：",
-    "  ① 视觉对齐原版：5 区布局（顶部通栏 KPI / 左列航次档案+货架配置+伙食需求 / 中列 2.5D 货架+仪表盘+甘特图+60 天产出曲线 / 右列任务清单+采摘预测+品种结构饼图 / 底部统计+导出）。深色科技蓝青配色（#00c8ff / #00ff9d / #ffbc00 / #ff3d48），霓虹边框+流光进度条+滚动告警+脉冲呼吸点全部还原。",
-    "  ② 功能补齐：90 个种植位全部可点击查看详情（蔬菜名/状态/种植日/采摘日/剩余天数/环境参数/预估产出）；4 种采摘模式（叶菜/果菜/快菜/育苗）配色标注；60 天稳定/峰值/低谷三色曲线；任务面板待办/进行中/已完成三段；告警条轮播滚动；底部 KPI 卡片显示总货架/总面积/总种植位/利用率/今日待采/今日已采。",
-    "  ③ 后端引擎增强：ShipPlantSimpleEngineService 385 行，贪心算法做 60 天轮作规划、产能供需（稳定/峰值/目标三档）、20 种蔬菜关键词知识库问答；3 个 endpoint（plan-rotation / calc-supply-demand / knowledge）已在 ToolboxController 接好。",
-    "  ④ 部署全自动 ✅：deploy.yml 已修好——后端在 GitHub Actions 构建，前端源码上传到服务器后由服务器本地构建（16GB+ 内存，绝不会 OOM），最后 PM2 重启后端 + Nginx 刷新前端。陈先生只需 git push，GitHub Actions 自动跑完，无需任何 SSH 操作。",
-    "  ⑤ 独立交付铁律保留：顶部【📦 一键剥离导出】按钮位置预留，将来 admin 后台接口接上即可一键导出独立 Java 项目 zip，满足 002 红条第 2 条。"
+    "【根因解决】陈先生反馈：工具箱里看不到海上菜篮子卡片 —— 追踪发现服务器前端 latest.json timestamp=2026-08-12T02:49:42Z，连续 3 次 Run (#146-#148) 的前端构建都 OOM 了但 GitHub Actions 没捕获到失败。原因 & 修复：",
+    "  ① 根因：.npmrc max-old-space-size=5120 (5.1G)，7GB runner cgroup 上限约 6.8G，V8 老年代堆积触发 Mark-Compact 后 RSS≈6.8G → cgroup OOM killer SIGKILL 进程。SIGKILL 场景下 npm/node exit code 偶发不被 step 捕获，导致"假绿勾"，deploy 上传的是旧 .output。",
+    "  ② 加固一（降内存上限）：.npmrc 降 max-old-space-size 到 4096 (4GB)，nuxt.config.ts 把 rollupOptions.maxParallelFileOps 从 2 降到 1（完全串行），预期总 RSS ≈ 4.5G 绝对安全；同时修复之前 nuxt.config.ts 中 nitro key 被重复定义覆盖的遗留 bug。",
+    "  ③ 加固二（包装脚本）：新增 scripts/ci-build-frontend.mjs 三重保险（构建前 rm -rf .nuxt/.output/.cache → 显式 spawn nuxi build 捕获 exit/signal → 构建后验证 6 个关键路径必须存在），任何一步失败 exit 1，让 GitHub Actions 真正红。",
+    "  ④ 前端 package.json build 从直接 nuxi build 改为调用 ci-build-frontend.mjs；.npmrc 还加了 fetch-timeout=10min、NUXT_TELEMETRY_DISABLED=1。",
+    "  ⑤ 本次推送后 Run #149 重新构建 —— 如果前端构建真的成功，陈先生刷新工具箱就能看到🌱海上菜篮子绿色卡片了。"
   ]
 }

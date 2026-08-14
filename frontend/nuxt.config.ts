@@ -21,82 +21,45 @@ export default defineNuxtConfig({
   compatibilityDate: '2024-04-03',
   devtools: { enabled: false },
   sourcemap: { server: false, client: false },
-  // 终极 OOM 保险：让 Nuxt 先 client build 再 server build（串行），避免两个 Rollup 同时占内存。
-  // Nitro 本身支持在 runtimeConfig 里无法控制，但我们可以直接让 build 拆分成两个步骤通过 NUXT_PRERENDER=0 方式？——
-  // 不能；但通过『关闭 client 构建的 sourcemap + 关闭 nitro client inlineDynamicImports + 关闭代码拆分』可以进一步压内存。
+  // 【CI 内存终极优化 v0814b】单一 nitro 定义（之前重复定义两次，后者覆盖前者，造成歧义）
   nitro: {
     preset: 'node-server',
     compressPublicAssets: { gzip: true, brotli: false },
     minify: true,
     inlineDynamicImports: false,
     rollupConfig: {
-      output: {
-        inlineDynamicImports: false,
-      },
+      output: { inlineDynamicImports: false },
       onwarn(warning, warn) {
         if (warning && warning.code && warning.code === 'CIRCULAR_DEPENDENCY') return;
         warn(warning);
       },
     },
-    esbuild: {
-      options: {
-        target: 'node18',
-      },
-    },
-  },
-  // 修复 GitHub Actions ubuntu-latest runner 前端构建 OOM：
-  // Run #141/#142 先后两次 Build frontend step exit 134 (FATAL ERROR: Ineffective mark-compacts near heap limit)
-  // 默认 Vite 7.x + Rollup 并行 chunk 构建会吃光 7G runner 内存。以下三层配置联合降级内存占用：
-  // 1) package.json 级：NODE_OPTIONS="--max-old-space-size=6144" 作为兜底（见 frontend/package.json scripts.build）
-  // 2) Nitro/Vite 级：禁用并行化/关闭 sourcemap/设置 worker 最大内存为 2048MB
-  // 3) 打包策略：terserParallel=false，避免 rollup 多进程 minify 峰值 >4G
-  nitro: {
-    preset: 'node-server',
-    compressPublicAssets: { gzip: true, brotli: false },
-    minify: true,
-    rollupConfig: {
-      output: {
-        // 单 bundle 内存峰值更稳定（Nitro/Rollup 多 chunk 拆分反而使 terser 并行化进程数爆炸）
-        // 保持默认拆 chunk，但 terser 单线程避免多进程内存爆炸
-      },
-      onwarn(warning, warn) {
-        if (warning && warning.code && warning.code === 'CIRCULAR_DEPENDENCY') return;
-        warn(warning);
-      },
-    },
-    esbuild: {
-      options: {
-        target: 'node18',
-      },
-    },
+    esbuild: { options: { target: 'node18' } },
   },
   vite: {
     build: {
-      // 目标：GitHub 7GB runner 内前端构建不 OOM（历史峰值 6168.5 MB，正好卡死在 7G cgroup 边界）。
-      // 策略三管齐下：
-      //   ① package.json 级 NODE_OPTIONS="--max-old-space-size=5120 --max-semi-space-size=16"（把 V8 总堆限死在 5.1G）
-      //   ② 不用 terser（terser 多进程并行 minify 内存峰值 ~3.2G），改成 esbuild 单进程流式压缩（内存峰值 ~600M 以内）
-      //   ③ 禁用自动拆 chunk 的并行处理（maxParallelFileOps=2），不要 rollup 生成过多 AST
-      // 预期总 RSS ≈ 5.1G V8堆 + ~600M 非堆（libc/openssl/esbuild externals）≈ 5.7G，小于 7GB runner
+      // 策略：V8 堆限死 4GB（见 .npmrc + ci-build-frontend.mjs），配合 esbuild 单线程压缩，
+      //   预期 RSS ≈ 4G + ~500M ≈ 4.5G，7GB runner 绝对安全
       target: 'es2022',
       sourcemap: false,
-      minify: 'esbuild',               // ★ 关键：替代 terser，内存从 3G 级别降到百兆级别
+      minify: 'esbuild',              // ★ 替代 terser：内存 3G→600M
       cssMinify: 'esbuild',
-      chunkSizeWarningLimit: 10000,       // 允许 10MB 单 chunk，尽量少拆 chunk，减少 Rollup 总 AST 节点数,     // 允许单 chunk 到 5MB，esbuild 也能处理，不再拆小 chunk 反而减少 AST 节点数
-      reportCompressedSize: false,     // 不要 gzip 预计算大小（额外 CPU/内存）
+      chunkSizeWarningLimit: 10000,     // 尽量少拆 chunk，减少 Rollup AST 节点数
+      reportCompressedSize: false,     // 跳过 gzip 预计算（省 CPU 和内存）
       rollupOptions: {
-        maxParallelFileOps: 2,         // ★ 关键：并行度从 默认≈20 降到 2。
+        maxParallelFileOps: 1,         // ★ v0814b 从 2 → 1：完全串行，避免 OOM
         cache: false,
+        onwarn(warning, warn) {
+          if (warning && warning.code && warning.code === 'CIRCULAR_DEPENDENCY') return;
+          warn(warning);
+        },
       },
     },
-    worker: {
-      format: 'es',
-    },
-    // 禁用 Vite 对依赖预构建的多线程（7.3.x 默认并行化在CI上内存翻倍）
+    worker: { format: 'es' },
     optimizeDeps: {
       force: false,
       disabled: false,
-      // 只预构建真正需要的依赖（把最大的 ECharts/ElementPlus 从 optimizeDeps 排除，避免打包时内存爆炸）
+      // 把最大的 ECharts/ElementPlus 排除出预构建，避免打包时内存爆炸
       exclude: [
         'echarts',
         'echarts/charts',
@@ -106,13 +69,10 @@ export default defineNuxtConfig({
         '@element-plus/icons-vue',
       ],
     },
-    json: {
-      namedExports: false,
-    },
+    json: { namedExports: false },
     esbuild: {
       target: 'es2022',
       legalComments: 'eof',
-      // esbuild 默认内存友好，不需要额外限制，关闭一些对内存不友好的细节
       treeShaking: true,
     },
   },

@@ -6,11 +6,11 @@
   "scripts": {
     "dev": "nuxt dev",
     "prebuild": "node ../scripts/bump-version.js",
-    "build": "NODE_OPTIONS=\"--max-old-space-size=5120 --max-semi-space-size=16\" nuxt build",
-    "generate": "NODE_OPTIONS=\"--max-old-space-size=5120 --max-semi-space-size=16\" nuxt generate",
+    "build": "node ../scripts/ci-build-frontend.mjs",
+    "generate": "nuxt generate",
     "preview": "nuxt preview",
     "electron:dev": "NODE_ENV=development electron electron/main.js",
-    "electron:build": "NODE_OPTIONS=\"--max-old-space-size=5120 --max-semi-space-size=16\" nuxt build && electron-builder --config electron-builder.yml",
+    "electron:build": "nuxt build && electron-builder --config electron-builder.yml",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
