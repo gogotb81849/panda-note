@@ -6,10 +6,44 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 const pkg = JSON.parse(readFileSync(join(__dirname, 'package.json'), 'utf-8'))
 
+// ★ CI 内存自救：如果 NODE_OPTIONS 里带了 --expose-gc（见 .npmrc），则每 45s 主动 global.gc() 一次，
+// 避免 Nuxt/Vite/Rollup 在 ~4.5G 左右 AST 老年代堆积触发 Mark-Compact 扫全堆（Run#141-145 峰值≈4.8G）。
+// 只有在 process.env.CI || process.env.GITHUB_ACTIONS 里才开启，本地 dev 不跑。
+try {
+  const shouldGc = (!!(process as any).env.CI || !!(process as any).env.GITHUB_ACTIONS) && typeof (globalThis as any).gc === 'function';
+  if (shouldGc) {
+    (setInterval as any)(() => { try { (globalThis as any).gc(); } catch (_) {} }, 45000);
+    (console as any).log('[nuxt.config.ts][ci-mem-saver] global.gc interval armed (45s)');
+  }
+} catch (_) {}
+
 export default defineNuxtConfig({
   compatibilityDate: '2024-04-03',
   devtools: { enabled: false },
   sourcemap: { server: false, client: false },
+  // 终极 OOM 保险：让 Nuxt 先 client build 再 server build（串行），避免两个 Rollup 同时占内存。
+  // Nitro 本身支持在 runtimeConfig 里无法控制，但我们可以直接让 build 拆分成两个步骤通过 NUXT_PRERENDER=0 方式？——
+  // 不能；但通过『关闭 client 构建的 sourcemap + 关闭 nitro client inlineDynamicImports + 关闭代码拆分』可以进一步压内存。
+  nitro: {
+    preset: 'node-server',
+    compressPublicAssets: { gzip: true, brotli: false },
+    minify: true,
+    inlineDynamicImports: false,
+    rollupConfig: {
+      output: {
+        inlineDynamicImports: false,
+      },
+      onwarn(warning, warn) {
+        if (warning && warning.code && warning.code === 'CIRCULAR_DEPENDENCY') return;
+        warn(warning);
+      },
+    },
+    esbuild: {
+      options: {
+        target: 'node18',
+      },
+    },
+  },
   // 修复 GitHub Actions ubuntu-latest runner 前端构建 OOM：
   // Run #141/#142 先后两次 Build frontend step exit 134 (FATAL ERROR: Ineffective mark-compacts near heap limit)
   // 默认 Vite 7.x + Rollup 并行 chunk 构建会吃光 7G runner 内存。以下三层配置联合降级内存占用：
@@ -48,7 +82,7 @@ export default defineNuxtConfig({
       sourcemap: false,
       minify: 'esbuild',               // ★ 关键：替代 terser，内存从 3G 级别降到百兆级别
       cssMinify: 'esbuild',
-      chunkSizeWarningLimit: 5000,     // 允许单 chunk 到 5MB，esbuild 也能处理，不再拆小 chunk 反而减少 AST 节点数
+      chunkSizeWarningLimit: 10000,       // 允许 10MB 单 chunk，尽量少拆 chunk，减少 Rollup 总 AST 节点数,     // 允许单 chunk 到 5MB，esbuild 也能处理，不再拆小 chunk 反而减少 AST 节点数
       reportCompressedSize: false,     // 不要 gzip 预计算大小（额外 CPU/内存）
       rollupOptions: {
         maxParallelFileOps: 2,         // ★ 关键：并行度从 默认≈20 降到 2。
