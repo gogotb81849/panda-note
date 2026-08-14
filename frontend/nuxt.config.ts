@@ -6,13 +6,13 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 const pkg = JSON.parse(readFileSync(join(__dirname, 'package.json'), 'utf-8'))
 
-// ★ CI 内存自救：如果 NODE_OPTIONS 里带了 --expose-gc（见 .npmrc），则每 30s 主动 global.gc() 一次
-// （之前 45s 间隔过长，老年代堆积到 2.5G+ 才触发 Mark-Compact，改为 30s 更积极回收）
+// ★ CI 内存自救：如果 NODE_OPTIONS 里带了 --expose-gc（见 .npmrc），则每 15s 主动 global.gc() 一次
+// （v0814e：堆上限 4096MB，配合禁PWA+串行+excludeDeps，15s GC 足够回收 AST 临时对象）
 try {
   const shouldGc = (!!(process as any).env.CI || !!(process as any).env.GITHUB_ACTIONS) && typeof (globalThis as any).gc === 'function';
   if (shouldGc) {
-    (setInterval as any)(() => { try { (globalThis as any).gc(); } catch (_) {} }, 30000);
-    (console as any).log('[nuxt.config.ts][ci-mem-saver] global.gc interval armed (30s)');
+    (setInterval as any)(() => { try { (globalThis as any).gc(); } catch (_) {} }, 15000);
+    (console as any).log('[nuxt.config.ts][ci-mem-saver] global.gc interval armed (15s, 4GB cap)');
   }
 } catch (_) {}
 
@@ -44,19 +44,16 @@ export default defineNuxtConfig({
   },
   vite: {
     build: {
-      // 策略：.npmrc + ci-build-frontend.mjs 统一限定 max-old-space-size=3072 (3GB)，
-      //   + esbuild 单线程压缩（minify css+js 都 esbuild，~600M 内存）
-      //   + maxParallelFileOps=1（完全串行）
-      //   + CI 时禁用 PWA (~400M)、跳过 gzip 预压缩 (~100M)
-      // 预期 RSS ≈ 3G + ~400M ≈ 3.4G，7GB runner 安全值
+      // ★ v0814e：4096MB 堆 + 禁PWA + 串行 + excludeDeps + GC15s
+      // 之前裸跑4096 OOM(无优化)，现在峰值降~500MB → 预期~2.7GB < 4GB ✓
       target: 'es2022',
       sourcemap: false,
       minify: 'esbuild',
       cssMinify: 'esbuild',
-      chunkSizeWarningLimit: 15000,     // 再放宽，尽量少拆 chunk 少 Rollup AST
-      reportCompressedSize: false,      // 跳过 gzip 预计算大小（省 CPU+内存）
+      chunkSizeWarningLimit: 20000,     // 20MB 上限 —— 极致少拆 chunk（一个大 chunk 比 10 个小 chunk 省 AST）
+      reportCompressedSize: false,      // 永远不要预计算压缩大小
       rollupOptions: {
-        maxParallelFileOps: 1,          // ★ 完全串行，不并行
+        maxParallelFileOps: 1,          // ★ 完全串行
         cache: false,
         onwarn(warning, warn) {
           if (warning && warning.code && warning.code === 'CIRCULAR_DEPENDENCY') return;
