@@ -411,16 +411,24 @@
           </div>
         </div>
 
-        <!-- Step 10: 编辑器 + 评分卡 MVP 骨架 -->
+        <!-- Step 10: 编辑器 + 评分卡 MVP 骨架（升级：修改追踪 + 💎个性化加成 + 柔性引导下载） -->
         <div v-else-if="activeStep === 9">
           <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
             <div class="xl:col-span-2">
               <h2 class="text-xl font-semibold mb-4">⑩ 📝 成品稿（可直接修改）</h2>
+              <div class="flex gap-2 mb-3 flex-wrap items-center">
+                <!-- 实时修改次数徽标：让用户能看到 "我在做的动作有被记住" -->
+                <el-tag type="success" effect="dark" round>
+                  🧩 有效修改：<b class="ml-1 text-lg">{{ validEditCount }}</b> 处
+                  <span v-if="personalBonus.bonus" class="ml-2">{{ personalBonus.label }}</span>
+                </el-tag>
+                <el-tag type="info" size="small" v-if="personalBonus.unlockText">{{ personalBonus.unlockText }}</el-tag>
+              </div>
               <div class="flex gap-2 mb-3 flex-wrap">
-                <el-button type="primary" plain size="small">📋 复制全文</el-button>
-                <el-button type="success" plain size="small">💾 存为熊猫笔记草稿</el-button>
+                <el-button type="primary" plain size="small" @click="copyFullArticle">📋 复制全文</el-button>
+                <el-button type="success" plain size="small" @click="saveToRevision(true)">💾 存为熊猫笔记草稿 + 保存修改记录</el-button>
                 <el-button type="warning" plain size="small">📰 发往杂志编排</el-button>
-                <el-button type="info" plain size="small">📤 导出 Word</el-button>
+                <el-button type="info" plain size="small" @click="onClickDownload">📤 导出 Word</el-button>
                 <el-button type="danger" plain size="small" @click="activeStep = 8">🔄 重新生成</el-button>
               </div>
               <el-input
@@ -428,23 +436,29 @@
                 type="textarea"
                 :rows="28"
                 class="font-serif text-base leading-relaxed p-4"
+                @input="onArticleInput"
               />
             </div>
 
-            <!-- 🏆 评分卡片（MVP 骨架 + 假数据演示） -->
+            <!-- 🏆 评分卡片（升级：加 💎个性化加成分 + 有效修改次数联动） -->
             <div>
               <h2 class="text-xl font-semibold mb-4">🏆 质量评估报告</h2>
               <div class="bg-gradient-to-br from-white to-green-50 border border-green-200 rounded-lg p-5 shadow-sm">
                 <div class="text-center mb-3">
-                  <div class="text-sm text-gray-600 mb-1">综合评分</div>
-                  <div class="text-5xl font-black text-green-600">92<span class="text-xl text-gray-400">/100</span></div>
-                  <el-tag type="success" size="large" class="mt-2">🟢 A · 优秀</el-tag>
+                  <div class="text-sm text-gray-600 mb-1">综合评分<span v-if="personalBonus.bonus" class="text-emerald-600">（含 {{ personalBonus.label }}）</span></div>
+                  <div class="text-5xl font-black text-green-600">{{ finalScore }}<span class="text-xl text-gray-400">/100</span></div>
+                  <el-tag v-if="!personalBonus.bonus" type="success" size="large" class="mt-2">🟢 A · 优秀</el-tag>
+                  <el-tag v-else-if="personalBonus.bonus===2" type="success" effect="dark" size="large" class="mt-2">🟢 A+ · 个性化加成</el-tag>
+                  <el-tag v-else type="success" effect="dark" size="large" class="mt-2">💎 S- · 黄金个性化</el-tag>
                 </div>
-                <el-progress :percentage="92" :stroke-width="10" color="#22c55e" class="mb-4" />
+                <el-progress :percentage="finalScore" :stroke-width="10" color="#22c55e" class="mb-4" />
 
                 <div class="text-sm border-t border-gray-100 pt-3 mb-2">
                   <div class="mb-2">🤖 <b>模拟 AI 检测率</b>：
                     <el-tag size="small" type="success">6.3%（远低于安全阈值 ≤15%）</el-tag>
+                  </div>
+                  <div class="mb-2 text-emerald-700">🧩 <b>有效修改次数：{{ validEditCount }} 处</b>
+                    <span v-if="validEditCount<3"> → 再改 {{ 3-validEditCount }} 处解锁 💎+2 个性化加成</span>
                   </div>
                   <div class="text-xs text-gray-600">主流检测器 GPTZero / 知网 AI 检测：预期判为「人类手写」</div>
                 </div>
@@ -456,7 +470,7 @@
                     <li>✅ 船队/公司内部刊物：<b>完全可用</b>（通过率 ≥99%）</li>
                     <li>✅ 中国远洋海运报 · 普通版：<b>可用</b>（通过率 ≥85%）</li>
                     <li>⚠️ 中国远洋海运报 · 头版：建议微调 2-3 处细节（通过率 ~60%）</li>
-                    <li>🎯 国家级水运期刊（《中国水运》）：<b>可投</b>（预期得分 ≈84）</li>
+                    <li>🎯 国家级水运期刊（《中国水运》）：<b>可投</b>（预期得分 ≈{{ 84 + personalBonus.bonus }}）</li>
                   </ul>
                 </div>
 
@@ -465,9 +479,13 @@
                   <div class="flex justify-between"><span>📝 内容完整性</span><el-tag size="small" type="success">18/20</el-tag></div>
                   <div class="flex justify-between"><span>🎯 主题贴合度</span><el-tag size="small" type="success">17/20</el-tag></div>
                   <div class="flex justify-between"><span>🧭 文种格式规范</span><el-tag size="small" type="success">19/20</el-tag></div>
-                  <div class="flex justify-between"><span>🎨 文学表现力</span><el-tag size="small" type="warning">14/20 👉 建议补 1 处细节</el-tag></div>
+                  <div class="flex justify-between"><span>🎨 文学表现力</span><el-tag size="small" type="warning" @click="quickFix('表现力')" class="cursor-pointer hover:bg-yellow-100">14/20 👉 点我一键补细节</el-tag></div>
                   <div class="flex justify-between"><span>🧠 去 AI 化程度</span><el-tag size="small" type="success">19/20</el-tag></div>
                   <div class="flex justify-between"><span>⚖️ 合规性</span><el-tag size="small" type="success">20/20</el-tag></div>
+                  <div v-if="personalBonus.bonus" class="flex justify-between pt-2 border-t border-dashed border-gray-200">
+                    <span class="text-emerald-700 font-bold">{{ personalBonus.label }}</span>
+                    <el-tag size="small" effect="dark" type="success">+{{ personalBonus.bonus }}</el-tag>
+                  </div>
                 </div>
               </div>
 
@@ -510,15 +528,30 @@
         <el-button type="primary" @click="confirmNextDespiteLowScore">⚠️ 直接生成</el-button>
       </template>
     </el-dialog>
+
+    <!-- 💡 柔性引导：0 次修改点下载时弹 -->
+    <el-dialog v-model="showDownloadGuide" :title="DOWNLOAD_GUIDE_ZERO_EDIT.title" width="580px">
+      <p class="text-base font-semibold">{{ DOWNLOAD_GUIDE_ZERO_EDIT.intro(validEditCount) }}</p>
+      <ul class="mt-3 text-sm space-y-1.5 list-disc pl-5 text-gray-700">
+        <li v-for="(b, i) in DOWNLOAD_GUIDE_ZERO_EDIT.bullets" :key="i">{{ b }}</li>
+      </ul>
+      <p class="mt-3 text-xs text-gray-500 bg-blue-50 p-2 rounded">{{ DOWNLOAD_GUIDE_ZERO_EDIT.hint }}</p>
+      <template #footer>
+        <el-button type="primary" @click="handleDownloadGoEdit">{{ DOWNLOAD_GUIDE_ZERO_EDIT.btnGoEdit }}</el-button>
+        <el-button @click="handleDownloadSkip">{{ DOWNLOAD_GUIDE_ZERO_EDIT.btnSkip }}</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted } from 'vue';
 import { Loading } from '@element-plus/icons-vue';
+import { ElMessage } from 'element-plus';
 import {
   WRITER_STYLES, CATEGORIES_SPRINT1, JOURNAL_WORDCOUNT_REF, WORDCOUNT_PRESETS,
   DETAIL_CARD_TYPES, RADAR_SMART_SUGGESTIONS, SCORE_GRADE_TABLE,
+  DOWNLOAD_GUIDE_ZERO_EDIT, countValidEdits, getPersonalBonus,
   type ManuscriptCategoryId, type WriterStyleId, type DetailsRadarScore, type DetailCardTypeId, type JournalWordCountRef
 } from '~/constants/ai-manuscript';
 
@@ -596,6 +629,102 @@ const mockResultArticle = ref<string>(`【成品稿】（Sprint 1 展示用示�
 
 （全文完 · 1487 字）
 `);
+
+// ============================================================
+// 🧩 自我优化闭环：成品稿修改追踪（diff + 有效修改次数）
+// ============================================================
+const originalArticleSnapshot = ref<string>(mockResultArticle.value); // 生成时刻的快照（每次"重新生成"都重置）
+const generationId = ref<string>(`gen_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`); // 本次生成唯一号
+const showDownloadGuide = ref(false); // 柔性引导弹窗开关
+
+// 简易行级 diff（O(n²)，对 2000 字以下稿件完全够用；重型 diff 放后端做精细化 8 类分类）
+function simpleDiffRows(before: string, after: string): Array<{ type: 'insert' | 'delete' | 'replace'; before?: string; after?: string }> {
+  const b = before.split('\n').filter(s => s.length > 0);
+  const a = after.split('\n').filter(s => s.length > 0);
+  const diffs: ReturnType<typeof simpleDiffRows> = [];
+  // 行对齐：用最长公共子序列思路（简化：行号映射相等则保留，否则逐行扫）
+  const maxLen = Math.max(b.length, a.length);
+  for (let i = 0; i < maxLen; i++) {
+    const rowB = b[i];
+    const rowA = a[i];
+    if (rowB === rowA) continue;
+    if (!rowB && rowA) diffs.push({ type: 'insert', after: rowA });
+    else if (rowB && !rowA) diffs.push({ type: 'delete', before: rowB });
+    else diffs.push({ type: 'replace', before: rowB, after: rowA });
+  }
+  return diffs;
+}
+
+const rowDiffs = computed(() => simpleDiffRows(originalArticleSnapshot.value, mockResultArticle.value));
+// 真实有效修改次数（过滤纯空格/标点）
+const validEdits = computed(() => countValidEdits(rowDiffs.value));
+const validEditCount = computed(() => validEdits.value.count);
+// 💎 个性化加成规则
+const personalBonus = computed(() => getPersonalBonus(validEditCount.value));
+// 最终评分：基础 92 + 个性化加成
+const baseMockScore = 92;
+const finalScore = computed(() => Math.min(100, baseMockScore + personalBonus.value.bonus));
+
+// 监听"重新生成"跳回 Step 8 → 重新进入 Step 10 时重置快照
+watch(activeStep, (ns, os) => {
+  if (ns === 8 && os === 9) {
+    // 重置（用户点了"重新生成"）
+    generationId.value = `gen_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  }
+  if (ns === 9 && os === 8) {
+    // Step 9 刚进来时，记录当前 mockResultArticle 作为原始快照
+    originalArticleSnapshot.value = mockResultArticle.value;
+  }
+});
+
+// 用户输入时：节流 800ms 统计一次 diff（避免每个字都重算）
+let __debounceTimer: any = null;
+function onArticleInput() {
+  if (__debounceTimer) clearTimeout(__debounceTimer);
+  __debounceTimer = setTimeout(() => { /* computed 已自动重算 validEditCount，这里只是占位 */ }, 800);
+}
+
+// -------- 下载 / 保存 行为 --------
+function onClickDownload() {
+  // 柔性引导：0 次修改 → 弹引导；其他情况直接下
+  if (validEditCount.value === 0) {
+    showDownloadGuide.value = true;
+    return;
+  }
+  realDownload();
+}
+function handleDownloadGoEdit() {
+  showDownloadGuide.value = false;
+  ElMessage.success('💡 好的！建议您：① 把"辛苦/任劳任怨"这类空词换成小动作；② 在结尾加一句事实收尾（如"远处，汽笛响了一声"）。改 3 处就能解锁 💎+2 分个性化加成哦！');
+}
+function handleDownloadSkip() {
+  showDownloadGuide.value = false;
+  // 仍然落库一条 revision（validEditCount=0），后续画像可以分析"政委拿到完美稿不修改的概率"
+  saveToRevision(false);
+  realDownload();
+}
+function realDownload() {
+  ElMessage.success(`✅ 开始导出 Word（含 ${validEditCount.value} 处个性化修改）。文件大小：${(new Blob([mockResultArticle.value]).size/1024).toFixed(1)} KB`);
+}
+function copyFullArticle() {
+  const text = mockResultArticle.value;
+  if (navigator?.clipboard?.writeText) navigator.clipboard.writeText(text);
+  ElMessage.success(`📋 已复制全文（${text.length} 字）到剪贴板`);
+}
+function saveToRevision(showTip: boolean) {
+  // Sprint 2 调用后端 /revision-record/save
+  if (showTip) ElMessage.success(`💾 已保存修改记录（${validEditCount.value} 处有效修改）。累计 ${Math.max(0, validEditCount.value)} 处，${personalBonus.value.unlockText}`);
+}
+function quickFix(what: string) {
+  // 点分项一键修复（演示版：在文末追加一段候选细节，算 1 处有效修改）
+  const patches: Record<string, string> = {
+    '表现力': '\n\n（AI 建议补细节）徒弟的目光落在师父左手背那道新疤上，粉红的嫩肉边缘翻着，像一条细细的红线。他张了张嘴，话到嘴边又咽了回去，只把水杯又往阴影里推了一寸。',
+  };
+  const p = patches[what];
+  if (!p) { ElMessage.info(`👉 ${what}的一键修复已在 Sprint 2 接入大模型，敬请期待`); return; }
+  mockResultArticle.value = mockResultArticle.value.trimEnd() + p;
+  ElMessage.success(`🎨 已为您追加一段候选细节。若不满意可删除（删除也会计 1 处有效修改）。`);
+}
 
 // ========= 计算属性 =========
 

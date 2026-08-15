@@ -518,24 +518,190 @@ model ManuscriptTemplateTag {
 | GET | `/ai-manuscript/templates/analyze-job/:jobId` | 查询上传后打标签流水线的进度 | ✅ 基础 |
 | POST | `/ai-manuscript/score` | 单独对一段文字跑「100 分 + AI 检测率 + 级别」评分（供编辑器调滑杆后实时重算） | ✅ |
 | POST | `/ai-manuscript/deai` | 单独跑去 AI 化引擎（调滑杆时前端直接调用） | ✅ |
+| **POST** | **`/ai-manuscript/revision-record/save`** | **🧩 保存一次用户修改会话（before/after 全文 + 前端 diff）→ 后端复核有效修改数 + 8 类自动归类 + 写 RevisionRecord 表 + 增量聚合 UserProfile 表 + 返回 💎 个性化加分结果** | **✅ 完整实现** |
+| **GET** | **`/ai-manuscript/user-profile`** | **🧩 查询政委个人写作画像看板（累计统计 + Top5 修改偏好 + 字数偏好 + 解锁等级 + 个性化改进建议）** | **✅ 完整实现** |
 | POST | `/ai-manuscript/suggest` | 返回当前最低分 2 维的 2 条智能建议（纯前端也能算，留 API 给后续 AI 高级版） | ⭕ Sprint 2 |
 | GET | `/ai-manuscript/history` | 我的历史生成列表（保存字段+Prompt+结果） | ⭕ Sprint 2 |
 
 ---
 
-## 11. Sprint 1~3 开发路线图
+## 11. 🧩 自我优化闭环（修改记录 + 个人画像看板）
+
+> **设计哲学**：不强制锁下载（用户体验太差），而是用「柔性引导 + 正向激励 + 越用越懂你」三重杠杆，推动政委对 AI 生成稿做人工修改——这既是稿件质量的最后一道关，也是系统学习政委写作风格的唯一数据来源。
+
+### 11.1 核心闭环流程图
+
+```
+ ┌─────────────┐   用户编辑 textarea   ┌──────────────────┐
+ │  AI 生成初稿 │ ─────────────────────▶│  前端实时行级 diff │
+ └─────────────┘                        └────────┬─────────┘
+                                                 │ countValidEdits()
+                                                 ▼
+                        ┌─────────────────────────────────────────────┐
+                        │ 评分卡显示：「已改 X 处 / 💎 个性化加成 +Y 分」  │
+                        └───────────────────────┬─────────────────────┘
+                                                │
+                           ┌────────────────────┴────────────────────┐
+                           │ 用户点「导出 Word / 存草稿 / 下载」时触发 │
+                           └────────────────────┬────────────────────┘
+                                                │
+                   ┌────────── 0 次有效修改？───────────┐
+                   │ Yes                               │ No
+                   ▼                                   ▼
+     ┌───────────────────────────┐         ┌─────────────────────────────┐
+     │ 💡 柔性引导弹窗（非强制）    │         │ POST /revision-record/save  │
+     │ · 告诉你改 3 处加 2 分        │         │  后端复核（再算一次 diff）     │
+     │ · 改 10 处解锁画像看板       │         │  8 类修改自动归类（启发式）    │
+     │ [📝 去修改]  [⏭️ 仍要下载] │         │  写 ManuscriptRevisionRecord  │
+     └───────┬───────────────┬──────┘         │  增量聚合 → UserProfile 表    │
+             │               │                └──────────────┬──────────────┘
+             │               │ 跳过                          │ 返回结果：validCount+bonus
+             ▼               ▼                               │
+     继续编辑器      仍走 save（记录这次「零修改下载」）         │
+                                                    ┌────────▼─────────┐
+                                                    │ 前端刷新评分卡 💎 │
+                                                    │ 画像等级 ↑        │
+                                                    └──────────────────┘
+```
+
+### 11.2 「有效修改」判定规则（前后端同一份，避免争议）
+
+| 判定项 | 规则 | 是否记为 1 处有效修改 |
+|---|---|---|
+| **无效修改** | 只改了空格/换行/中英文标点/大小写/字体格式 | ❌ 不计 |
+| **有效修改** | 改动 delta 中至少有一个 **CJK 汉字 / 英文字母 / 阿拉伯数字** | ✅ 计 1 处 |
+| **实现方式** | 前后端各有一份 `countValidEdits()`，正则、strip 表完全一致，最终以后端复核数为准 | — |
+
+> **为什么要后端复核？** 防止前端被篡改（例如用户控制台把 validCount 硬改成 999 骗取加分），后端收到 before/after 全文后自己再 diff 一遍，用同一规则重算。
+
+### 11.3 8 大修改类别（后端自动归类，Top3 存入 RevisionRecord，Top5 累积到画像）
+
+| 类别 Key | 展示名 | 判定启发式优先级 | 画像含义 |
+|---|---|---|---|
+| `REMOVE_SLOGAN_ENDING` | 🚫 删口号结尾 | **最高** | 这位政委非常反感"让我们……！/ 一定……！"式结尾 |
+| `ADD_DIALOG` | 💬 加对白 | 2 | 政委喜欢让人物"说出来"，而不是作者"介绍出来" |
+| `NUMBER_COLLOQUIAL` | 🔢 数字口语化 | 3 | 常把 "50%"→"刚好一半"，"3h"→"三个半小时" |
+| `ADD_DETAIL_ACTION` | 🤸 加小动作细节 | 4 | 总觉得 AI 写得"空"，爱补动作/神态/外貌等具象细节 |
+| `WORD_REPLACE_VIVID` | 🔁 空词换实词 | 5 | 经常把"辛苦/勤恳/敬业"等空泛词换成具体描述 |
+| `PARAGRAPH_RESTRUCTURE` | 🧩 段落调整 | 6 | 重视结构，爱整段移动/拆分独句段/合并短段 |
+| `WORD_COUNT_TRIM` | 📏 字数调整 | 7 | 严格控制目标刊物字数，经常增删段落 |
+| `OTHER_TWEAK` | 🛠️ 其他微修 | 最低 兜底 | 改标点/错别字/人名船名等事实性修正 |
+
+### 11.4 💎 个性化加分 & 画像解锁（柔性激励阶梯）
+
+| 累计有效修改 | 💎 评分卡加成 | 画像等级 | 解锁权益 |
+|---|---|---|---|
+| **0 次** | +0 | 🔒 未解锁 | 点下载时弹柔性引导（不是锁！仍可以跳过） |
+| **1–2 处** | +0 | 🔒 未解锁 | — |
+| **3–4 处** | **+2 分** | 🥉 青铜画像 | 评分卡出现 💎 条目，显示"个性化加成" |
+| **5–9 处** | **+3 分** | 🥈 白银画像 | 进入 "S 级稿件精选" 候选池 + Top5 修改偏好看板可查看 |
+| **≥10 处** | **+4 分** | 🥇 黄金画像 | **完整画像看板**：雷达图 + Top10 词替换偏好 + 字数偏好 + 5 条个性化改进建议（下次生成 Prompt 自动微调） |
+
+> **注意**：加分的分母是 100 分制总分，但只在 **基础分 ≤ 96** 时生效（不允许 97+4=101，`Math.min(100, baseScore + bonus)` 做封顶）。
+
+### 11.5 数据模型（Prisma 2 张新表）
+
+**`ManuscriptRevisionRecord`**（单次修改会话明细，一次下载 = 1 条，**不可变日志表**）：
+- `userId / teamCode / generationId` → 把同篇稿子的多次修改串起来
+- `beforeText / afterText`（Sprint 1 明文存储；Sprint 2 改为只存 15 条重点 diffSnippets 压缩 + SHA256 校验，避免全文存两份）
+- `validEditCount`：后端复核后的真实有效修改数
+- `diffSnippets Json`：最多 15–30 条重点 diff，**每条都带 `editCategory`**（后端已自动归类好）
+- `top3EditCategories Json`：这次改得最多的 3 类
+- `totalEditChars`：总修改字符数
+
+**`ManuscriptUserProfile`**（按 userId 聚合，**画像看板直接消费**）：
+- `totalManuscriptsGenerated / totalRevisionSessions / totalValidEdits / avgValidEditsPerManuscript`：基础统计
+- `top5EditCategories Json [string, number][]`：累计 Top5 修改类别 + 次数（画像雷达图数据源）
+- `top10WordReplaces Json [string, string, number][]`：Sprint 2 接 LCS/Myer's diff 做词级粒度，记录"这位政委经常把 XX 改成 YY"
+- `favoriteWordBucket`：字数偏好（`1200-2000字标准` 等）
+- `profileUnlockLevel`：0=未解锁 / 1=青铜 / 2=白银 / 3=黄金
+- `lastRevisedAt`：最后一次修改时间
+
+### 11.6 API 契约（前后端对齐）
+
+**`POST /revision-record/save` 请求体 `SaveRevisionRecordDto`**：
+```ts
+{
+  generationId: string;             // 前端生成：gen_{时间戳}_{随机5位}，把同篇多次修改聚合
+  manuscriptCategory: ManuscriptCategoryId;
+  beforeText: string;               // 原始快照（AI 刚吐出来的版本）
+  afterText: string;                // 用户改过的版本
+  wordCountBefore: number;
+  wordCountAfter: number;
+  frontendValidEditCount: number;   // 前端算的，后端再复核
+  diffSnippets?: DiffSnippetDto[];  // 3-15 条重点 diff（前端传，仅供参考，后端会重算）
+  totalEditChars?: number;
+}
+```
+
+**`POST /revision-record/save` 返回体 `SaveRevisionResultDto`**（前端立即用它刷新评分卡 💎 行）：
+```ts
+{
+  id: number;
+  validEditCount: number;                     // 后端复核后的"官方数字"
+  top3EditCategories: EditCategoryKey[];
+  editCategoriesBreakdown: Record<EditCategoryKey, number>;
+  personalBonus: 0 | 2 | 3 | 4;               // 💎 加成分
+  personalBonusLabel: string;                 // "💎 个性化加成 +3"
+  profileUnlockLevel: 0 | 1 | 2 | 3;
+  profileUnlockText: string;                  // "🥈 白银画像：已解锁 Top5 修改偏好"
+}
+```
+
+**`GET /user-profile` 返回体 `GetUserProfileResultDto`**（画像看板直接消费，Sprint 3 接可视化图表）：
+```ts
+{
+  totalManuscriptsGenerated, totalRevisionSessions, totalValidEdits, avgValidEditsPerManuscript,
+  top5EditCategories: [key, count][],
+  top5Labels: [{ key, label, emoji, desc, count }][],  // UI 直接渲染，不用再查字典
+  top10WordReplaces: [beforeWord, afterWord, count][], // Sprint 2 词级 diff 实现后有数据
+  favoriteWordBucket: string | null,
+  profileUnlockLevel: 0 | 1 | 2 | 3,
+  profileUnlockLabel: '🔒 未解锁' | '🥉 青铜画像' | '🥈 白银画像' | '🥇 黄金画像',
+  nextLevelNeed: number,                                // 到下一级还需多少有效修改
+  lastRevisedAt: ISO | null,
+  recommendations: string[];                            // 3-5 条个性化建议（基于 Top5 类别生成，如"你爱删口号结尾→试试结尾方式选『事实性结尾』"）
+}
+```
+
+### 11.7 零修改下载的「柔性引导」弹窗文案（`DOWNLOAD_GUIDE_ZERO_EDIT` 常量）
+
+**标题**：💡 建议您至少改 1 处——为您积累专属写作风格
+
+**正文**：
+```
+您当前对成品稿的有效修改次数：0 处
+
+· 修改越细致 → 下次生成越贴合您个人写作习惯
+· 累计 10 次有效修改 → 解锁「个人写作画像」看板
+· 改 ≥3 处 → 评分卡额外 +2 分「💎 个性化加成」
+· 改 ≥5 处 → 额外 +3 分 + 进入「S 级稿件精选」候选池
+
+（有效修改 = 非空格/标点的文字内容变更，系统自动识别）
+
+[📝 好的，我去修改]    [⏭️ 确认无需修改，直接下载]
+```
+
+> **关键决策**：右边「⏭️ 仍要下载」永远可点（不锁），但后台仍会 saveRevisionRecord 记录这次「0 修改下载」——这本身就是宝贵数据，画像中可以看到"这位政委对 AI 初稿很满意 / 很不满意"的分布。
+
+---
+
+## 12. Sprint 1~3 开发路线图
 
 ### 🏃 Sprint 1（MVP · 9 天 · 当前目标）
 1. toolbox.vue 加「✍️ 政工笔」卡片
 2. `/pages/toolbox/ai-manuscript.vue` 10 步 Steps 全骨架 + Step5 细节卡 6 维雷达（含阈值放行 + 智能建议）
 3. Step 6 字数三维联动滑杆 + 10 档刊物 + 12 位作家风格卡常量
 4. NestJS AiManuscriptModule 模块骨架（controller/service/dto）
-5. Prisma schema 新增 2 张表 + migration（manuscript_templates / template_tags）
+5. Prisma schema 新增 4 张表 + migration（manuscript_templates / template_tags / manuscript_revision_records / manuscript_user_profiles）
 6. backend prompts/ 6 层模板文件（system-iron-law.ts + 12-writer-styles.ts + fact-cage-template.ts）
 7. DeAiEngine（6 规则空骨架 + 打分函数）
 8. QualityScoringEngine（3 大维度 18 项判分空实现）
 9. 100 分评分卡片 UI 骨架 + 富文本 textarea 编辑器
 10. 范文上传入口 UI 骨架（双库）
+11. **🧩 前端自我优化闭环**：行级 diff 实时追踪 + 0 次修改柔性引导弹窗 + 评分卡 💎 个性化加成分显示
+12. **🧩 后端自我优化闭环**：`/revision-record/save`（后端复核 diff + 8 类修改启发式自动归类 + 写 RevisionRecord + 增量聚合 UserProfile）+ `/user-profile`（画像看板查询）
+13. **🧩 前后端常量对齐**：countValidEdits / getPersonalBonus / EDIT_CATEGORY_LABELS 三处实现前后端逐行一致，保证结果可复现
 
 ### 🚀 Sprint 2（增强 · 7-10 天）
 1. 文种补到 12 种
@@ -552,7 +718,7 @@ model ManuscriptTemplateTag {
 
 ---
 
-## 12. 工程规范（必须遵循 001 文档）
+## 13. 工程规范（必须遵循 001 文档）
 
 严格遵循《001 - 20260622 全面分析与优化方案》：
 

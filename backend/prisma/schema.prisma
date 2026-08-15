@@ -107,6 +107,10 @@ model User {
   scheduleSettings ScheduleSettings?
   // 政工笔：用户上传的个人范文（反向关联）
   ownedManuscriptTemplates ManuscriptTemplate[] @relation("ManuscriptOwner")
+  // 政工笔：用户的修改记录（闭环分析数据源）
+  manuscriptRevisionRecords ManuscriptRevisionRecord[] @relation("RevisionOwner")
+  // 政工笔：用户写作画像（聚合表，后续给个性化画像看板用）
+  manuscriptUserProfile ManuscriptUserProfile?
 
   @@index([username])
 }
@@ -2436,4 +2440,64 @@ model ManuscriptTemplateTag {
 
   @@unique([templateId, tagName])
   @@index([teamCode, tagCategory, tagName])
+}
+
+// ============================================================
+// ✨ 政工笔 · 稿件修改记录表（自我优化闭环·核心数据源）
+// 每一次用户对 AI 生成稿做的修改都会落库一条，后续用于：
+//   1) 政委个人写作画像看板（你改得最多的是哪类）
+//   2) 下一轮生成自动"避开你经常改的坑"
+//   3) 大模型 LoRA 微调数据（企业版）
+// ============================================================
+model ManuscriptRevisionRecord {
+  id              Int      @id @default(autoincrement())
+  userId          Int
+  teamCode        TeamCode
+  generationId    String   // AI 本次生成唯一号（前端 generatedAt+随机），用于把同篇稿子的多条 diff 聚一起
+  manuscriptCategory String // 稿件文种 categoryKey
+  wordCountBefore Int      // 修改前字数
+  wordCountAfter  Int      // 修改后字数
+  // 有效修改次数（前端已按「排除空格/标点/换行/大小写」判定，后端再复核一次）
+  validEditCount  Int      @default(0)
+  // 本次 3-15 条重点 diff（Json：[{type:'insert'|'replace'|'delete', before?, after?, startIdx, endIdx, editCategory}]）
+  diffSnippets    Json?
+  // 本次自动识别：用户"最常改的 3 类" Top3
+  top3EditCategories Json? // string[]，如 ["ADD_DETAIL_ACTION","REMOVE_SLOGAN_ENDING","WORD_REPLACE_VIVID"]
+  totalEditChars  Int      @default(0) // 总修改字符数（insert+delete）
+  createdAt       DateTime @default(now())
+
+  // 反向关联 User
+  user            User     @relation("RevisionOwner", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([teamCode, manuscriptCategory])
+}
+
+// ============================================================
+// ✨ 政工笔 · 政委个人写作画像聚合表（画像看板直接读这一张）
+// 每次 revision 入库时 service 层做 UPSERT 累加
+// ============================================================
+model ManuscriptUserProfile {
+  id             Int      @id @default(autoincrement())
+  userId         Int      @unique
+  teamCode       TeamCode
+  // 基础统计
+  totalManuscriptsGenerated Int @default(0) // 累计生成稿件次数
+  totalRevisionSessions     Int @default(0) // 累计修改会话次数（≥1 次有效修改才记）
+  totalValidEdits           Int @default(0) // 累计有效修改次数
+  avgValidEditsPerManuscript Float @default(0) // 平均每篇改几处
+  // Top 5 修改类别（string[] + 各自次数 Json）
+  top5EditCategories Json? // 如：[["ADD_DETAIL_ACTION",48],["REMOVE_SLOGAN_ENDING",31],...]
+  // 关键词替换偏好（你最经常把 XX 改成 YY）
+  top10WordReplaces Json? // 如：[["辛苦极了→手背上新疤",12],["任劳任怨→哑着嗓子说",9],...]
+  // 字数偏好：你最常把 AI 稿字数改成什么区间？
+  favoriteWordBucket String? // 如 1000-1500
+  // 解锁状态
+  profileUnlockLevel Int @default(0) // 0=锁（<10次有效修改）1=青铜 2=白银 3=黄金（≥50次）
+  lastRevisedAt    DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([teamCode, profileUnlockLevel])
 }

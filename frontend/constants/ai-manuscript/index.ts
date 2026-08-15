@@ -447,3 +447,99 @@ export const AI_DETECT_RATE_THRESHOLDS = [
   { max: 25,  label: '🟠 临界（建议一键加强去AI化）',           color: 'orange' },
   { max: 100, label: '🔴 危险（检测器大概率判AI，必须处理）',   color: 'red' }
 ];
+
+// ============================================================
+// 7. 自我优化闭环：有效修改判定规则 + 💎个性化加分规则 + 8 类修改分类
+// ============================================================
+
+/**
+ * 8 大修改类别（revision 自动归类，前后端共用一份字典）
+ * 后续画像看板："这位政委最爱做的修改——加动作细节 / 删口号结尾"
+ */
+export type EditCategoryKey =
+  | 'ADD_DETAIL_ACTION'     // ① 加小动作细节（把"他很辛苦"→"手背上2cm新疤还没结痂"）
+  | 'ADD_DIALOG'            // ② 加对白（增加人物对话）
+  | 'REMOVE_SLOGAN_ENDING'  // ③ 删口号式结尾（AI 最喜欢写的"让我们……！"/"一定会……！"）
+  | 'WORD_REPLACE_VIVID'    // ④ 空词换实词（"辛苦/任劳任怨/兢兢业业"→具体动作/对白）
+  | 'PARAGRAPH_RESTRUCTURE' // ⑤ 段落调整（整段移动、合并、拆分、加独句段）
+  | 'WORD_COUNT_TRIM'       // ⑥ 字数删减/扩充（整句删去以适配目标刊物字数）
+  | 'NUMBER_COLLOQUIAL'     // ⑦ 数字口语化（"约 50%"→"刚好一半"）
+  | 'OTHER_TWEAK';          // ⑧ 其他（改标点、错别字、人名/船名等）
+
+export const EDIT_CATEGORY_LABELS: Record<EditCategoryKey, { label: string; emoji: string; desc: string }> = {
+  ADD_DETAIL_ACTION:    { label: '加小动作细节', emoji: '🤸', desc: '你经常觉得 AI 写得太"空"，喜欢补动作、神态、外貌等具象细节' },
+  ADD_DIALOG:           { label: '加对白',       emoji: '💬', desc: '你喜欢让人物"说出来"而不是作者"介绍出来"' },
+  REMOVE_SLOGAN_ENDING: { label: '删口号结尾',   emoji: '🚫', desc: '你严格拒绝"让我们……！""一定会……！"这类空喊口号' },
+  WORD_REPLACE_VIVID:   { label: '空词换实词',   emoji: '🔁', desc: '你经常把"辛苦/勤恳/敬业"这类空泛词换成真实描述' },
+  PARAGRAPH_RESTRUCTURE:{ label: '段落调整',     emoji: '🧩', desc: '你重视结构，常移动段落、拆长段为独句段' },
+  WORD_COUNT_TRIM:      { label: '字数调整',     emoji: '📏', desc: '你严格控制目标字数，经常增删段落以适配目标刊物' },
+  NUMBER_COLLOQUIAL:    { label: '数字口语化',   emoji: '🔢', desc: '你喜欢把干巴巴的数字换成生活化表达（如"一半""三个半小时"）' },
+  OTHER_TWEAK:          { label: '其他微修',     emoji: '🛠️', desc: '标点/错别字/人名船名等事实修正' }
+};
+
+/**
+ * 有效修改判定规则（前后端同一份，避免前后端计数不一致）
+ * 「无效修改」= 纯空格/标点/换行/大小写 改动，不记为 1 处有效修改
+ * 「有效修改」= 改动内容中至少有一个 CJK 汉字 / 英文单词
+ */
+export function countValidEdits(
+  diffs: Array<{ type: 'insert' | 'delete' | 'replace'; before?: string; after?: string }>
+): { count: number; validDiffs: typeof diffs } {
+  const HAS_VALID_CHAR = /[\u4e00-\u9fa5A-Za-z0-9]/; // 只要有汉字/英文/数字就算有效
+  let count = 0;
+  const validDiffs: typeof diffs = [];
+  for (const d of diffs) {
+    const before = d.before ?? '';
+    const after = d.after ?? '';
+    // 跳过完全一样
+    if (before === after) continue;
+    // 去掉空格/标点/换行后，检查有没有有效字符
+    const strip = (s: string) => s.replace(/[\s，。！？、；：""''（）《》…—·\-,.!?;:()<>"'_/\\\[\]{}@#$%^&*+=`~|]/g, '');
+    const strippedDelta = (d.type === 'insert' || d.type === 'replace') ? strip(after) : strip(before);
+    if (!HAS_VALID_CHAR.test(strippedDelta)) continue;
+    count++;
+    validDiffs.push(d);
+  }
+  return { count, validDiffs };
+}
+
+/**
+ * 💎 个性化加成规则（柔性激励：不是强锁，而是正向加分）
+ *  ┌───────────────┬───────────────┬─────────────────────────────────────────┐
+ *  │ 有效修改次数  │ 额外加分      │ 解锁权益                                 │
+ *  ├───────────────┼───────────────┼─────────────────────────────────────────┤
+ *  │ 0 次          │ +0            │ 弹窗柔性提示去修改                       │
+ *  │ 1-2 处        │ +0            │ —                                        │
+ *  │ 3-4 处        │ +2            │ 💎 个性化加成 +2                        │
+ *  │ 5-9 处        │ +3            │ 💎 个性化加成 +3 + 进入 S 级稿件候选池   │
+ *  │ ≥10 处        │ +4            │ 💎 个性化加成 +4 + 解锁个人画像看板      │
+ *  └───────────────┴───────────────┴─────────────────────────────────────────┘
+ */
+export function getPersonalBonus(validEditCount: number): {
+  bonus: 0 | 2 | 3 | 4;
+  label: string;
+  unlockLevel: 0 | 1 | 2 | 3; // 画像解锁等级
+  unlockText: string;
+} {
+  if (validEditCount >= 10) return { bonus: 4, label: '💎 个性化加成 +4', unlockLevel: 3, unlockText: '🎉 黄金级画像：已解锁完整个人写作偏好分析' };
+  if (validEditCount >= 5)  return { bonus: 3, label: '💎 个性化加成 +3', unlockLevel: 2, unlockText: '🥈 白银级画像：已解锁 Top5 修改偏好 / 进入 S 级稿候选池' };
+  if (validEditCount >= 3)  return { bonus: 2, label: '💎 个性化加成 +2', unlockLevel: 1, unlockText: '🥉 青铜级画像：再改 7 处即可解锁完整个人画像看板' };
+  return { bonus: 0, label: '', unlockLevel: 0, unlockText: '改满 3 处可解锁个性化加分，满 10 处解锁个人画像看板 ✨' };
+}
+
+/**
+ * 柔性引导弹窗文案（用户 0 次修改点下载时弹）
+ */
+export const DOWNLOAD_GUIDE_ZERO_EDIT = {
+  title: '💡 建议您至少改 1 处——为您积累专属写作风格',
+  intro: (validEditCount: number) => `您当前对成品稿的有效修改次数：${validEditCount} 处`,
+  bullets: [
+    '· 修改越细致 → 下次生成越贴合您个人写作习惯',
+    '· 累计 10 次有效修改 → 解锁「个人写作画像」看板',
+    '· 改 ≥3 处 → 评分卡额外 +2 分「💎 个性化加成」',
+    '· 改 ≥5 处 → 额外 +3 分 + 进入「S 级稿件精选」候选池'
+  ],
+  hint: '（有效修改 = 非空格/标点的文字内容变更，系统自动识别）',
+  btnGoEdit: '📝 好的，我去修改',
+  btnSkip:   '⏭️  确认无需修改，直接下载'
+};

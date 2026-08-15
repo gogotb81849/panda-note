@@ -6,7 +6,7 @@ import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards, UsePi
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { User, UserPayload } from '../auth/user.decorator';
 import { AiManuscriptService } from './ai-manuscript.service';
-import { GenerateManuscriptDto, ScoreOnlyDto, DeaiOnlyDto } from './dto/generate-manuscript.dto';
+import { GenerateManuscriptDto, ScoreOnlyDto, DeaiOnlyDto, SaveRevisionRecordDto } from './dto/generate-manuscript.dto';
 import { Logger } from '@nestjs/common';
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
 
@@ -115,5 +115,30 @@ export class AiManuscriptController {
   @Get('history')
   async history(@User() user: UserPayload) {
     return { total: 0, items: [], message: 'Sprint 2 实现：保存用户每次生成的字段 + prompt + 结果，可复用/对比' };
+  }
+
+  // ============================================================
+  // 🧩 自我优化闭环 ① 保存一次修改记录
+  // 触发时机：前端点「导出 Word」「存草稿」「跳过引导直接下载」时都会调一次
+  // ============================================================
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @Post('revision-record/save')
+  async saveRevisionRecord(
+    @User() user: UserPayload,
+    @Body() dto: SaveRevisionRecordDto,
+    @Req() req: any,
+  ) {
+    this.logger.log(`[user=${user.userId}] 保存修改记录 category=${dto.manuscriptCategory} frontValidEdits=${dto.frontendValidEditCount}`);
+    return this.service.saveRevisionRecord(dto, user, req.teamCode);
+  }
+
+  // ============================================================
+  // 🧩 自我优化闭环 ② 查询政委个人写作画像（画像看板直接消费）
+  // ============================================================
+  @SkipThrottle()
+  @Get('user-profile')
+  async getUserProfile(@User() user: UserPayload, @Req() req: any) {
+    this.logger.debug(`[user=${user.userId}] 查询个人写作画像`);
+    return this.service.getUserProfile(user.userId, req.teamCode);
   }
 }
