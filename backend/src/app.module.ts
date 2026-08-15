@@ -56,6 +56,7 @@ import { DiaryBlockModule } from './diary-block/diary-block.module';
 import { ImportantDateModule } from './important-date/important-date.module';
 import { ScheduleReminderModule } from './schedule-reminder/schedule-reminder.module';
 import { ScheduleSettingsModule } from './schedule-settings/schedule-settings.module';
+import { AiManuscriptModule } from './ai-manuscript/ai-manuscript.module';
 
 @Module({
   imports: [
@@ -115,6 +116,7 @@ import { ScheduleSettingsModule } from './schedule-settings/schedule-settings.mo
     ImportantDateModule,
     ScheduleReminderModule,
     ScheduleSettingsModule,
+    AiManuscriptModule,
   ],
   controllers: [HealthController],
   providers: [],

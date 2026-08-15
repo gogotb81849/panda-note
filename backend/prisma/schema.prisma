@@ -105,6 +105,8 @@ model User {
   importantDates ImportantDate[]
   scheduleReminders ScheduleReminder[]
   scheduleSettings ScheduleSettings?
+  // 政工笔：用户上传的个人范文（反向关联）
+  ownedManuscriptTemplates ManuscriptTemplate[] @relation("ManuscriptOwner")
 
   @@index([username])
 }
@@ -2388,4 +2390,50 @@ model MagazineAutoSave {
   expiresAt   DateTime // 24小时后过期
 
   @@index([magazineId])
+}
+
+// ============================================================
+// ✨ 政工笔（AI 智能写作系统）· 范文主表（双库隔离：owner_user_id NULL = 全局 admin 库）
+// ============================================================
+model ManuscriptTemplate {
+  id             Int      @id @default(autoincrement())
+  teamCode       TeamCode
+  ownerUserId    Int?     // NULL = 全局 admin 库；非 NULL = 个人用户库
+  title          String
+  source         String?  // 来源（如：中远海运政工简报 2024.03 期 / 用户个人上传）
+  contentText    String   @db.Text // 抽取后的纯文本（tsvector 检索）
+  summary200     String?  @db.Text // AI 自动生成的 200 字摘要
+  goldenSentences Json?    // 5 条金句摘录（string[]）
+  wordCount      Int      @default(0)
+  era            String?  // 年代标签（2020s / 2010s / 2000s / earlier）
+  emotionTone    String?  // 情绪基调（庄重/抒情/紧张/欢快/反思）
+  matchScore     Int?     // AI 自动打分 0-100：集团用稿匹配度
+  // PostgreSQL tsvector 全文索引列；用 Unsupported，migration 里用原生 SQL 建触发器更新
+  contentVector  Unsupported("tsvector")?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // 关联：作者 User（ownerUserId 有值时指向个人）
+  owner          User?    @relation("ManuscriptOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  // 关联：多对多标签
+  tags           ManuscriptTemplateTag[]
+
+  @@index([teamCode, ownerUserId])
+  @@index([teamCode])
+}
+
+// ============================================================
+// ✨ 政工笔 · 范文多对多标签表（6 大类：文种/主题/人物/字数档/年代/自定义）
+// ============================================================
+model ManuscriptTemplateTag {
+  id          Int    @id @default(autoincrement())
+  templateId  Int
+  tagName     String // 如：先进事迹 / 安全类 / 王建国 / 1000-1500字 / 2020s
+  tagCategory String // category / topic / person / word_count_bucket / era / custom
+  teamCode    TeamCode
+
+  template    ManuscriptTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, tagName])
+  @@index([teamCode, tagCategory, tagName])
 }

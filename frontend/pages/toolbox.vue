@@ -75,6 +75,16 @@
           <el-button type="success" class="tool-btn">进入菜篮子</el-button>
         </div>
       </el-card>
+
+      <!-- 政工笔 · AI 智能写作（船舶政工写作专家系统） -->
+      <el-card class="tool-card tool-card-highlight cursor-pointer hover:shadow-lg transition-shadow" @click="openAiManuscript">
+        <div class="tool-content">
+          <div class="tool-icon">✍️</div>
+          <h3>政工笔 · AI 智能写作</h3>
+          <p>通讯/简报/人物稿/散文/总结：10 步结构化填表 → 出一篇集团录用规范、去 AI 化 ≤15% 的成品稿</p>
+          <el-button type="warning" class="tool-btn">进入政工笔</el-button>
+        </div>
+      </el-card>
     </div>
     
     <!-- PDF压缩对话框 -->
@@ -141,6 +151,11 @@ const openShipPlant = () => {
   // 完全内嵌版本（和熊猫笔记就是一体！不走 iframe、不用额外部署）
   // 架构说明见 003 文档第十章『嵌入一体化 + 一键剥离导出』路线
   router.push('/toolbox/ship-plant')
+}
+
+const openAiManuscript = () => {
+  // 政工笔：船舶政工 AI 写作专家系统（10 步结构化填表 + 去 AI 化 + 100 分评分）
+  router.push('/toolbox/ai-manuscript')
 }
 </script>
 

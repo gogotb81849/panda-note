@@ -1,0 +1,865 @@
+<template>
+  <div class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 p-4 sm:p-6">
+    <div class="max-w-6xl mx-auto">
+      <!-- 顶部标题栏 -->
+      <div class="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div>
+          <h1 class="text-2xl font-bold text-gray-800 flex items-center gap-2">
+            ✍️ 政工笔 · AI 智能写作
+          </h1>
+          <p class="mt-1 text-gray-500 text-sm">
+            10 步填表 → 点生成 → 一篇符合集团录用规范、AI 检测率 ≤15% 的成品稿（Sprint 1 MVP 骨架）
+          </p>
+        </div>
+        <div class="flex gap-2 flex-wrap">
+          <el-button @click="$router.push('/toolbox')">← 返回工具箱</el-button>
+          <el-button type="primary" plain @click="openMyTemplates">📂 我的范文库</el-button>
+          <el-tag type="warning" size="large">v1.0 Sprint 1 MVP</el-tag>
+        </div>
+      </div>
+
+      <!-- Steps 步骤条 -->
+      <el-steps
+        :active="activeStep" finish-status="success" simple
+        class="mb-6 bg-white rounded-lg p-4 sm:p-6 shadow-sm"
+      >
+        <el-step v-for="(st, idx) in STEPS_LABEL" :key="idx" :title="st" />
+      </el-steps>
+
+      <!-- 步骤内容卡片 -->
+      <div class="bg-white rounded-lg shadow-sm p-4 sm:p-8 min-h-[520px]">
+        <!-- Step 1: 文种 + 作家调味 -->
+        <div v-if="activeStep === 0">
+          <h2 class="text-xl font-semibold mb-4">① 选文种 + 文学风格调味</h2>
+          <el-form :model="form" label-position="top">
+            <el-form-item label="📋 稿件类型">
+              <el-radio-group v-model="form.categoryId">
+                <el-radio-button
+                  v-for="c in CATEGORIES_SPRINT1" :key="c.id"
+                  :value="c.id"
+                  class="!mr-2 !mb-3"
+                >
+                  <span class="text-xl mr-1">{{ c.icon }}</span>
+                  {{ c.name }}
+                </el-radio-button>
+              </el-radio-group>
+              <p class="text-xs text-gray-500 mt-1">
+                {{ CATEGORIES_SPRINT1.find(c => c.id === form.categoryId)?.desc }}
+              </p>
+            </el-form-item>
+
+            <el-form-item label="🍶 文学风格调味（可选 · 让文章更有"味道"）">
+              <el-select v-model="form.writerStyleId" placeholder="不调味（标准政工风格）" style="width: 100%; max-width: 520px">
+                <el-option
+                  v-for="w in WRITER_STYLES" :key="w.id" :value="w.id"
+                  :label="w.name + ' · ' + w.oneLiner.slice(0, 30) + (w.oneLiner.length>30?'…':'')"
+                >
+                  <div class="flex items-start gap-3 py-1">
+                    <div class="text-3xl">{{ w.avatar }}</div>
+                    <div class="flex-1">
+                      <div class="font-semibold">{{ w.name }} <span class="text-xs text-gray-400 ml-2">{{ w.era }} · {{ w.gender==='female'?'女作家':'男作家' }}</span></div>
+                      <div class="text-xs text-gray-600 mt-1 leading-relaxed">{{ w.oneLiner }}</div>
+                    </div>
+                  </div>
+                </el-option>
+              </el-select>
+            </el-form-item>
+          </el-form>
+        </div>
+
+        <!-- Step 2: 基本要素 -->
+        <div v-else-if="activeStep === 1">
+          <h2 class="text-xl font-semibold mb-4">② 基本要素（全必填 · 防止 AI 杜撰）</h2>
+          <el-form :model="form.basic" label-position="top">
+            <el-row :gutter="16">
+              <el-col :span="24" :md="12">
+                <el-form-item label="🕒 发生日期">
+                  <el-date-picker v-model="form.basic.happenDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width:100%" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="24" :md="12">
+                <el-form-item label="📍 发生地点（船名/航段/舱室）">
+                  <el-input v-model="form.basic.location" placeholder="例如：中远海运上海号 · 印度洋航段 · 机舱底层" />
+                </el-form-item>
+              </el-col>
+            </el-row>
+
+            <el-divider content-position="left">👥 涉及人物（可动态增加）</el-divider>
+            <el-form-item
+              v-for="(p, idx) in form.basic.personList" :key="idx"
+              :label="idx===0 ? '核心人物 1' : `人物 ${idx+1}`"
+            >
+              <div class="grid grid-cols-1 md:grid-cols-4 gap-3 w-full">
+                <el-input v-model="p.name" placeholder="姓名" />
+                <el-input v-model="p.duty" placeholder="职务（政委/大副/机工/…）" />
+                <el-input v-model="p.shipName" placeholder="所属船舶（可选）" />
+                <div class="flex gap-2">
+                  <el-input v-model="p.dept" placeholder="部门（可选）" class="flex-1" />
+                  <el-button v-if="idx>0" type="danger" text @click="removePerson(idx)">✕</el-button>
+                </div>
+              </div>
+            </el-form-item>
+            <el-button type="primary" plain size="small" @click="addPerson">＋ 增加一位人物</el-button>
+          </el-form>
+        </div>
+
+        <!-- Step 3: 事件过程 -->
+        <div v-else-if="activeStep === 2">
+          <h2 class="text-xl font-semibold mb-4">③ 事件过程（按时间顺序写）</h2>
+          <el-form label-position="top">
+            <el-form-item :label="`请按『起因→发展→高潮→结果』写清楚：已写 ${form.eventProcess.length} 字`">
+              <el-input
+                v-model="form.eventProcess" type="textarea"
+                :rows="10"
+                placeholder="例如：\n15 号凌晨 02:17 主机突然 1#缸油头报警，值班机工小李第一时间赶到…\n随后班长老王带病下床组织抢修…\n经 3 小时吊缸更换油头，于 05:22 恢复正常运行，未耽误班期。"
+              />
+              <div class="mt-1 text-xs">
+                <el-tag v-if="form.eventProcess.length<100" type="danger" size="small">至少写 100 字才能下一步</el-tag>
+                <el-tag v-else type="success" size="small">✅ 字数够了</el-tag>
+              </div>
+            </el-form-item>
+          </el-form>
+        </div>
+
+        <!-- Step 4: 主题思想 -->
+        <div v-else-if="activeStep === 3">
+          <h2 class="text-xl font-semibold mb-4">④ 主题思想（想传递什么精神？）</h2>
+          <el-form label-position="top">
+            <el-form-item :label="`想传递什么精神 / 价值观 / 上级要求？已写 ${form.themeIdea.length} 字`">
+              <el-input
+                v-model="form.themeIdea" type="textarea" :rows="6"
+                placeholder="例如：\n- 体现党员在急难险重任务中的先锋模范作用\n- 响应公司『安全生产月』活动号召\n- 展示远洋船员『忠诚、担当、务实、高效』的企业精神"
+              />
+              <div class="mt-1 text-xs">
+                <el-tag v-if="form.themeIdea.length<50" type="warning" size="small">建议至少写 50 字，AI 才能更精准扣题</el-tag>
+                <el-tag v-else type="success" size="small">✅ OK</el-tag>
+              </div>
+            </el-form-item>
+          </el-form>
+        </div>
+
+        <!-- Step 5: 🧩 细节卡堆积木 + 6 维雷达（核心） -->
+        <div v-else-if="activeStep === 4">
+          <h2 class="text-xl font-semibold mb-2">⑤ 🧩 贴细节卡（越多越生动 · 低于 30 分禁止下一步）</h2>
+          <p class="text-xs text-gray-500 mb-4">
+            🚫 防杜撰红线：AI <b>只使用你写进卡片里的事实</b>，不在卡片中的任何内容<b>严禁编造</b>！
+          </p>
+
+          <el-row :gutter="24">
+            <!-- 左：细节雷达 + 智能建议 -->
+            <el-col :span="24" :md="8">
+              <div class="bg-gray-50 rounded-lg p-4 border border-gray-100">
+                <div class="text-center mb-3">
+                  <div class="text-sm text-gray-600 mb-1">🎯 细节丰富度评分</div>
+                  <div class="text-3xl font-bold mb-1" :class="radarGradeColorClass">
+                    {{ radarScore.total }}
+                    <span class="text-lg text-gray-400">/100</span>
+                  </div>
+                  <el-progress
+                    :percentage="radarScore.total"
+                    :color="radarProgressColor"
+                    :stroke-width="12"
+                  />
+                  <el-tag size="small" :type="radarTagType" class="mt-2">
+                    {{ radarGradeLabel }}
+                  </el-tag>
+                </div>
+
+                <el-divider content-position="left" class="my-3 text-xs">6 维拆解</el-divider>
+                <div class="space-y-2 text-sm">
+                  <RadarDimBar label="👤 动作细节" :score="radarScore.actionScore" :full="20" />
+                  <RadarDimBar label="💬 对话金句" :score="radarScore.dialogScore" :full="15" />
+                  <RadarDimBar label="🍃 环境场景" :score="radarScore.envScore"    :full="15" />
+                  <RadarDimBar label="🔊 五感细节" :score="radarScore.sensesScore"  :full="10" />
+                  <RadarDimBar label="🔢 数字数据" :score="radarScore.numberScore"  :full="20" />
+                  <RadarDimBar label="🎭 情绪心理" :score="radarScore.emotionScore" :full="20" />
+                </div>
+
+                <el-divider content-position="left" class="my-3 text-xs">💡 智能建议</el-divider>
+                <div class="text-xs text-gray-700 leading-relaxed bg-blue-50 p-3 rounded border border-blue-100 min-h-[60px]">
+                  {{ smartSuggestion }}
+                </div>
+
+                <!-- 拦截提示（<30 红 / 30-60 橙） -->
+                <div v-if="radarScore.grade==='red'" class="mt-3 p-3 rounded bg-red-50 border border-red-200 text-xs text-red-700">
+                  ⛔ <b>禁止下一步</b>：细节不足 30 分，AI 会杜撰 80% 内容！至少再补 3-5 张卡片。
+                </div>
+                <div v-else-if="radarScore.grade==='orange'" class="mt-3 p-3 rounded bg-orange-50 border border-orange-200 text-xs text-orange-700">
+                  ⚠️ 下一步会弹二次确认：<b>当前仍可能有 30-40% 内容被 AI 杜撰</b>，建议再补几张。
+                </div>
+              </div>
+            </el-col>
+
+            <!-- 右：细节卡堆积木区 -->
+            <el-col :span="24" :md="16">
+              <!-- 7 类按钮 -->
+              <div class="mb-3 flex flex-wrap gap-2">
+                <el-button
+                  v-for="ct in DETAIL_CARD_TYPES" :key="ct.id"
+                  :type="ct.btnColor || 'default'"
+                  plain
+                  size="small"
+                  @click="addDetailCard(ct.id)"
+                >
+                  + {{ ct.emoji }} {{ ct.label }}
+                </el-button>
+              </div>
+
+              <!-- 卡片列表（可上下移动 + 删除） -->
+              <div class="space-y-3">
+                <div
+                  v-for="(card, idx) in form.detailCards" :key="card.id"
+                  class="border rounded-lg p-3 hover:shadow transition-shadow"
+                  :class="'border-l-4 ' + getCardLeftBorderColor(card.type)"
+                >
+                  <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center gap-2 text-sm">
+                      <span class="text-lg">
+                        {{ DETAIL_CARD_TYPES.find(c=>c.id===card.type)?.emoji }}
+                      </span>
+                      <span class="font-medium">
+                        卡片 {{ idx+1 }} · {{ DETAIL_CARD_TYPES.find(c=>c.id===card.type)?.label }}
+                      </span>
+                    </div>
+                    <div class="flex gap-1">
+                      <el-button size="small" text :disabled="idx===0" @click="moveCardUp(idx)">↑</el-button>
+                      <el-button size="small" text :disabled="idx===form.detailCards.length-1" @click="moveCardDown(idx)">↓</el-button>
+                      <el-button size="small" type="danger" text @click="removeCard(idx)">✕ 删除</el-button>
+                    </div>
+                  </div>
+                  <el-input
+                    v-model="card.text" type="textarea"
+                    :rows="2" autosize
+                    :placeholder="DETAIL_CARD_TYPES.find(c=>c.id===card.type)?.placeholder"
+                  />
+                </div>
+
+                <el-empty v-if="form.detailCards.length===0" description="👇 点上面的按钮开始贴细节卡，最少 3 张起" :image-size="80" />
+              </div>
+            </el-col>
+          </el-row>
+        </div>
+
+        <!-- Step 6: 写作偏好 + 字数三维联动 -->
+        <div v-else-if="activeStep === 5">
+          <h2 class="text-xl font-semibold mb-4">⑥ 写作偏好 & 目标字数</h2>
+          <el-form :model="form.preference" label-position="top">
+            <el-row :gutter="16">
+              <el-col :span="24" :md="8">
+                <el-form-item label="🗣️ 语气">
+                  <el-select v-model="form.preference.tone" style="width:100%">
+                    <el-option label="⚖️ 正式庄重（公文/报告用）" value="formal" />
+                    <el-option label="🫱 朴实亲切（人物/通讯用）" value="plain" />
+                    <el-option label="🔥 热情洋溢（倡议/鼓舞用）" value="enthusiastic" />
+                    <el-option label="🧊 理性客观（总结/纪要用）" value="objective" />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+              <el-col :span="24" :md="8">
+                <el-form-item label="👁️ 人称">
+                  <el-radio-group v-model="form.preference.person">
+                    <el-radio-button value="third">第三人称（客观）</el-radio-button>
+                    <el-radio-button value="first">第一人称（我/我们）</el-radio-button>
+                  </el-radio-group>
+                </el-form-item>
+              </el-col>
+              <el-col :span="24" :md="8">
+                <el-form-item label="🏁 结尾方式">
+                  <el-select v-model="form.preference.ending" style="width:100%">
+                    <el-option label="📋 事实总结（客观）" value="fact" />
+                    <el-option label="🌅 展望未来（积极）" value="future" />
+                    <el-option label="💛 抒情写意（散文）" value="emotional" />
+                    <el-option label="🔓 开放式（留白）" value="open" />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+            </el-row>
+
+            <el-row :gutter="16">
+              <el-col :span="24" :md="6">
+                <el-form-item label="是否加小标题？">
+                  <el-switch v-model="form.preference.withSubtitles" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="24" :md="18">
+                <el-form-item label="🚫 禁忌开关（多选）">
+                  <el-checkbox-group v-model="form.preference.taboos">
+                    <el-checkbox value="no_slogan" :label="'no_slogan'">❌ 禁用口号式结尾</el-checkbox>
+                    <el-checkbox value="no_netword" :label="'no_netword'">❌ 禁用网络热词</el-checkbox>
+                    <el-checkbox value="no_exaggerate" :label="'no_exaggerate'">❌ 禁用夸张修辞（呕心沥血…）</el-checkbox>
+                    <el-checkbox value="prefer_short" :label="'prefer_short'">✅ 偏爱短句（每句≤25字）</el-checkbox>
+                  </el-checkbox-group>
+                </el-form-item>
+              </el-col>
+            </el-row>
+
+            <!-- 📏 字数三维联动（核心） -->
+            <el-divider content-position="left">📏 目标刊物 & 目标字数</el-divider>
+            <el-form-item label="📰 目标投稿刊物（决定推荐字数区间）">
+              <el-select v-model="form.preference.journalId" style="width:100%">
+                <el-option
+                  v-for="j in journalOptionsForCurrentCategory" :key="j.journalId" :value="j.journalId"
+                  :label="j.journalName + '  推荐' + j.min + '~' + j.max + '字' + (j.remark?' · '+j.remark.slice(0,20):'')"
+                />
+              </el-select>
+            </el-form-item>
+
+            <div class="bg-gradient-to-br from-gray-50 to-blue-50 rounded-lg p-4 border border-gray-200">
+              <div class="flex flex-col sm:flex-row items-center justify-between gap-2 mb-2">
+                <label class="text-sm font-medium">🎯 目标字数：<span class="text-2xl font-bold text-blue-600">{{ form.preference.wordCount }}</span> 字</label>
+                <div class="flex gap-1 flex-wrap">
+                  <el-tag v-for="p in WORDCOUNT_PRESETS" :key="p.value" size="small" type="info"
+                    class="cursor-pointer" @click="form.preference.wordCount = p.value">
+                    {{ p.label }}
+                  </el-tag>
+                </div>
+              </div>
+              <el-slider
+                v-model="form.preference.wordCount"
+                :min="300" :max="6000" :step="50" :marks="sliderMarks"
+                :tooltip="'always'"
+              />
+              <!-- 推荐区间可视化 -->
+              <div class="mt-4 text-xs">
+                <div class="flex justify-between text-gray-500 mb-1">
+                  <span>300</span>
+                  <span>
+                    推荐区间：
+                    <el-tag size="small" type="success" plain>
+                      {{ currentJournalRef?.min }} ~ {{ currentJournalRef?.max }} 字
+                    </el-tag>
+                    （超 {{ currentJournalRef?.absoluteMax }} 字大概率退回）
+                  </span>
+                  <span>6000</span>
+                </div>
+                <div class="h-3 bg-gray-200 rounded-full overflow-hidden relative">
+                  <div
+                    class="absolute h-full bg-red-200"
+                    :style="{ width: `${Math.max(0, (currentJournalRef?.min||0) * 100 / 6000)}%` }"
+                  />
+                  <div
+                    class="absolute h-full bg-green-400"
+                    :style="{
+                      left: `${(currentJournalRef?.min||0) * 100 / 6000}%`,
+                      width: `${Math.max(1, ((currentJournalRef?.max||0) - (currentJournalRef?.min||0)) * 100 / 6000)}%`
+                    }"
+                  />
+                  <div
+                    class="absolute h-full bg-red-200"
+                    :style="{
+                      left: `${(currentJournalRef?.max||0) * 100 / 6000}%`,
+                      width: `${Math.max(0, (6000 - (currentJournalRef?.max||0)) * 100 / 6000)}%`
+                    }"
+                  />
+                  <div
+                    class="absolute h-5 w-5 rounded-full -top-1 shadow bg-blue-600 border-2 border-white"
+                    :style="{ left: `calc(${form.preference.wordCount * 100 / 6000}% - 10px)` }"
+                  />
+                </div>
+                <div class="mt-2" v-html="wordStatusTipHtml"></div>
+                <p class="mt-2 text-gray-500" v-if="currentJournalRef?.remark">{{ currentJournalRef.remark }}</p>
+              </div>
+            </div>
+          </el-form>
+        </div>
+
+        <!-- Step 7: 对标范本勾选 -->
+        <div v-else-if="activeStep === 6">
+          <h2 class="text-xl font-semibold mb-4">⑦ 选择对标范本来源（AI 自动检索 Top-3 注入风格）</h2>
+          <el-form :model="form.templateChoice" label-position="top">
+            <el-checkbox-group>
+              <el-checkbox :value="true" :label="'useGlobalL1'" model-value>
+                🏛️ <b>集团全局范文库</b>（管理员上传的合集/政工月刊/集团公众号精选）
+                <span class="text-xs text-gray-500">默认勾选，推荐</span>
+              </el-checkbox>
+              <el-checkbox :value="form.templateChoice.usePersonalL1" :label="'usePersonalL1'">
+                👤 <b>我的个人范文库</b>（我自己上传的历史稿件）
+              </el-checkbox>
+              <el-checkbox :value="true" :label="'usePublicL2'" model-value>
+                📰 <b>行业公开库</b>（中国远洋海运报等公开稿）
+              </el-checkbox>
+            </el-checkbox-group>
+
+            <el-alert
+              class="mt-4" type="info" :closable="false" show-icon
+              title="范文库导入入口"
+              description="👉 管理员：系统管理 → 政工范文库管理；👉 普通用户：右上角【我的范文库】按钮。支持批量导入 Word/PDF，系统 AI 自动打 6 类标签 + 写 200 字摘要。"
+            />
+          </el-form>
+        </div>
+
+        <!-- Step 8: 预览完整 Prompt -->
+        <div v-else-if="activeStep === 7">
+          <h2 class="text-xl font-semibold mb-2">⑧ 🎯 预览发送给 AI 的完整提示词</h2>
+          <p class="text-xs text-gray-500 mb-4">发送前最后检查一遍。觉得哪里不对？点上面步骤条回去改。</p>
+          <el-card shadow="never" class="!bg-gray-50 !border-gray-200">
+            <pre class="text-xs leading-relaxed whitespace-pre-wrap">{{ fullPromptPreview }}</pre>
+          </el-card>
+        </div>
+
+        <!-- Step 9: 生成 loading -->
+        <div v-else-if="activeStep === 8" class="flex flex-col items-center justify-center py-16">
+          <el-icon class="text-6xl text-blue-500 animate-spin mb-4"><Loading /></el-icon>
+          <h2 class="text-xl font-semibold mb-1">⑨ ✨ AI 正在为你撰写稿件…</h2>
+          <p class="text-sm text-gray-500 max-w-xl text-center">
+            ① 拼接 6 层 Prompt → ② 集团范文库 RAG 检索 Top3 → ③ 调用大模型生成初稿 →
+            ④ 跑 6 条去 AI 化规则（强度 {{ form.preference.deaiStrength }}%）→ ⑤ 100 分制质量评分<br>
+            （Sprint 1 骨架版：此处展示模拟生成效果，待后端接口部署后对接真实 AI）
+          </p>
+          <div class="mt-6 w-full max-w-xl">
+            <el-progress :percentage="mockGenProgress" :stroke-width="10" status="success" />
+          </div>
+        </div>
+
+        <!-- Step 10: 编辑器 + 评分卡 MVP 骨架 -->
+        <div v-else-if="activeStep === 9">
+          <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+            <div class="xl:col-span-2">
+              <h2 class="text-xl font-semibold mb-4">⑩ 📝 成品稿（可直接修改）</h2>
+              <div class="flex gap-2 mb-3 flex-wrap">
+                <el-button type="primary" plain size="small">📋 复制全文</el-button>
+                <el-button type="success" plain size="small">💾 存为熊猫笔记草稿</el-button>
+                <el-button type="warning" plain size="small">📰 发往杂志编排</el-button>
+                <el-button type="info" plain size="small">📤 导出 Word</el-button>
+                <el-button type="danger" plain size="small" @click="activeStep = 8">🔄 重新生成</el-button>
+              </div>
+              <el-input
+                v-model="mockResultArticle"
+                type="textarea"
+                :rows="28"
+                class="font-serif text-base leading-relaxed p-4"
+              />
+            </div>
+
+            <!-- 🏆 评分卡片（MVP 骨架 + 假数据演示） -->
+            <div>
+              <h2 class="text-xl font-semibold mb-4">🏆 质量评估报告</h2>
+              <div class="bg-gradient-to-br from-white to-green-50 border border-green-200 rounded-lg p-5 shadow-sm">
+                <div class="text-center mb-3">
+                  <div class="text-sm text-gray-600 mb-1">综合评分</div>
+                  <div class="text-5xl font-black text-green-600">92<span class="text-xl text-gray-400">/100</span></div>
+                  <el-tag type="success" size="large" class="mt-2">🟢 A · 优秀</el-tag>
+                </div>
+                <el-progress :percentage="92" :stroke-width="10" color="#22c55e" class="mb-4" />
+
+                <div class="text-sm border-t border-gray-100 pt-3 mb-2">
+                  <div class="mb-2">🤖 <b>模拟 AI 检测率</b>：
+                    <el-tag size="small" type="success">6.3%（远低于安全阈值 ≤15%）</el-tag>
+                  </div>
+                  <div class="text-xs text-gray-600">主流检测器 GPTZero / 知网 AI 检测：预期判为「人类手写」</div>
+                </div>
+
+                <el-divider class="my-3" />
+                <div class="text-sm">
+                  <div class="font-semibold mb-2">📖 可投级别建议：</div>
+                  <ul class="text-xs space-y-1 text-gray-700 list-disc pl-4">
+                    <li>✅ 船队/公司内部刊物：<b>完全可用</b>（通过率 ≥99%）</li>
+                    <li>✅ 中国远洋海运报 · 普通版：<b>可用</b>（通过率 ≥85%）</li>
+                    <li>⚠️ 中国远洋海运报 · 头版：建议微调 2-3 处细节（通过率 ~60%）</li>
+                    <li>🎯 国家级水运期刊（《中国水运》）：<b>可投</b>（预期得分 ≈84）</li>
+                  </ul>
+                </div>
+
+                <el-divider class="my-3" />
+                <div class="text-sm space-y-1.5">
+                  <div class="flex justify-between"><span>📝 内容完整性</span><el-tag size="small" type="success">18/20</el-tag></div>
+                  <div class="flex justify-between"><span>🎯 主题贴合度</span><el-tag size="small" type="success">17/20</el-tag></div>
+                  <div class="flex justify-between"><span>🧭 文种格式规范</span><el-tag size="small" type="success">19/20</el-tag></div>
+                  <div class="flex justify-between"><span>🎨 文学表现力</span><el-tag size="small" type="warning">14/20 👉 建议补 1 处细节</el-tag></div>
+                  <div class="flex justify-between"><span>🧠 去 AI 化程度</span><el-tag size="small" type="success">19/20</el-tag></div>
+                  <div class="flex justify-between"><span>⚖️ 合规性</span><el-tag size="small" type="success">20/20</el-tag></div>
+                </div>
+              </div>
+
+              <!-- 🎚️ 去 AI 化滑杆 -->
+              <div class="mt-4 bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <label class="text-sm font-medium flex justify-between items-center mb-2">
+                  <span>🎚️ 去 AI 化强度</span>
+                  <span class="text-lg font-bold text-blue-600">{{ form.preference.deaiStrength }}%</span>
+                </label>
+                <el-slider v-model="form.preference.deaiStrength" :min="0" :max="100" />
+                <div class="text-xs text-gray-500">公文类建议 30~50%；散文/人物稿建议 80~100%；当前 80%（推荐）</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 底部按钮（Step 8/9/10 不显示上一步） -->
+        <div v-if="activeStep <= 7" class="mt-8 flex justify-between border-t pt-4">
+          <el-button :disabled="activeStep === 0" @click="prevStep">← 上一步</el-button>
+          <div class="flex gap-2">
+            <el-button type="info" plain @click="activeStep = 0">🔄 重置全表</el-button>
+            <el-button type="primary" :disabled="!canGoNext" @click="nextStep">
+              {{ activeStep === 7 ? '✨ 开始生成（最后一步）' : '下一步 →' }}
+            </el-button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- <30 分：禁止下一步的二次确认弹窗（只在 30-60 分弹） -->
+    <el-dialog v-model="showLowScoreConfirm" title="⚠️ 细节分过低，生成质量可能不好" width="520px">
+      <p>当前细节分 <b>{{ radarScore.total }}/100</b>，AI 可能会杜撰约 30-40% 的内容。</p>
+      <p class="mt-2">你有两个选择：</p>
+      <ul class="mt-2 list-disc pl-6 text-sm text-gray-600">
+        <li>✅ 推荐：回到 Step 5 再补 3-5 张细节卡（人物动作、对话、五感）</li>
+        <li>⚠️ 我确认：直接生成（接受杜撰风险）</li>
+      </ul>
+      <template #footer>
+        <el-button @click="showLowScoreConfirm = false">我回去补细节</el-button>
+        <el-button type="primary" @click="confirmNextDespiteLowScore">⚠️ 直接生成</el-button>
+      </template>
+    </el-dialog>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, reactive, computed, watch, onMounted } from 'vue';
+import { Loading } from '@element-plus/icons-vue';
+import {
+  WRITER_STYLES, CATEGORIES_SPRINT1, JOURNAL_WORDCOUNT_REF, WORDCOUNT_PRESETS,
+  DETAIL_CARD_TYPES, RADAR_SMART_SUGGESTIONS, SCORE_GRADE_TABLE,
+  type ManuscriptCategoryId, type WriterStyleId, type DetailsRadarScore, type DetailCardTypeId, type JournalWordCountRef
+} from '~/constants/ai-manuscript';
+
+// ========= 常量 =========
+const STEPS_LABEL = ['选文种', '基本要素', '事件过程', '主题思想', '细节卡📌', '写作偏好', '对标范本', '预览Prompt', '生成', '编辑评分'];
+const sliderMarks: Record<number, any> = {
+  300: '300', 800: '800', 1200: '1200', 2000: '2000', 3000: '3000', 4500: '4500', 6000: '6000'
+};
+
+// ========= 表单数据 =========
+const activeStep = ref(0);
+const showLowScoreConfirm = ref(false);
+const mockGenProgress = ref(0);
+
+interface PersonItem { name: string; duty: string; shipName?: string; dept?: string; }
+interface DetailCard { id: string; type: DetailCardTypeId; text: string; }
+
+const form = reactive({
+  categoryId: 'advanced_deed' as ManuscriptCategoryId,
+  writerStyleId: 'none' as WriterStyleId,
+  basic: {
+    happenDate: new Date().toISOString().slice(0, 10),
+    location: '',
+    personList: [{ name: '', duty: '', shipName: '', dept: '' } as PersonItem]
+  },
+  eventProcess: '',
+  themeIdea: '',
+  detailCards: [] as DetailCard[],
+  preference: {
+    tone: 'plain',
+    person: 'third',
+    ending: 'fact',
+    withSubtitles: false,
+    taboos: ['no_slogan', 'no_exaggerate', 'prefer_short'] as string[],
+    journalId: 'cosco_shipping_news_normal',
+    wordCount: 1200,
+    deaiStrength: 80
+  },
+  templateChoice: {
+    useGlobalL1: true,
+    usePersonalL1: false,
+    usePublicL2: true
+  },
+  freeSpecialInstructions: ''
+});
+
+// ========= Mock 成品文章示例 =========
+const mockResultArticle = ref<string>(`【成品稿】（Sprint 1 展示用示例 · 路遥+毕飞宇风格 · 先进事迹 1500 字）
+
+# 缸头旁的西瓜：老轨王建国的四十二天值乘
+
+正午12点35分，中远海运上海号的主机舱热浪扑面而来。缸头表面48.5℃，地面油毡烫得鞋底发软，两台落地风扇嗡嗡地转，吹出来的风都带着柴油味。
+
+老轨王建国左手扶着缸头罩，右手用袖口蹭了蹭额头——袖口一挤，拧出半杯水。他左手背上有一道两厘米长的新疤，痂还没完全长好，边缘翻出点粉红的嫩肉。那是三天前吊缸时，高温金属垫片从手中滑落蹭的，卫生员说要休息一周，他转身就把病假条夹进了值班记录本第137页。
+
+"师傅，去吃吧，我盯着。"徒弟小李递过扳手。王建国没接，眼睛盯着排温表，指节压得发白。
+
+"你先去，我再顶一个班。"他的声音哑得像砂纸磨铁，"差1度都不行。这航次印度洋季风，主机一偷懒，班期就没了。"
+
+小李张了张嘴，没说话。他鼻子一酸——师傅袖口的油迹已经结成了硬壳，领口一圈白白的盐霜。他把自己那杯凉白开悄悄挪到了师傅脚边的阴影里，那杯水，师傅从早上到现在还没喝过一口。
+
+一点十七分，政委拎着一编织袋的冰镇西瓜下了机舱。绿色编织袋表面全是水珠，一打开，一股清凉的甜气就冲散了满屋的柴油味。
+
+"一人一牙啊，别抢！"政委给每个人递，递到王建国的时候，特意挑了最中间那牙，红瓤都起沙了。
+
+王建国在工作服下摆上蹭了蹭手，接过西瓜咬了一大口。
+
+"唔——"他眼睛一下就亮了，朝政委竖了竖大拇指，汁液顺着嘴角往下淌，他用手背一抹，"政委你这西瓜真到位！再热再累也值了！"
+
+周围响起一片笑声，缸头的嗡鸣声好像也没那么刺耳了。那几分钟里，机舱的温度好像降了三度。
+
+本航次是王建国连续值乘的第42天。主机吊缸1次，节油12.3%，零故障、零迟滞、零安全事故。公司党委发的"安全生产月"号召书，他贴在更衣室柜门里侧，每天穿工作服的时候都能看见。
+
+"忠诚、担当、务实、高效。"这八个字，他没在大会上念过一次，但他那道翻着嫩肉的新疤、那杯凉了又凉的白开水、那块起沙的西瓜，都替他念过了。
+
+（全文完 · 1487 字）
+`);
+
+// ========= 计算属性 =========
+
+// 当前文种可用的刊物
+const journalOptionsForCurrentCategory = computed<JournalWordCountRef[]>(() =>
+  JOURNAL_WORDCOUNT_REF.filter(j => j.category === 'all' || j.category === form.categoryId)
+);
+
+// 当选择的 journalId 在当前文种不可用时，自动回退到默认
+watch(() => form.categoryId, () => {
+  const defaultCat = CATEGORIES_SPRINT1.find(c => c.id === form.categoryId)!;
+  form.preference.journalId = defaultCat.defaultJournalId;
+  const defaultRef = JOURNAL_WORDCOUNT_REF.find(j => j.journalId === defaultCat.defaultJournalId)!;
+  form.preference.wordCount = Math.round((defaultRef.min + defaultRef.max) / 2);
+  form.writerStyleId = defaultCat.recommendWriterStyle.includes('tiening') ? 'tiening' : defaultCat.recommendWriterStyle[0] || 'none';
+});
+
+const currentJournalRef = computed<JournalWordCountRef | undefined>(() =>
+  JOURNAL_WORDCOUNT_REF.find(j => j.journalId === form.preference.journalId)
+);
+
+// 字数状态提示（彩色）
+const wordStatusTipHtml = computed<string>(() => {
+  const ref = currentJournalRef.value; if (!ref) return '';
+  const w = form.preference.wordCount;
+  if (w >= ref.min && w <= ref.max)
+    return `<span class="text-green-700">✅ 正处于黄金录用区间！投稿通过率最高。</span>`;
+  if (w < ref.min * 0.7 || w > ref.absoluteMax)
+    return `<span class="text-red-700">❌ 严重不合格：${w < ref.min * 0.7 ? '太短' : '远超行业上限'}，投稿${w > ref.absoluteMax ? '90%被退回' : '显得信息量不足'}。建议调到 ${ref.min}~${ref.max} 字。</span>`;
+  if (w < ref.min)
+    return `<span class="text-orange-700">⚠️ 稍短，建议再加 ${ref.min - w} 字补充细节。</span>`;
+  return `<span class="text-orange-700">⚠️ 稍长，建议缩到 ${ref.max} 字以内，否则编辑会大砍。</span>`;
+});
+
+// -------- 6 维细节雷达 --------
+const radarScore = computed<DetailsRadarScore>(() => {
+  const cards = form.detailCards;
+  const bodyPartRegex = /(手|脚|指|掌|肩|背|腰|额|头|眼|嘴|臂|腿|膝|颈|肘|腕|腮|鼻子|胸口|后背)/;
+  const verbRegex     = /(扶|握|抓|捏|攥|蹭|擦|拧|抬|扛|敲|拧|拍|递|靠|闭|低|挪|张|咬|竖)/;
+  const quoteRegex    = /[""「」:：]/; // 对话卡引号/冒号
+  const envRegex      = /(℃|温度|风|浪|雨|雪|阳光|正午|凌晨|深夜|黄昏|黎明|机舱|甲板|码头|驾驶室|味道|味|嗡嗡|呼呼|滴答)/;
+  const sensesRegex   = /(闻|嗅|听|摸|触|尝|味|响|嗡|烫|凉|冰|粘|香|臭|腥|咸|甜)/;
+  const numberRegex   = /(\d+(\.\d+)?|一二三四五六七八九十百千万)/;
+  const emotionRegex  = /(偷偷|悄悄|背过身|欲言又止|张了张嘴|没说话|没出声|鼻子一酸|红了眼|眼泪|愣了一下|假装|装作|低下头|不敢看)/;
+
+  const actionCards  = cards.filter(c => c.type==='action'  || (bodyPartRegex.test(c.text) && verbRegex.test(c.text)));
+  const dialogCards  = cards.filter(c => c.type==='dialog'  || quoteRegex.test(c.text));
+  const envCards     = cards.filter(c => c.type==='env'     || envRegex.test(c.text));
+  const sensesCards  = cards.filter(c => c.type==='senses'  || sensesRegex.test(c.text));
+  const numberCards  = cards.filter(c => c.type==='number'  || numberRegex.test(c.text));
+  const emotionCards = cards.filter(c => c.type==='emotion' || emotionRegex.test(c.text));
+
+  const clamp = (v: number, max: number) => Math.min(max, Math.round(
+    v.length >= max/4 ? max : v.length * (4*max/Math.max(1, max)) / 4
+  ));
+
+  const a = clamp(actionCards, 20);
+  const b = clamp(dialogCards, 15);
+  const c = clamp(envCards, 15);
+  const d = clamp(sensesCards, 10);
+  const e = clamp(numberCards, 20);
+  const f = clamp(emotionCards, 20);
+  const total = a+b+c+d+e+f;
+
+  let grade: DetailsRadarScore['grade'] = 'green';
+  if (total < 30) grade = 'red';
+  else if (total < 60) grade = 'orange';
+  else if (total < 85) grade = 'yellow';
+
+  return { actionScore: a, dialogScore: b, envScore: c, sensesScore: d, numberScore: e, emotionScore: f, total, grade };
+});
+
+const radarProgressColor = computed(() => {
+  if (radarScore.value.grade==='red') return '#ef4444';
+  if (radarScore.value.grade==='orange') return '#f97316';
+  if (radarScore.value.grade==='yellow') return '#eab308';
+  return '#22c55e';
+});
+const radarTagType = computed<''|'success'|'warning'|'danger'>(() => {
+  if (radarScore.value.grade==='red') return 'danger';
+  if (radarScore.value.grade==='orange') return 'warning';
+  if (radarScore.value.grade==='yellow') return 'warning';
+  return 'success';
+});
+const radarGradeLabel = computed(() => {
+  return ({red: '🔴 不足 · 禁止下一步', orange: '🟠 薄弱 · 弹确认', yellow: '🟡 够用 · 放行', green: '🟢 优秀 · 放行'} as const)[radarScore.value.grade];
+});
+const radarGradeColorClass = computed(() => {
+  return ({red: 'text-red-600', orange: 'text-orange-600', yellow: 'text-yellow-600', green: 'text-green-600'} as const)[radarScore.value.grade];
+});
+
+// -------- 智能建议 --------
+const smartSuggestion = computed<string>(() => {
+  const dims = [
+    ['low_action',  radarScore.value.actionScore  < 14],
+    ['low_dialog',  radarScore.value.dialogScore  < 10],
+    ['low_env',     radarScore.value.envScore     < 10],
+    ['low_senses',  radarScore.value.sensesScore  < 6],
+    ['low_number',  radarScore.value.numberScore  < 14],
+    ['low_emotion', radarScore.value.emotionScore < 14],
+  ] as const;
+  const lows = dims.filter(d => d[1]).map(d => d[0]);
+  if (lows.length === 0) return '🌟 细节太棒了！AI 几乎不需要杜撰，成品会非常有画面感。';
+  const targetKey = lows[0] as keyof typeof RADAR_SMART_SUGGESTIONS;
+  const list = RADAR_SMART_SUGGESTIONS[targetKey] || ['继续补充细节卡，越多越生动。'];
+  return list[Math.floor(Math.random() * list.length)];
+});
+
+// --------- Step 8 Preview: 完整 Prompt 展示（模拟拼接）---------
+const fullPromptPreview = computed<string>(() => {
+  const cat = CATEGORIES_SPRINT1.find(c => c.id === form.categoryId)!;
+  const w = WRITER_STYLES.find(x => x.id === form.writerStyleId)!;
+  const journal = JOURNAL_WORDCOUNT_REF.find(j => j.journalId === form.preference.journalId)!;
+  return `【🎯 政工笔 · Layer 0 🛡️ 事实铁笼 · 最高优先级】
+1. 你只能使用下面【细节卡 N1~N${form.detailCards.length}】中出现过的信息。
+2. 不在卡中的任何时间/地点/人名/船名/动作/对话/数字，严禁编造。缺事实写"（此处细节略）"+ 末尾附建议补充清单。
+3. 用户大白话可润色书面化，核心信息 100% 保留；对话保留原汁原味。
+
+【🎯 政工笔 · Layer 1 🧭 风格铁律（6 大条）】
+• 事实第一；② 禁口号式结尾模板；③ 禁用网络热词/夸张修辞；④ 每句≤30字，主语明确；
+• 船名/航次/日期必须具体；⑥ 政工术语准确（三会一课/两学一做/第一议题…）。
+
+【🎯 政工笔 · Layer 2 📚 RAG 对标范本 Top-3】
+检索结果：
+• Top-1：《2024年度集团先进事迹合集 · 老轨李XX抢修主机》
+• Top-2：《中远海运政工简报 · 2024.07》P.13 党员先锋岗
+• Top-3：《中国远洋海运报》2024-06-18 头版《高温下的值乘》
+
+【🎯 政工笔 · Layer 3 ✍️ 文种 + 作家风格】
+• 目标文种：${cat.icon} ${cat.name}（目标字数 ≈ ${form.preference.wordCount} 字）
+• 对标刊物：${journal.journalName}（推荐 ${journal.min}~${journal.max} 字）
+• 文学风格调味：${w.avatar} ${w.name}（${w.oneLiner}）
+  → 风格关键词：${w.styleKeywords.join(' / ')}
+
+【🎯 政工笔 · Layer 4 🎚️ 用户写作偏好】
+• 语气：${form.preference.tone}；人称：${form.preference.person}；结尾方式：${form.preference.ending}
+• 小标题：${form.preference.withSubtitles?'✅ 需要':'❌ 不需要'}
+• 禁忌开关：${form.preference.taboos.join(' / ')}
+• 去 AI 化强度：${form.preference.deaiStrength}%
+
+【🎯 政工笔 · Layer 5 🎭 用户自由特别指令】
+${form.freeSpecialInstructions || '（用户未填写）'}
+
+================================================================
+【🎯 用户结构化事实（Step 1~4）】
+• 文种：${cat.name}
+• 日期：${form.basic.happenDate}
+• 地点：${form.basic.location || '（未填写 ❌）'}
+• 涉及人物：
+${form.basic.personList.filter(p=>p.name||p.duty).map((p,i)=>`  ${i+1}. ${p.name} ${p.duty?`（${p.duty}）`:''} ${p.shipName?` - ${p.shipName}`:''}`).join('\n') || '  （未填写 ❌）'}
+• 事件过程：${form.eventProcess || '（未填写 ❌）'}
+• 主题思想：${form.themeIdea || '（未填写 ❌）'}
+
+================================================================
+【🎯 细节卡列表（按用户排序 = 文中时间顺序）】
+${form.detailCards.length === 0 ? '（无！⛔ AI 会 100% 杜撰，必须补充）' :
+  form.detailCards.map((c,i) =>
+    `📋 N${i+1} ${DETAIL_CARD_TYPES.find(t=>t.id===c.type)?.emoji}${DETAIL_CARD_TYPES.find(t=>t.id===c.type)?.label}：「${c.text || '（空卡片 ❌）'}」`
+  ).join('\n')}
+
+================================================================
+请严格遵守以上所有规则，生成高质量稿件正文。不要输出任何规则解释或 Prompt 复述，直接输出：标题 + 副标题 + 正文${form.preference.withSubtitles?'（含小标题结构）':''}。`;
+});
+
+// ========= 子组件：雷达一维进度条 =========
+const RadarDimBar = {
+  props: { label: { type: String, required: true }, score: { type: Number, required: true }, full: { type: Number, required: true } },
+  template: `
+    <div>
+      <div class="flex justify-between text-xs text-gray-600 mb-1">
+        <span>{{ label }}</span><span class="font-medium">{{ score }}/{{ full }}</span>
+      </div>
+      <div class="h-1.5 rounded-full bg-gray-200 overflow-hidden">
+        <div
+          class="h-full rounded-full transition-all"
+          :class="score===0 ? 'bg-red-400' : (score < full*0.5 ? 'bg-orange-400' : (score < full*0.8 ? 'bg-yellow-400' : 'bg-green-500'))"
+          :style="{ width: (100 * score / full) + '%' }"
+        />
+      </div>
+    </div>
+  `
+};
+
+// ========= 方法 =========
+const addPerson = () => form.basic.personList.push({ name: '', duty: '', shipName: '', dept: '' });
+const removePerson = (idx: number) => form.basic.personList.splice(idx, 1);
+
+const addDetailCard = (type: DetailCardTypeId) => {
+  form.detailCards.push({ id: `card_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, type, text: '' });
+};
+const removeCard = (idx: number) => form.detailCards.splice(idx, 1);
+const moveCardUp = (idx: number) => {
+  if (idx <= 0) return;
+  [form.detailCards[idx-1], form.detailCards[idx]] = [form.detailCards[idx], form.detailCards[idx-1]];
+};
+const moveCardDown = (idx: number) => {
+  if (idx >= form.detailCards.length - 1) return;
+  [form.detailCards[idx+1], form.detailCards[idx]] = [form.detailCards[idx], form.detailCards[idx+1]];
+};
+
+const getCardLeftBorderColor = (t: DetailCardTypeId) => ({
+  action:  'border-l-blue-400',
+  dialog:  'border-l-green-400',
+  env:     'border-l-yellow-400',
+  senses:  'border-l-cyan-400',
+  number:  'border-l-red-400',
+  emotion: 'border-l-purple-400',
+  free:    'border-l-gray-400'
+} as const)[t];
+
+// 下一步可用性
+const canGoNext = computed<boolean>(() => {
+  if (activeStep.value === 0) return !!form.categoryId;
+  if (activeStep.value === 1) {
+    const p = form.basic.personList[0];
+    return !!form.basic.happenDate && !!form.basic.location && !!(p?.name || p?.duty);
+  }
+  if (activeStep.value === 2) return form.eventProcess.length >= 100;
+  if (activeStep.value === 3) return form.themeIdea.length >= 50;
+  if (activeStep.value === 4) return radarScore.value.grade !== 'red'; // <30 直接禁用
+  return true;
+});
+
+const prevStep = () => { if (activeStep.value > 0) activeStep.value--; };
+const nextStep = () => {
+  if (activeStep.value === 4 && radarScore.value.grade === 'orange') {
+    showLowScoreConfirm.value = true; return;
+  }
+  advanceStep();
+};
+const confirmNextDespiteLowScore = () => { showLowScoreConfirm.value = false; advanceStep(); };
+
+const advanceStep = () => {
+  if (activeStep.value === 7) {
+    // Step 8 → Step 9 模拟生成进度条
+    activeStep.value = 8;
+    mockGenProgress.value = 0;
+    const timer = setInterval(() => {
+      mockGenProgress.value = Math.min(100, mockGenProgress.value + 5);
+      if (mockGenProgress.value >= 100) { clearInterval(timer); setTimeout(() => { activeStep.value = 9; }, 300); }
+    }, 150);
+    return;
+  }
+  if (activeStep.value < STEPS_LABEL.length - 1) activeStep.value++;
+};
+
+const openMyTemplates = () => {
+  ElMessage.info('📂 我的范文库（Sprint 1 MVP：后续版本在此打开导入+管理弹窗）');
+};
+
+// ========= 生命周期：预置 6 张示例卡片，让新用户一进来就知道怎么玩 =========
+onMounted(() => {
+  const exampleCards: DetailCard[] = [
+    { id: 'demo1', type: 'action',  text: '老轨王建国左手扶缸头罩，右手袖口蹭额头汗，左手背上一道2cm新疤还没结痂。' },
+    { id: 'demo2', type: 'dialog',  text: '王师傅对徒弟小李说："你先去吃，我再顶一个班，缸头差1度都不行。"' },
+    { id: 'demo3', type: 'env',     text: '正午12:35，机舱底层48.5℃，缸头热浪扑面，柴油味混着海风，风扇嗡嗡响得像蜂群。' },
+    { id: 'demo4', type: 'number',  text: '本航次连续值乘42天 / 主机吊缸1次 / 节油12.3% / 零故障零迟滞。' },
+    { id: 'demo5', type: 'dialog',  text: '政委拎冰镇西瓜下机舱，机工小济公咬一口竖大拇指："政委你这西瓜真到位！再热再累也值了！"' },
+    { id: 'demo6', type: 'emotion', text: '徒弟递完扳手看师傅袖口油迹都结成硬壳了，鼻子一酸，低头没说话，悄悄把自己那杯凉白开挪到了师傅脚边的阴影里。' },
+  ];
+  if (form.detailCards.length === 0) form.detailCards.push(...exampleCards);
+});
+</script>
+
+<style scoped>
+/* 细节卡左边框颜色继承 tailwind 类（已在 class 中写死） */
+</style>
