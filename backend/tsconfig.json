@@ -9,7 +9,11 @@
     "target": "ES2021",
     "sourceMap": true,
     "outDir": "./dist",
-    "baseUrl": "./",
+    // baseUrl 在 TS 5.9+ 已移除；等价写法 paths + rootDir 组合
+    "rootDir": "./",
+    "paths": {
+      "*": ["./*"]
+    },
     "incremental": true,
     "skipLibCheck": true,
     "strictNullChecks": false,
