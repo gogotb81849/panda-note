@@ -57,15 +57,17 @@ for (const d of cacheDirs) {
 //   这样**真正跑 nuxt build 的 node 进程**拿到的 V8 上限才是 3GB！
 //
 //   （测试：GC trace 里 Mark-Compact 的括号内 committed 峰值应该稳定 ~3200-3400MB，而不是 4120MB）
-log('Step 1/3: Run nuxt build (max-old-space-size=3000 via env+argv double-lock, fully serial, CI no-PWA)...');
-log('  (v0816-8: NODE_OPTIONS env 写 --max-old-space-size=3000（确保 npx fork 的孙进程继承）+ argv 再加一次双重保险)');
+log('Step 1/3: Run nuxt build (max-old-space-size=3600 via env+argv double-lock, fully serial, CI no-PWA)...');
+log('  (v0816-12: frontend/.npmrc=3600 + env NODE_OPTIONS + argv 三重锁；committed 峰值 ~3610MB < 3800 cgroup)');
 const buildEnv = {
   ...process.env,
-  // ★ v0816-8: 不要继承 process.env.NODE_OPTIONS（setup-node@v4 可能塞了默认值）
-  //   完全清零重写，确保我们设置的 --max-old-space-size=3000 会被 npx/npm 的内部 fork
-  //   全部继承到（因为 NODE_OPTIONS 是 env 变量，spawn 的所有子进程/孙进程都能拿到；
-  //   而 argv flag 只传给最外层进程，下一层 fork 就丢了）。
-  NODE_OPTIONS: '--max-old-space-size=3300 --max-semi-space-size=4 --expose-gc',
+  // ★ v0816-12: old-space=3600（GC trace v11: Mark-Compact 3058/3307.7 OOM 在边界）
+  //   三重锁（优先级从高到低）：
+  //   1) frontend/.npmrc node-options=3600   ← npm run-script 真正被注入的值（最高优先级）
+  //   2) env NODE_OPTIONS=3600              ← spawn 的所有 fork 继承
+  //   3) argv --max-old-space-size=3600     ← 外层 node 进程直传
+  //   预期 committed 峰值 ~3610 MB < runner cgroup 3800 MB（留 200MB 安全边际）
+  NODE_OPTIONS: '--max-old-space-size=3600 --max-semi-space-size=4 --expose-gc',
   NUXT_TELEMETRY_DISABLED: '1',
   DISABLE_OPENCOLLECTIVE: '1',
   NEXT_TELEMETRY_DISABLED: '1',
@@ -77,7 +79,7 @@ log(`  using npx at: ${npxPath}`);
 log(`  buildEnv.NODE_OPTIONS = ${buildEnv.NODE_OPTIONS}`);
 // ★ 全部 V8 flag 都在 argv 直传（外层保险）+ env 传了 NODE_OPTIONS（内层保险）：
 const nodeArgs = [
-  '--max-old-space-size=3300',
+  '--max-old-space-size=3600',
   '--max-semi-space-size=4',
   '--expose-gc',
   '--gc-global',
