@@ -45,11 +45,11 @@ for (const d of cacheDirs) {
 }
 
 // ---------- Step 1: spawn nuxt build ----------
-log('Step 1/3: Run nuxt build (max-old-space-size=5120, fully serial, CI no-PWA)...');
-log('  (v0816-2: runner 总内存 7GB，V8 堆占 5120MB ≈ 5GB，留 2GB 给系统/其他进程，避免 OOM 硬 kill)');
+log('Step 1/3: Run nuxt build (max-old-space-size=4096, fully serial, CI no-PWA)...');
+log('  (v0816-3: runner 7GB → V8 old-space 4096 + nursery 128 ≈ 4.2GB < OS 可用内存。关键是 --gc-global 强制 full GC)');
 const buildEnv = {
   ...process.env,
-  NODE_OPTIONS: '--max-old-space-size=5120 --max-semi-space-size=32 --expose-gc',
+  NODE_OPTIONS: '--max-old-space-size=4096 --max-semi-space-size=8 --expose-gc --gc-global --no-concurrent-recompilation',
   NUXT_TELEMETRY_DISABLED: '1',
   DISABLE_OPENCOLLECTIVE: '1',
   NEXT_TELEMETRY_DISABLED: '1',

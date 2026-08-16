@@ -6,13 +6,14 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 const pkg = JSON.parse(readFileSync(join(__dirname, 'package.json'), 'utf-8'))
 
-// ★ CI 内存自救：如果 NODE_OPTIONS 里带了 --expose-gc（见 .npmrc），则每 10s 主动 global.gc() 一次
-// （v0814g：堆上限 3500MB 甜点值，10s GC 更积极回收 AST 临时对象）
+// ★ CI 内存自救：如果 NODE_OPTIONS 里带了 --expose-gc（见 ci-build-frontend.mjs），则每 2s 主动 global.gc() 一次
+//   （v0816-3: 2 秒更积极 GC 峰值，避免 Mark-Compact 吃满 3800MB+ allocation failure；
+//     额外 --gc-global 强制 full GC 而不是 incremental young GC）
 try {
   const shouldGc = (!!(process as any).env.CI || !!(process as any).env.GITHUB_ACTIONS) && typeof (globalThis as any).gc === 'function';
   if (shouldGc) {
-    (setInterval as any)(() => { try { (globalThis as any).gc(); } catch (_) {} }, 10000);
-    (console as any).log('[nuxt.config.ts][ci-mem-saver] global.gc interval armed (10s, 3.5GB cap)');
+    (setInterval as any)(() => { try { (globalThis as any).gc({ type: 'major', execution: 'sync' } as any); } catch (_) {} }, 2000);
+    (console as any).log('[nuxt.config.ts][ci-mem-saver] global.gc interval armed (2s, major+synchronous GC)');
   }
 } catch (_) {}
 
