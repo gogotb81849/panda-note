@@ -57,17 +57,15 @@ for (const d of cacheDirs) {
 //   这样**真正跑 nuxt build 的 node 进程**拿到的 V8 上限才是 3GB！
 //
 //   （测试：GC trace 里 Mark-Compact 的括号内 committed 峰值应该稳定 ~3200-3400MB，而不是 4120MB）
-log('Step 1/3: Run nuxt build (max-old-space-size=8192 via env+argv double-lock, fully serial, CI no-PWA)...');
-log('  (v0816-18: 17轮证明 Mark-Compact 只释放 5MB → 3.8GB 全是 live 数据。GitHub Runner 16GB RAM，8192 有 4.2GB 空间做 GC)');
+log('Step 1/3: Run nuxt build (max-old-space-size=8192 + gc-interval=100, CI no-PWA)...');
+log('  (v0816-19: 18轮证明 used 紧跟 old-space！V8 GC 太懒→垃圾堆积。gc-interval=100 强制每 50MB GC 一次)');
 const buildEnv = {
   ...process.env,
-  // ★ v0816-18: old-space=8192（8GB）
-  //   17 轮 GC trace 证明：Mark-Compact 只释放 5MB（3820→3815），3.8GB 几乎全是 live 数据
-  //   → 应用真实内存需求 = ~3.8GB（不是垃圾，是 Vite/Rollup transform 的 AST）
-  //   → old-space=4096 时 used=3820 ≈ old-space，差只有 276MB → V8 GC 不够空间 → OOM
-  //   → old-space=8192：应用 3.8GB + V8 GC 预留 4.2GB = 8GB < 16GB runner RAM ✅
-  //   → RSS ≈ 8.5GB < 16GB 物理内存，不会 cgroup SIGKILL
-  NODE_OPTIONS: '--max-old-space-size=8192 --max-semi-space-size=8 --expose-gc',
+  // ★ v0816-19: old-space=8192 + gc-interval=100（强制频繁 GC）
+  //   v18 证明：old-space=8192 → used=7662（翻倍！不是应用需要这么多，是 V8 推迟 GC 导致垃圾堆积）
+  //   gc-interval=100：每分配 100 个 old-space 页面（~50MB）强制 GC 一次
+  //   → 预期 used 从 7662 降到 ~4000（垃圾来不及堆积）
+  NODE_OPTIONS: '--max-old-space-size=8192 --max-semi-space-size=8 --expose-gc --gc-interval=100 --gc-global',
   NUXT_TELEMETRY_DISABLED: '1',
   DISABLE_OPENCOLLECTIVE: '1',
   NEXT_TELEMETRY_DISABLED: '1',
@@ -83,6 +81,7 @@ const nodeArgs = [
   '--max-semi-space-size=8',
   '--expose-gc',
   '--gc-global',
+  '--gc-interval=100',
   '--no-concurrent-recompilation',
   '--no-turbo-inlining',
   '--lazy',
