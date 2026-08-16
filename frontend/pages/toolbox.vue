@@ -139,7 +139,28 @@ const openShipQuiz = () => {
 }
 
 const openAiManuscript = () => {
-  router.push('/toolbox/ai-manuscript')
+  console.log('[政工笔调试] ① 点击政工笔卡片，准备跳转 /toolbox/ai-manuscript')
+  try {
+    router.push('/toolbox/ai-manuscript').then(() => {
+      console.log('[政工笔调试] ② router.push Promise resolved (跳转完成)')
+    }).catch((err: any) => {
+      console.error('[政工笔调试] ② router.push 报错：', err?.message || err, err)
+      const msg = err?.message || String(err || '导航失败')
+      try {
+        const ElMessage = (window as any).ElMessage || require?.('element-plus')?.ElMessage
+        if (ElMessage) {
+          ElMessage.error(`政工笔跳转失败：${msg}。请按 Ctrl+F5 强制刷新浏览器，或清除站点缓存后重试`)
+        } else {
+          alert(`政工笔跳转失败：${msg}\n\n解决方案：按 Ctrl+F5 强制刷新浏览器`)
+        }
+      } catch {
+        alert(`政工笔跳转失败：${msg}\n\n解决方案：按 Ctrl+F5 强制刷新浏览器`)
+      }
+    })
+  } catch (err: any) {
+    console.error('[政工笔调试] ① router.push 同步抛错：', err)
+    alert(`政工笔跳转异常：${err?.message || err}\n\n请按 Ctrl+F5 强制刷新浏览器后重试`)
+  }
 }
 </script>
 
