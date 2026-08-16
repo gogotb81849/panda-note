@@ -126,6 +126,8 @@ export class RoleMenuConfigService {
       for (let i = 0; i < missingItems.length; i++) {
         const item = missingItems[i];
         const defaultItem = defaultMenus.find(d => d.menuKey === item.menuKey);
+        // ★ 2026-08-16 兜底：'/toolbox' 一律强制 enabled=true，避免漏补时为 false 导致政工笔侧边栏消失
+        const forcedEnabled = item.menuKey === '/toolbox' ? true : (defaultItem?.enabled ?? false);
         await this.prisma.roleMenuConfig.create({
           data: {
             teamCode,
@@ -133,7 +135,7 @@ export class RoleMenuConfigService {
             menuKey: item.menuKey,
             label: item.label,
             icon: item.icon,
-            enabled: defaultItem?.enabled ?? false,
+            enabled: forcedEnabled,
             sortOrder: maxSortOrder + i + 1,
           },
         });
@@ -187,19 +189,34 @@ export class RoleMenuConfigService {
   /**
    * 获取当前用户角色的菜单（仅返回启用的）
    * 注意：杂志编排只在工具箱中显示，不在左侧菜单中显示
+   * ★ 陈先生 2026-08-16 双保险兜底：
+   *   A. 只要 DEFAULT_ROLE_MENUS[role] 里本来就包含 '/toolbox'，不管数据库里 enabled=false（管理员误关），都强制返回
+   *   B. 即使动态返回菜单里完全漏了 '/toolbox'，如果该角色属于默认有工具箱的角色就自动补到末尾
+   *   这样政工笔的入口「工具箱」绝不会在侧边栏消失
    */
   async getMyMenus(teamCode: TeamCode, role: UserRole): Promise<{ path: string; label: string; icon: string }[]> {
     const configs = await this.getRoleMenus(teamCode, role);
     // 兼容旧路径映射：/staff-assignments → /admin/staff-assignments（已迁移路径）
     const SEEN_PATHS = new Set<string>();
     const out: { path: string; label: string; icon: string }[] = [];
+    const roleShouldHaveToolbox = Array.isArray(DEFAULT_ROLE_MENUS[role]) && (DEFAULT_ROLE_MENUS[role] as string[]).includes('/toolbox');
     for (const c of configs) {
-      if (!c.enabled || c.menuKey === '/magazine' || c.menuKey === '/diary') continue;
+      if (c.menuKey === '/magazine' || c.menuKey === '/diary') continue;
+      // ★ 双保险 A：只要这个角色本来就有工具箱权限（DEFAULT_ROLE_MENUS 里写了 /toolbox），即使数据库 enabled=false 也强制放行
+      const enabled = (c.menuKey === '/toolbox' && roleShouldHaveToolbox) ? true : c.enabled;
+      if (!enabled) continue;
       let path = c.menuKey;
       if (path === '/staff-assignments') path = '/admin/staff-assignments';
       if (SEEN_PATHS.has(path)) continue;
       SEEN_PATHS.add(path);
       out.push({ path, label: c.label, icon: c.icon || '' });
+    }
+    // ★ 双保险 B：如果输出里完全没有 /toolbox，但这个角色默认应该有，就自动补一条
+    if (roleShouldHaveToolbox && !SEEN_PATHS.has('/toolbox')) {
+      const toolboxDef = ALL_MENU_ITEMS.find(m => m.menuKey === '/toolbox');
+      if (toolboxDef) {
+        out.push({ path: toolboxDef.menuKey, label: toolboxDef.label, icon: toolboxDef.icon || 'toolbox' });
+      }
     }
     return out;
   }
@@ -270,13 +287,17 @@ export class RoleMenuConfigService {
 
   /**
    * 初始化所有角色的默认菜单配置到数据库
+   * ★ 2026-08-16 陈先生兜底：所有角色的 '/toolbox' 一律强制 enabled=true，
+   *   即使默认白名单里漏掉了也给打开（工具箱是政工笔/菜篮子等工具的总入口，不能被关掉）
    */
   async seedDefaultMenus(teamCode: TeamCode) {
     const roles = Object.values(UserRole);
     let count = 0;
 
     for (const role of roles) {
-      const enabledKeys = DEFAULT_ROLE_MENUS[role] || [];
+      const enabledKeys = new Set<string>(DEFAULT_ROLE_MENUS[role] || []);
+      // ★ 兜底强制：工具箱对所有角色都是开的
+      enabledKeys.add('/toolbox');
       for (let i = 0; i < ALL_MENU_ITEMS.length; i++) {
         const item = ALL_MENU_ITEMS[i];
         try {
@@ -290,13 +311,13 @@ export class RoleMenuConfigService {
               menuKey: item.menuKey,
               label: item.label,
               icon: item.icon,
-              enabled: enabledKeys.includes(item.menuKey),
+              enabled: enabledKeys.has(item.menuKey),
               sortOrder: i,
             },
             update: {
               label: item.label,
               icon: item.icon,
-              enabled: enabledKeys.includes(item.menuKey),
+              enabled: enabledKeys.has(item.menuKey),
               sortOrder: i,
             },
           });
@@ -306,7 +327,7 @@ export class RoleMenuConfigService {
         }
       }
     }
-    this.logger.log(`菜单配置初始化完成: ${count} 条`);
+    this.logger.log(`菜单配置初始化完成: ${count} 条（所有角色工具箱均已强制开启）`);
     return { count };
   }
 }
