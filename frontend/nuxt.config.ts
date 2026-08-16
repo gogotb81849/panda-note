@@ -74,12 +74,24 @@ export default defineNuxtConfig({
         'element-plus',
         '@element-plus/icons-vue',
       ],
+      // ★ 合并第二个 vite 块的 include（dayjs / fullcalendar）
+      include: ['dayjs', '@fullcalendar/core', '@fullcalendar/daygrid', '@fullcalendar/interaction', '@fullcalendar/vue3'],
     },
     json: { namedExports: false },
     esbuild: {
       target: 'es2022',
       legalComments: 'eof',
       treeShaking: true,
+    },
+    // ★ 合并第二个 vite 块的 resolve.alias（dayjs ESM 入口）
+    resolve: {
+      alias: {
+        dayjs: 'dayjs/esm/index.js',
+      },
+    },
+    // ★ 合并第二个 vite 块的 ssr.noExternal
+    ssr: {
+      noExternal: ['dayjs', '@popperjs/core'],
     },
   },
   // 将 /api 请求代理到后端服务（SSR和客户端都可用）
@@ -250,24 +262,6 @@ export default defineNuxtConfig({
     layoutTransition: {
       name: 'layout',
       mode: 'out-in',
-    },
-  },
-  vite: {
-    resolve: {
-      alias: {
-        // element-plus Nuxt 模块客户端会 `import "dayjs"`（通过 .nuxt/dist 自动注入），
-        // dayjs 包的 main=dayjs.min.js 没有 ESM default 导出，导致浏览器报：
-        //   "does not provide an export named 'default'"
-        // 这里强制把 dayjs 指向真正的 ESM 入口，确保 SSR 与客户端一致
-        dayjs: 'dayjs/esm/index.js',
-      },
-    },
-    optimizeDeps: {
-      include: ['dayjs', '@fullcalendar/core', '@fullcalendar/daygrid', '@fullcalendar/interaction', '@fullcalendar/vue3'],
-    },
-    ssr: {
-      // 将 CommonJS / ESM 异常依赖打包进 SSR 产物，避免 ESM/CJS 互操作错误
-      noExternal: ['dayjs', '@popperjs/core'],
     },
   },
 });
