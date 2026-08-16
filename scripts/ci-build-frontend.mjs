@@ -57,13 +57,15 @@ for (const d of cacheDirs) {
 //   这样**真正跑 nuxt build 的 node 进程**拿到的 V8 上限才是 3GB！
 //
 //   （测试：GC trace 里 Mark-Compact 的括号内 committed 峰值应该稳定 ~3200-3400MB，而不是 4120MB）
-log('Step 1/3: Run nuxt build (max-old-space-size=3000 via argv, fully serial, CI no-PWA)...');
-log('  (v0816-7: 所有 V8 flag 走 spawn argv（不依赖 NODE_OPTIONS），避免 npx/npm run 链上被覆盖/继承出问题)');
+log('Step 1/3: Run nuxt build (max-old-space-size=3000 via env+argv double-lock, fully serial, CI no-PWA)...');
+log('  (v0816-8: NODE_OPTIONS env 写 --max-old-space-size=3000（确保 npx fork 的孙进程继承）+ argv 再加一次双重保险)');
 const buildEnv = {
   ...process.env,
-  // NODE_OPTIONS 必须清理掉 max-old-space-size，因为它会和 argv 冲突且不稳定
-  // 只保留 NO_DISABLE 类环境变量
-  NODE_OPTIONS: '--expose-gc',
+  // ★ v0816-8: 不要继承 process.env.NODE_OPTIONS（setup-node@v4 可能塞了默认值）
+  //   完全清零重写，确保我们设置的 --max-old-space-size=3000 会被 npx/npm 的内部 fork
+  //   全部继承到（因为 NODE_OPTIONS 是 env 变量，spawn 的所有子进程/孙进程都能拿到；
+  //   而 argv flag 只传给最外层进程，下一层 fork 就丢了）。
+  NODE_OPTIONS: '--max-old-space-size=3000 --max-semi-space-size=4 --expose-gc',
   NUXT_TELEMETRY_DISABLED: '1',
   DISABLE_OPENCOLLECTIVE: '1',
   NEXT_TELEMETRY_DISABLED: '1',
@@ -72,15 +74,8 @@ const buildEnv = {
 };
 const npxPath = execFileSync('which', ['npx'], { encoding: 'utf8' }).trim();
 log(`  using npx at: ${npxPath}`);
-// ★ 全部 V8 flag 都在 argv 直传：
-//   - --max-old-space-size=3000（3GB old-space，committed 极限 ~3200MB）
-//   - --max-semi-space-size=4（年轻代半区 4MB，避免 nursery 峰值突增）
-//   - --gc-global（强制 full GC，不是 hint incremental young GC）
-//   - --no-concurrent-recompilation（禁用后台编译线程占用额外内存）
-//   - --no-turbo-inlining（禁用 TurboFan 内联展开，省 code-space 300-500MB）
-//   - --lazy（懒 JIT，降低前序编译内存峰值）
-//   - --max-stack-trace-source-length=100（错误堆栈少存源码，省 malloc）
-//   - --max-old-space-size=3000 必须在最开头，被 argv 优先级高于任何 env 与默认
+log(`  buildEnv.NODE_OPTIONS = ${buildEnv.NODE_OPTIONS}`);
+// ★ 全部 V8 flag 都在 argv 直传（外层保险）+ env 传了 NODE_OPTIONS（内层保险）：
 const nodeArgs = [
   '--max-old-space-size=3000',
   '--max-semi-space-size=4',
@@ -94,8 +89,7 @@ const nodeArgs = [
   'nuxt',
   'build',
 ];
-log(`  node argv: ${nodeArgs.join(' ')}`);
-log('  ★ verify-heap-limits: start with a 5-second probe that prints v8 heap statistics every 1s...');
+log(`  outer node argv: ${nodeArgs.join(' ')}`);
 const child = spawn(process.execPath, nodeArgs, {
   cwd: FRONTEND_DIR,
   env: buildEnv,
