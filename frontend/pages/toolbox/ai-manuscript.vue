@@ -427,7 +427,7 @@
               <div class="flex gap-2 mb-3 flex-wrap">
                 <el-button type="primary" plain size="small" @click="copyFullArticle">📋 复制全文</el-button>
                 <el-button type="success" plain size="small" @click="saveToRevision(true)">💾 存为熊猫笔记草稿 + 保存修改记录</el-button>
-                <el-button type="warning" plain size="small">📰 发往杂志编排</el-button>
+                <el-button type="warning" plain size="small" @click="handleSendToMagazine">📰 发往杂志编排</el-button>
                 <el-button type="info" plain size="small" @click="onClickDownload">📤 导出 Word</el-button>
                 <el-button type="danger" plain size="small" @click="activeStep = 8">🔄 重新生成</el-button>
               </div>
@@ -436,6 +436,7 @@
                 type="textarea"
                 :rows="28"
                 class="font-serif text-base leading-relaxed p-4"
+                placeholder="请先完成 Step 1-8（选文种→填三要素→写事件过程→定主题思想→做细节卡→设偏好→选范本→预览 Prompt），然后在 Step 8 点『开始生成』。生成后，成品稿会自动显示在这里，您可以直接继续改、直接复制、直接存草稿、直接发往杂志编排、直接导出 Word。"
                 @input="onArticleInput"
               />
             </div>
@@ -454,37 +455,42 @@
                 <el-progress :percentage="finalScore" :stroke-width="10" color="#22c55e" class="mb-4" />
 
                 <div class="text-sm border-t border-gray-100 pt-3 mb-2">
-                  <div class="mb-2">🤖 <b>模拟 AI 检测率</b>：
-                    <el-tag size="small" type="success">6.3%（远低于安全阈值 ≤15%）</el-tag>
+                  <div class="mb-2">🤖 <b>AI 检测率（真实 · 确定性打分，每次一致）</b>：
+                    <el-tag v-if="generatedResult.aiDetectRateLevel==='safe'" size="small" type="success">{{ generatedResult.simAiDetectRate || '-' }}%（远低于安全阈值 ≤15%）</el-tag>
+                    <el-tag v-else-if="generatedResult.aiDetectRateLevel==='warning'" size="small" type="warning">{{ generatedResult.simAiDetectRate }}%（偏高，建议加强度或手动补 3-5 处细节）</el-tag>
+                    <el-tag v-else size="small" type="danger">{{ generatedResult.simAiDetectRate }}%（⚠️ 危险，检测器大概率判 AI）</el-tag>
+                    <span class="ml-1 text-xs text-gray-500">{{ generatedResult.aiDetectRateHint }}</span>
                   </div>
                   <div class="mb-2 text-emerald-700">🧩 <b>有效修改次数：{{ validEditCount }} 处</b>
                     <span v-if="validEditCount<3"> → 再改 {{ 3-validEditCount }} 处解锁 💎+2 个性化加成</span>
                   </div>
-                  <div class="text-xs text-gray-600">主流检测器 GPTZero / 知网 AI 检测：预期判为「人类手写」</div>
+                  <div class="text-xs text-gray-600">主流检测器 GPTZero / 知网 AI 检测预期：{{ generatedResult.gradeLabel }}（{{ generatedResult.sprintInfo }}）</div>
                 </div>
 
                 <el-divider class="my-3" />
                 <div class="text-sm">
                   <div class="font-semibold mb-2">📖 可投级别建议：</div>
                   <ul class="text-xs space-y-1 text-gray-700 list-disc pl-4">
-                    <li>✅ 船队/公司内部刊物：<b>完全可用</b>（通过率 ≥99%）</li>
-                    <li>✅ 中国远洋海运报 · 普通版：<b>可用</b>（通过率 ≥85%）</li>
-                    <li>⚠️ 中国远洋海运报 · 头版：建议微调 2-3 处细节（通过率 ~60%）</li>
-                    <li>🎯 国家级水运期刊（《中国水运》）：<b>可投</b>（预期得分 ≈{{ 84 + personalBonus.bonus }}）</li>
+                    <li>📌 <b>评级：</b>{{ generatedResult.gradeLabel }} / {{ generatedResult.grade }} — {{ generatedResult.gradeAdvice || '未生成' }}</li>
+                    <li v-if="generatedResult.missingFactsHints?.length"><span class="text-orange-600">⚠️ 系统提示：</span>{{ generatedResult.missingFactsHints.join('；') }}</li>
+                    <li v-if="generatedResult.forbiddenHits?.length"><span class="text-red-600">⛔ 禁用词命中：</span>{{ generatedResult.forbiddenHits.join('、') }}</li>
                   </ul>
                 </div>
 
                 <el-divider class="my-3" />
                 <div class="text-sm space-y-1.5">
-                  <div class="flex justify-between"><span>📝 内容完整性</span><el-tag size="small" type="success">18/20</el-tag></div>
-                  <div class="flex justify-between"><span>🎯 主题贴合度</span><el-tag size="small" type="success">17/20</el-tag></div>
-                  <div class="flex justify-between"><span>🧭 文种格式规范</span><el-tag size="small" type="success">19/20</el-tag></div>
-                  <div class="flex justify-between"><span>🎨 文学表现力</span><el-tag size="small" type="warning" @click="quickFix('表现力')" class="cursor-pointer hover:bg-yellow-100">14/20 👉 点我一键补细节</el-tag></div>
-                  <div class="flex justify-between"><span>🧠 去 AI 化程度</span><el-tag size="small" type="success">19/20</el-tag></div>
-                  <div class="flex justify-between"><span>⚖️ 合规性</span><el-tag size="small" type="success">20/20</el-tag></div>
+                  <div class="flex justify-between"><span>📝 内容完整性</span><el-tag :type="generatedResult.contentIntegrity>=17?'success':generatedResult.contentIntegrity>=14?'warning':'danger'" size="small">{{ score20(generatedResult.contentIntegrity) }}/20</el-tag></div>
+                  <div class="flex justify-between"><span>🎯 主题贴合度</span><el-tag :type="generatedResult.themeCoherence>=17?'success':generatedResult.themeCoherence>=14?'warning':'danger'" size="small">{{ score20(generatedResult.themeCoherence) }}/20</el-tag></div>
+                  <div class="flex justify-between"><span>🧭 文种格式规范</span><el-tag :type="generatedResult.structureFitness>=17?'success':generatedResult.structureFitness>=14?'warning':'danger'" size="small">{{ score20(generatedResult.structureFitness) }}/20</el-tag></div>
+                  <div class="flex justify-between"><span>🎨 文学表现力</span><el-tag :type="generatedResult.detailRichness>=14?'success':generatedResult.detailRichness>=10?'warning':'danger'" @click="quickFix('表现力')" size="small" class="cursor-pointer hover:bg-yellow-100">{{ score20(generatedResult.detailRichness) }}/20 👉 一键补细节</el-tag></div>
+                  <div class="flex justify-between"><span>🧠 去 AI 化程度</span><el-tag :type="generatedResult.deaiScore>=17?'success':generatedResult.deaiScore>=14?'warning':'danger'" size="small">{{ score20(generatedResult.deaiScore) }}/20</el-tag></div>
+                  <div class="flex justify-between"><span>⚖️ 合规性</span><el-tag :type="generatedResult.compliance>=17?'success':generatedResult.compliance>=14?'warning':'danger'" size="small">{{ score20(generatedResult.compliance, 20) }}/20</el-tag></div>
                   <div v-if="personalBonus.bonus" class="flex justify-between pt-2 border-t border-dashed border-gray-200">
                     <span class="text-emerald-700 font-bold">{{ personalBonus.label }}</span>
                     <el-tag size="small" effect="dark" type="success">+{{ personalBonus.bonus }}</el-tag>
+                  </div>
+                  <div v-if="generatedResult.deaiAppliedRules?.length" class="pt-2 border-t border-dashed border-gray-200 text-xs text-gray-500">
+                    <b>已应用去 AI 化规则：</b>{{ generatedResult.deaiAppliedRules.join('；') }}
                   </div>
                 </div>
               </div>
@@ -598,42 +604,14 @@ const form = reactive({
   freeSpecialInstructions: ''
 });
 
-// ========= Mock 成品文章示例 =========
-const mockResultArticle = ref<string>(`【成品稿】（Sprint 1 展示用示例 · 路遥+毕飞宇风格 · 先进事迹 1500 字）
-
-# 缸头旁的西瓜：老轨王建国的四十二天值乘
-
-正午12点35分，中远海运上海号的主机舱热浪扑面而来。缸头表面48.5℃，地面油毡烫得鞋底发软，两台落地风扇嗡嗡地转，吹出来的风都带着柴油味。
-
-老轨王建国左手扶着缸头罩，右手用袖口蹭了蹭额头——袖口一挤，拧出半杯水。他左手背上有一道两厘米长的新疤，痂还没完全长好，边缘翻出点粉红的嫩肉。那是三天前吊缸时，高温金属垫片从手中滑落蹭的，卫生员说要休息一周，他转身就把病假条夹进了值班记录本第137页。
-
-"师傅，去吃吧，我盯着。"徒弟小李递过扳手。王建国没接，眼睛盯着排温表，指节压得发白。
-
-"你先去，我再顶一个班。"他的声音哑得像砂纸磨铁，"差1度都不行。这航次印度洋季风，主机一偷懒，班期就没了。"
-
-小李张了张嘴，没说话。他鼻子一酸——师傅袖口的油迹已经结成了硬壳，领口一圈白白的盐霜。他把自己那杯凉白开悄悄挪到了师傅脚边的阴影里，那杯水，师傅从早上到现在还没喝过一口。
-
-一点十七分，政委拎着一编织袋的冰镇西瓜下了机舱。绿色编织袋表面全是水珠，一打开，一股清凉的甜气就冲散了满屋的柴油味。
-
-"一人一牙啊，别抢！"政委给每个人递，递到王建国的时候，特意挑了最中间那牙，红瓤都起沙了。
-
-王建国在工作服下摆上蹭了蹭手，接过西瓜咬了一大口。
-
-"唔——"他眼睛一下就亮了，朝政委竖了竖大拇指，汁液顺着嘴角往下淌，他用手背一抹，"政委你这西瓜真到位！再热再累也值了！"
-
-周围响起一片笑声，缸头的嗡鸣声好像也没那么刺耳了。那几分钟里，机舱的温度好像降了三度。
-
-本航次是王建国连续值乘的第42天。主机吊缸1次，节油12.3%，零故障、零迟滞、零安全事故。公司党委发的"安全生产月"号召书，他贴在更衣室柜门里侧，每天穿工作服的时候都能看见。
-
-"忠诚、担当、务实、高效。"这八个字，他没在大会上念过一次，但他那道翻着嫩肉的新疤、那杯凉了又凉的白开水、那块起沙的西瓜，都替他念过了。
-
-（全文完 · 1487 字）
-`);
+// ========= 成品稿文本框初始值：空，等 Step 8 生成后再填 =========
+//   —— 避免一进 Step 9 就塞一大段"老轨王建国"硬编码示例误导政委以为是自己的稿
+const mockResultArticle = ref<string>('');
 
 // ============================================================
 // 🧩 自我优化闭环：成品稿修改追踪（diff + 有效修改次数）
 // ============================================================
-const originalArticleSnapshot = ref<string>(mockResultArticle.value); // 生成时刻的快照（每次"重新生成"都重置）
+const originalArticleSnapshot = ref<string>(''); // 生成时刻的快照（每次"重新生成"都重置）
 const generationId = ref<string>(`gen_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`); // 本次生成唯一号
 const showDownloadGuide = ref(false); // 柔性引导弹窗开关
 
@@ -661,9 +639,42 @@ const validEdits = computed(() => countValidEdits(rowDiffs.value));
 const validEditCount = computed(() => validEdits.value.count);
 // 💎 个性化加成规则
 const personalBonus = computed(() => getPersonalBonus(validEditCount.value));
-// 最终评分：基础 92 + 个性化加成
-const baseMockScore = 92;
-const finalScore = computed(() => Math.min(100, baseMockScore + personalBonus.value.bonus));
+
+// ★ 后端真实生成结果（硬编码 baseMockScore=92 / 固定18/20分 / 固定6.3% AI检测率 → 通通改为从后端返回承接）
+const generatedResult = reactive<{
+  sprintInfo: string;
+  scoreTotal100: number;
+  contentIntegrity: number; themeCoherence: number; structureFitness: number;
+  detailRichness: number; freeDirectiveDone: number; deaiScore: number;
+  compliance: number;
+  simAiDetectRate: number;
+  aiDetectRateLevel: 'safe' | 'warning' | 'danger';
+  aiDetectRateHint: string;
+  grade: string; gradeLabel: string; gradeColor: string; gradeAdvice: string;
+  forbiddenHits: string[]; politicalTermOK: boolean; titleShipOK: boolean;
+  missingFactsHints: string[];
+  deaiAppliedRules: string[];
+}>({
+  sprintInfo: '未生成：请在 Step 8 点"开始生成"。',
+  scoreTotal100: 0,
+  contentIntegrity: 0, themeCoherence: 0, structureFitness: 0,
+  detailRichness: 0, freeDirectiveDone: 0, deaiScore: 0,
+  compliance: 0,
+  simAiDetectRate: 0,
+  aiDetectRateLevel: 'safe',
+  aiDetectRateHint: '未生成',
+  grade: '-', gradeLabel: '-', gradeColor: 'gray', gradeAdvice: '-',
+  forbiddenHits: [], politicalTermOK: true, titleShipOK: true,
+  missingFactsHints: [],
+  deaiAppliedRules: [],
+});
+// 最终评分：后端真实分 + 个性化加成（💎越改分越高）
+const finalScore = computed(() => Math.min(100, (generatedResult.scoreTotal100 || 0) + personalBonus.value.bonus));
+// 六维分项满分映射（后端 6 维度总分 100，等比例缩放到 UI 的 x/20 显示）
+function score20(scoreFrom100: number, maxScore = 20) {
+  if (!scoreFrom100) return 0;
+  return Math.min(maxScore, Math.round(scoreFrom100 / 100 * maxScore));
+}
 
 // 监听"重新生成"跳回 Step 8 → 重新进入 Step 10 时重置快照
 watch(activeStep, (ns, os) => {
@@ -982,23 +993,112 @@ const nextStep = () => {
 };
 const confirmNextDespiteLowScore = () => { showLowScoreConfirm.value = false; advanceStep(); };
 
-const advanceStep = () => {
+const advanceStep = async () => {
   if (activeStep.value === 7) {
-    // Step 8 → Step 9 模拟生成进度条
+    // Step 8 → Step 9：真正 POST 后端 /api/ai-manuscript/generate（复用大盘子豆包 API，无额外配置）
     activeStep.value = 8;
     mockGenProgress.value = 0;
+    // ① 前 30%：快速推进进度条，给政委"正在处理"的视觉反馈
     const timer = setInterval(() => {
-      mockGenProgress.value = Math.min(100, mockGenProgress.value + 5);
-      if (mockGenProgress.value >= 100) { clearInterval(timer); setTimeout(() => { activeStep.value = 9; }, 300); }
+      mockGenProgress.value = Math.min(30, mockGenProgress.value + 5);
+      if (mockGenProgress.value >= 30) clearInterval(timer);
     }, 150);
+    try {
+      const res = await $fetch<any>('/api/ai-manuscript/generate', {
+        method: 'POST',
+        body: form,
+      });
+      // ② 70~95%：拿到数据后，快速把进度条推到收尾
+      clearInterval(timer);
+      mockGenProgress.value = 90;
+      const timer2 = setInterval(() => {
+        mockGenProgress.value = Math.min(100, mockGenProgress.value + 5);
+        if (mockGenProgress.value >= 100) clearInterval(timer2);
+      }, 120);
+      // ③ 填入成品稿（后端豆包直出，或豆包失败时的本地兜底稿）
+      mockResultArticle.value = res?.finalArticle || '';
+      originalArticleSnapshot.value = mockResultArticle.value;
+      // ④ 填入真实评分 / AI 检测率 / 合规命中 / 规则明细
+      const s = res?.score || {};
+      generatedResult.sprintInfo = res?.sprintInfo || '-';
+      generatedResult.scoreTotal100 = s?.total100 || 0;
+      generatedResult.contentIntegrity = s?.contentIntegrity || 0;
+      generatedResult.themeCoherence = s?.themeCoherence || 0;
+      generatedResult.structureFitness = s?.structureFitness || 0;
+      generatedResult.detailRichness = s?.detailRichness || 0;
+      generatedResult.freeDirectiveDone = s?.freeDirectiveDone || 0;
+      generatedResult.deaiScore = s?.deai || 0;
+      generatedResult.compliance = s?.compliance || 0;
+      generatedResult.simAiDetectRate = typeof s?.simAiDetectRate === 'number' ? s.simAiDetectRate : 0;
+      generatedResult.aiDetectRateLevel = s?.aiDetectRateLevel || 'safe';
+      generatedResult.aiDetectRateHint = s?.aiDetectRateHint || '';
+      generatedResult.grade = s?.grade || '-';
+      generatedResult.gradeLabel = s?.gradeLabel || '-';
+      generatedResult.gradeColor = s?.gradeColor || 'gray';
+      generatedResult.gradeAdvice = s?.gradeAdvice || '';
+      generatedResult.forbiddenHits = Array.isArray(s?.forbiddenHits) ? s.forbiddenHits : [];
+      generatedResult.politicalTermOK = !!s?.politicalTermOK;
+      generatedResult.titleShipOK = !!s?.titleShipOK;
+      generatedResult.missingFactsHints = Array.isArray(res?.missingFactsHints) ? res.missingFactsHints : [];
+      generatedResult.deaiAppliedRules = Array.isArray(res?.deaiAppliedRules) ? res.deaiAppliedRules : [];
+      // ⑤ 过 400ms 进 Step 9
+      setTimeout(() => { activeStep.value = 9; mockGenProgress.value = 100; }, 400);
+    } catch (e) {
+      clearInterval(timer);
+      mockGenProgress.value = 100;
+      activeStep.value = 9;
+      ElMessage.error(`生成失败：${(e as Error)?.message || '网络错误'}。已降级为兜底稿，请您查看成品稿后手动调整，或稍后再试一次。`);
+      console.warn('[advanceStep] 生成失败，降级', e);
+    }
     return;
   }
   if (activeStep.value < STEPS_LABEL.length - 1) activeStep.value++;
 };
 
-const openMyTemplates = () => {
-  ElMessage.info('📂 我的范文库（Sprint 1 MVP：后续版本在此打开导入+管理弹窗）');
+const openMyTemplates = async () => {
+  try {
+    const res = await $fetch<any>('/api/ai-manuscript/templates', { method: 'GET' });
+    const total = Array.isArray(res?.items) ? res.items.length : (Array.isArray(res) ? res.length : 0);
+    if (total > 0) {
+      ElMessage.success(`📂 我的范文库：共 ${total} 篇，个人/团队/舰队三层联动可用。（Sprint 2：此处弹出管理弹窗 → 上传/导入/预览）`);
+    } else {
+      ElMessage.info('📂 我的范文库：当前您还没有范文，后续写完一篇"集团录用级"的稿件后，勾选"存为L2个人范文"即可自动入库。');
+    }
+  } catch (e) {
+    ElMessage.warning(`📂 范文库接口暂未就绪：${(e as Error)?.message || '请稍后再试'}`);
+  }
 };
+
+// ★ 「发往杂志编排」真调用大盘子 magazine 模块创建文章接口
+//   —— 陈先生不用来回发微信/邮件附件。如果杂志/版块还没创建，给明确降级引导，不打断用户
+async function handleSendToMagazine() {
+  if (!mockResultArticle.value || mockResultArticle.value.trim().length < 50) {
+    ElMessage.warning('请先生成或填写至少 50 字的成品稿，再发往杂志编排。');
+    return;
+  }
+  const titleMatch = mockResultArticle.value.match(/^[#\s]*(.+)$/m);
+  const title = (titleMatch?.[1] || `${form.basic.personList[0]?.name || '政委'}先进事迹稿`).slice(0, 60);
+  try {
+    // 复用大盘子杂志编排已有 API：POST 创建文章到默认版块；sectionId 给特殊占位 _default_pending，让岸基编辑后台再分配
+    await $fetch('/api/magazine/sections/_default_pending/articles', {
+      method: 'POST',
+      body: {
+        title,
+        author: form.basic.personList.map(p => [p.name, p.duty].filter(Boolean).join('（')).join('、') || '熊猫笔记·政工笔',
+        content: mockResultArticle.value,
+        category: form.categoryId,
+        wordCount: finalTextLength.value,
+        generationId: generationId.value,
+      },
+    });
+    ElMessage.success(`📰 已成功发往杂志编排（默认"待分配"版块），标题：${title}。请岸基端杂志编排模块中审核/分配到具体版块。`);
+  } catch (e) {
+    ElMessage.warning(`📰 杂志编排模块接口异常（可能还没创建默认版块）。降级操作：请您点击"复制全文"，手动粘贴到杂志编排 → 新建文章 页面即可。错误：${(e as Error)?.message || ''}`);
+    console.warn('[handleSendToMagazine] 降级', e);
+  }
+}
+
+const finalTextLength = computed(() => mockResultArticle.value?.length || 0);
 
 // ========= 生命周期：预置 6 张示例卡片，让新用户一进来就知道怎么玩 =========
 onMounted(() => {

@@ -1,9 +1,9 @@
 // ============================================================
 // 政工笔 · AI 写作系统 - 核心 Service
-// Sprint 1 实现：Prompt 5+1 层拼接 + RAG(tsvector 占位) + 去 AI 化引擎 + 100 分评分
-// Sprint 2 接入：真实豆包大模型调用 + 文件抽取打标签队列 + 历史稿件库
+// 已接入：熊猫笔记大盘子豆包 API（process.env.AI_API_URL / AI_API_KEY / AI_ENDPOINT_ID），0 额外配置
 // ============================================================
 import { Injectable, Logger, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   GenerateManuscriptDto, ScoreOnlyDto, DetailCardDto,
@@ -24,18 +24,67 @@ import {
 @Injectable()
 export class AiManuscriptService {
   private readonly logger = new Logger(AiManuscriptService.name);
+  private readonly AI_API_URL: string;
+  private readonly AI_API_KEY: string;
+  private readonly AI_ENDPOINT_ID: string;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly deAiEngine: DeAiEngine,
     private readonly scoringEngine: QualityScoringEngine,
-  ) {}
+    private readonly config: ConfigService,
+  ) {
+    // ★ 复用熊猫笔记大盘子已经持久化保存的豆包 API 配置（陈先生只配过一次）
+    //   同 ai-dashboard-report / ai-brief / magazine 等 7 个模块使用完全相同的环境变量
+    this.AI_API_URL = this.config.get<string>('AI_API_URL', 'https://ark.cn-beijing.volces.com/api/v3/chat/completions');
+    this.AI_API_KEY = this.config.get<string>('AI_API_KEY', '');
+    this.AI_ENDPOINT_ID = this.config.get<string>('AI_ENDPOINT_ID', '');
+  }
+
+  /**
+   * 调用豆包大模型（完全复用大盘子 callAI 模板：headers / messages / 30s 超时 / JSON 清理）
+   * —— 陈先生不用再单独申请 Key、不用再配一遍、不用再看配置文档：直接吃大盘子已有的
+   */
+  private async callAI(userPrompt: string): Promise<string> {
+    if (!this.AI_API_KEY || !this.AI_ENDPOINT_ID) {
+      throw new Error('[政工笔] 大盘子豆包 API 配置缺失（AI_API_KEY / AI_ENDPOINT_ID），请确认 .env');
+    }
+    try {
+      const res = await fetch(this.AI_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.AI_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: this.AI_ENDPOINT_ID,
+          stream: false,
+          messages: [
+            { role: 'system', content: '你是资深政工写作编辑，服务于远洋海运业船舶政委。必须严格遵守用户给出的全部规则，严禁杜撰任何未给出的事实。' },
+            { role: 'user', content: userPrompt },
+          ],
+          temperature: 0.75,
+          max_tokens: 4096,
+        }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json() as any;
+      const content: string = data?.choices?.[0]?.message?.content ?? '';
+      if (!content) throw new Error('豆包返回内容为空');
+      // JSON 清理 & 去除首尾 ```markdown 围栏
+      return content.replace(/^```(?:markdown)?\s*/i, '').replace(/```\s*$/i, '').trim();
+    } catch (e) {
+      this.logger.warn(`[callAI] 豆包调用失败，降级使用本地结构生成。原因：${(e as Error).message}`);
+      throw e;
+    }
+  }
 
   /**
    * 【核心】生成稿件全流程：
    *  1. 校验字段 → 缺要素给提示
    *  2. 拼接 5+1 层 Prompt
-   *  3. 调大模型生成（Sprint 1：占位 mock；Sprint 2 调豆包 API）
+   *  3. 调大模型生成（优先走大盘子豆包；失败降级到本地 buildMockArticle 保证政委能工作）
    *  4. 跑 DeAiEngine 6 规则去 AI 化
    *  5. 跑 QualityScoringEngine 100 分评分
    *  6. 返回：最终稿 + 评分卡 + AI 检测率
@@ -48,11 +97,20 @@ export class AiManuscriptService {
     // Step B: 拼接 5+1 层完整 Prompt
     const fullPrompt = this.buildFullPrompt(dto, userDetailsScore, missingHints);
 
-    // Step C: (Sprint 2) 真正调用豆包大模型 → Sprint 1 用用户数据拼一篇 demo 文，让前端能跑通
-    const mockArticle = this.buildMockArticle(dto);
+    // Step C: 真正调用豆包大模型（复用大盘子 .env 配置，失败才降级到本地结构稿）
+    let rawArticle: string;
+    let sourceLabel: string;
+    try {
+      rawArticle = await this.callAI(fullPrompt);
+      sourceLabel = '政工笔 · 熊猫笔记大盘子豆包 API 直出（强度规则已应用）';
+    } catch (err) {
+      this.logger.warn(`[generate][user=${user.userId}] 豆包调用失败，降级使用本地结构稿：${(err as Error).message}`);
+      rawArticle = this.buildMockArticle(dto);
+      sourceLabel = '政工笔 · 豆包不可用时的本地结构兜底稿（请检查网络）';
+    }
 
     // Step D: 去 AI 化引擎
-    const deaiOutput: DeAiOutput = await this.deAiEngine.process(mockArticle, dto.preference.deaiStrength);
+    const deaiOutput: DeAiOutput = await this.deAiEngine.process(rawArticle, dto.preference.deaiStrength);
 
     // Step E: 100 分质量评分
     const qualityBreakdown: QualityBreakdown = await this.scoringEngine.score(
@@ -71,7 +129,7 @@ export class AiManuscriptService {
       deaiRuleScores: deaiOutput.ruleScores,
       score: qualityBreakdown,
       missingFactsHints: missingHints,
-      sprintInfo: 'Sprint 1 MVP：此处返回 mock 文章；Sprint 2 接入豆包大模型真实生成调用。',
+      sprintInfo: sourceLabel,
     };
   }
 
@@ -81,8 +139,9 @@ export class AiManuscriptService {
 
   async runQualityScoring(text: string, strength: number) {
     // 没有 dto 时，构造一个最小 dto（Step 5 细节分给 70 中值，其它按默认）
+    // —— 结构必须对齐 GenerateManuscriptDto 的嵌套（basic.happenDate / basic.location / basic.personList）
     const mockDto: any = {
-      happenDate: '2026-08-15', location: '未知', personList: [{ name: '未知' }],
+      basic: { happenDate: '2026-08-15', location: '未知', personList: [{ name: '未知' }] },
       eventProcess: '（无）', themeIdea: '（无）',
       detailCards: [], freeSpecialInstructions: '',
       preference: { wordCount: text.length, taboos: [] }

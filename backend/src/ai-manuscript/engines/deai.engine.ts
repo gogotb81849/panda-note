@@ -141,12 +141,14 @@ export class DeAiEngine {
     // ===== 合计 & 映射 =====
     const totalSubscore = sentScore + perpScore + transScore + paraScore + puncScore + numScore;
     const cappedScore = Math.round(Math.min(25, totalSubscore * 25 / 30));
-    // 模拟 AI 检测率（反向公式 · 加 ±4% 浮动）
+    // AI 检测率：使用文本内容的稳定 hash 算一个 -3 ~ +3 的固定偏移，
+    //   保证同一篇稿子每次打分完全一致（不会出现刷新一下涨 4%，让政委觉得系统"随机作弊"）
     const base = Math.max(0, Math.min(1, totalSubscore / 30));
     const detectBase = 100 - (base * 90 + 6);
-    const simAiDetectRatePercent = Math.max(0, Math.min(100,
-      Math.round(detectBase + (Math.random() * 8 - 4))
-    ));
+    let hash = 0;
+    for (let i = 0; i < clean.length; i++) hash = ((hash << 5) - hash + clean.charCodeAt(i)) | 0;
+    const stableJitter = ((Math.abs(hash) % 61) - 30) / 10; // -3.0 ~ +3.0，纯文本内容确定性映射
+    const simAiDetectRatePercent = Math.max(0, Math.min(100, Math.round(detectBase + stableJitter)));
 
     return {
       sentenceLengthStdDev: sentScore,
