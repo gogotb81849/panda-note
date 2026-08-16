@@ -30,8 +30,9 @@ export default defineNuxtConfig({
   // 【CI 内存终极优化 v0816】单一 nitro 定义 + 更激进省内存
   nitro: {
     preset: 'node-server',
-    compressPublicAssets: false, // CI 时完全跳过 gzip/brotli 预压缩（本地 build 时不用 CI 产物做 CDN 分发），省 ~200M
-    minify: true,
+    compressPublicAssets: false, // CI 时完全跳过 gzip/brotli 预压缩，省 ~200M
+    // ★ v0816-13: CI 关闭 nitro minify（esbuild minify 额外吃 ~200-300MB AST 内存，生产体积稍大可接受）
+    minify: !isCI,
     inlineDynamicImports: false,
     rollupConfig: {
       output: { inlineDynamicImports: false },
@@ -44,16 +45,17 @@ export default defineNuxtConfig({
   },
   vite: {
     build: {
-      // ★ v0816 极致内存优化：client build 只用 ~2.5-3GB < 5120MB V8 上限
       target: 'es2022',
       sourcemap: false,
-      minify: 'esbuild',
-      cssMinify: 'esbuild',
-      chunkSizeWarningLimit: 50000,      // 50MB 上限 —— 彻底不拆 chunk（拆越多份 AST 越多）
-      reportCompressedSize: false,      // 永远不要预计算压缩大小
-      cssCodeSplit: false,              // 所有 CSS 打成一份，减少 Rollup 的 chunk graph 节点
+      // ★ v0816-13: CI 关闭所有 minify（esbuild minify 对大型 chunk 做 parse → transform AST 时要吃 300-500MB 额外内存！）
+      //   v12 used=3337MB/3607MB（old-space=3600 到顶，OOM 在边界），关 minify 预期直接降 300-500MB
+      minify: isCI ? false : 'esbuild',
+      cssMinify: isCI ? false : 'esbuild',
+      chunkSizeWarningLimit: 50000,      // 50MB 不拆 chunk
+      reportCompressedSize: false,       // 禁用预计算压缩大小
+      cssCodeSplit: false,               // CSS 合并一份
       rollupOptions: {
-        maxParallelFileOps: 1,          // ★ 完全串行（并发=1）
+        maxParallelFileOps: 1,           // 完全串行
         cache: false,
         treeshake: isCI ? { correctVarValueBeforeDeclaration: true, annotations: true, moduleSideEffects: 'no-external', preset: 'smallest' } as any : { correctVarValueBeforeDeclaration: true, annotations: true, moduleSideEffects: 'no-external' } as any,
         makeAbsoluteExternalsRelative: true,
@@ -62,9 +64,8 @@ export default defineNuxtConfig({
           warn(warning);
         },
       },
-      // ★ CI 额外省内存：Vite 7.x sourcemap 禁止 + terser 禁止多线程 + rollup treeshake smallest
       sourcemap: !isCI,
-      reportCompressedSize: false,      // 永远不要预计算压缩大小
+      reportCompressedSize: false,
     },
     // ★ Vite 7.x 内存优化：减少中间产物
     watch: { skipWrite: true },       // build 时不需要写 watch 文件
