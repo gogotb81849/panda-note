@@ -4,6 +4,10 @@
  * 背景：后端完全宕机（502），后端自修复接口 /api/_fix_pm2_20260806 也无法访问。
  * 此路由运行在前端 Nuxt 服务器上（仍在运行），可以直接在服务器上执行 PM2 命令。
  *
+ * 关键修复（v2）：入口文件可能是 dist/main.js 或 dist/src/main.js
+ *   （取决于 backend/tsconfig.json 的 rootDir 配置；当前 rootDir:"./" → 输出 dist/src/main.js）
+ *   v1 版本第 151 行硬编码了 dist/main.js，导致找到正确路径却用错路径启动，PM2 仍 errored。
+ *
  * 用法：GET /__fix_backend_20260816?token=Pm2FixToken_2026Aug06_x9K2m7Qp5zR4tV1wN8hB3cL6sY0jF4gD
  *
  * 安全：需要正确的 token，否则返回 404（避免被扫描发现）
@@ -13,6 +17,19 @@ import { existsSync } from 'fs'
 import { join } from 'path'
 
 const FIX_TOKEN = 'Pm2FixToken_2026Aug06_x9K2m7Qp5zR4tV1wN8hB3cL6sY0jF4gD'
+
+// 后端入口文件可能的相对路径（取决于 tsconfig rootDir）
+const MAIN_JS_CANDIDATES = ['dist/main.js', 'dist/src/main.js']
+
+/**
+ * 在指定 backend 目录下查找入口文件，返回相对路径（如 'dist/src/main.js'），找不到返回 ''
+ */
+function findMainJs(backendDir: string): string {
+  for (const p of MAIN_JS_CANDIDATES) {
+    if (existsSync(join(backendDir, p))) return p
+  }
+  return ''
+}
 
 export default defineEventHandler(async (event) => {
   const token = getQuery(event).token as string
@@ -50,6 +67,7 @@ export default defineEventHandler(async (event) => {
 
   let deployDir = ''
   let backendDir = ''
+  let mainJsRelative = ''
 
   // 方法1：从 PM2 现有进程信息中获取 cwd
   log.push('\n--- Trying to find backend from PM2 process info ---')
@@ -62,8 +80,25 @@ export default defineEventHandler(async (event) => {
         log.push(`  PM2 process ${p.name}: cwd=${cwd} status=${p.pm2_env?.status}`)
         if (p.name === 'nav-log-frontend' && cwd) {
           // 前端的 cwd 是 .../frontend，后端应该在 .../backend
-          deployDir = cwd.replace(/\/frontend$/, '')
-          backendDir = join(deployDir, 'backend')
+          const guessedDeploy = cwd.replace(/\/frontend$/, '')
+          const guessedBackend = join(guessedDeploy, 'backend')
+          const entry = findMainJs(guessedBackend)
+          if (entry) {
+            deployDir = guessedDeploy
+            backendDir = guessedBackend
+            mainJsRelative = entry
+            log.push(`  ✅ FOUND via PM2 frontend cwd! deployDir=${deployDir} entry=${entry}`)
+          }
+        }
+        // backend 进程本身也可能有有效 cwd
+        if (p.name === 'nav-log-backend' && cwd && !mainJsRelative) {
+          const entry = findMainJs(cwd)
+          if (entry) {
+            backendDir = cwd
+            deployDir = cwd.replace(/\/backend$/, '')
+            mainJsRelative = entry
+            log.push(`  ✅ FOUND via PM2 backend cwd! backendDir=${backendDir} entry=${entry}`)
+          }
         }
       }
     }
@@ -72,32 +107,42 @@ export default defineEventHandler(async (event) => {
   }
 
   // 方法2：在候选目录中查找
-  if (!backendDir || !existsSync(join(backendDir, 'dist', 'main.js'))) {
+  if (!mainJsRelative) {
     log.push('\n--- Searching candidate directories ---')
     for (const dir of candidateDirs) {
-      const mainJs = join(dir, 'backend', 'dist', 'main.js')
-      log.push(`  Checking: ${mainJs}`)
-      if (existsSync(mainJs)) {
+      const bDir = join(dir, 'backend')
+      const entry = findMainJs(bDir)
+      log.push(`  Checking: ${bDir} → ${entry || 'NOT FOUND'}`)
+      if (entry) {
         deployDir = dir
-        backendDir = join(dir, 'backend')
-        log.push(`  ✅ FOUND! deployDir=${deployDir}`)
+        backendDir = bDir
+        mainJsRelative = entry
+        log.push(`  ✅ FOUND! deployDir=${deployDir} entry=${entry}`)
         break
       }
     }
   }
 
-  // 方法3：用 find 命令搜索（兜底）
-  if (!backendDir || !existsSync(join(backendDir, 'dist', 'main.js'))) {
-    log.push('\n--- Using find to search for dist/main.js ---')
+  // 方法3：用 find 命令搜索（兜底）—— 同时搜索 dist/main.js 和 dist/src/main.js
+  if (!mainJsRelative) {
+    log.push('\n--- Using find to search for backend entry (dist/main.js OR dist/src/main.js) ---')
     try {
-      const found = execSync('find /www /opt /home /var /srv -path "*/backend/dist/main.js" -type f 2>/dev/null | head -5', { encoding: 'utf-8', timeout: 30_000 }).trim()
+      const found = execSync(
+        'find /www /opt /home /var /srv \\( -path "*/backend/dist/main.js" -o -path "*/backend/dist/src/main.js" \\) -type f 2>/dev/null | head -10',
+        { encoding: 'utf-8', timeout: 30_000 },
+      ).trim()
       if (found) {
         const lines = found.split('\n')
         for (const line of lines) {
-          if (line && existsSync(line)) {
-            backendDir = line.replace('/dist/main.js', '')
+          const trimmed = line.trim()
+          if (!trimmed || !existsSync(trimmed)) continue
+          // line 形如 .../backend/dist/main.js 或 .../backend/dist/src/main.js
+          const match = trimmed.match(/^(.*\/backend\/dist)((?:\/src)?\/main\.js)$/)
+          if (match) {
+            backendDir = match[1].replace(/\/dist$/, '')
             deployDir = backendDir.replace(/\/backend$/, '')
-            log.push(`  ✅ FOUND via find! deployDir=${deployDir} backendDir=${backendDir}`)
+            mainJsRelative = `dist${match[2]}`
+            log.push(`  ✅ FOUND via find! deployDir=${deployDir} backendDir=${backendDir} entry=${mainJsRelative}`)
             break
           }
         }
@@ -107,32 +152,32 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  if (!backendDir || !existsSync(join(backendDir, 'dist', 'main.js'))) {
-    log.push('\n❌ ERROR: Could not find backend dist/main.js anywhere!')
+  if (!mainJsRelative || !backendDir) {
+    log.push('\n❌ ERROR: Could not find backend entry (dist/main.js or dist/src/main.js) anywhere!')
     log.push('\n--- PM2 process list ---')
     run('pm2 ls 2>&1 || true')
-    log.push('\n--- Searching for main.js in common dirs ---')
-    run('find /www /opt /home -name "main.js" -path "*/backend/dist/*" 2>/dev/null | head -10 || true')
+    log.push('\n--- Searching for any main.js under backend/dist ---')
+    run('find /www /opt /home -name "main.js" -path "*/backend/dist*" 2>/dev/null | head -10 || true')
     log.push(`\n[done] ${new Date().toISOString()}`)
     return new Response(log.join('\n'), { headers: { 'Content-Type': 'text/plain; charset=utf-8' } })
   }
 
-  const mainJs = join(backendDir, 'dist', 'main.js')
-  log.push(`\n✅ Backend found at: ${mainJs}`)
+  log.push(`\n=== Backend located ===`)
   log.push(`deployDir=${deployDir}`)
   log.push(`backendDir=${backendDir}`)
+  log.push(`mainJsRelative=${mainJsRelative}`)
 
   // 1) 查看当前 PM2 状态
   log.push('\n--- PM2 status before fix ---')
   run('pm2 ls 2>&1 || true')
 
-  // 2) 删除旧的后端进程（清除可能过时的 cwd 配置）
+  // 2) 删除旧的后端进程（清除可能过时/错误的 cwd 与入口配置）
   log.push('\n--- Deleting stale nav-log-backend ---')
   run('pm2 delete nav-log-backend 2>/dev/null || true')
 
-  // 3) 重新启动后端，显式指定 --cwd
-  log.push('\n--- Starting nav-log-backend with explicit --cwd ---')
-  run(`cd "${backendDir}" && pm2 start dist/main.js --name nav-log-backend --cwd "${backendDir}" --node-args="--max-old-space-size=512"`)
+  // 3) 重新启动后端，显式指定 --cwd 与正确入口文件（★ v2 修复：用 mainJsRelative 而非硬编码 dist/main.js）
+  log.push(`\n--- Starting nav-log-backend with entry=${mainJsRelative} ---`)
+  run(`cd "${backendDir}" && pm2 start ${mainJsRelative} --name nav-log-backend --cwd "${backendDir}" --node-args="--max-old-space-size=512"`)
 
   // 4) 保存 PM2
   run('pm2 save || true')
