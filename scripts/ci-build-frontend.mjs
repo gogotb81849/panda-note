@@ -57,21 +57,17 @@ for (const d of cacheDirs) {
 //   这样**真正跑 nuxt build 的 node 进程**拿到的 V8 上限才是 3GB！
 //
 //   （测试：GC trace 里 Mark-Compact 的括号内 committed 峰值应该稳定 ~3200-3400MB，而不是 4120MB）
-log('Step 1/3: Run nuxt build (max-old-space-size=4096 via env+argv double-lock, fully serial, CI no-PWA)...');
-log('  (v0816-16: 15轮数据公式 used≈old-space-270，应用峰值3331，4096有765MB安全边际)');
+log('Step 1/3: Run nuxt build (max-old-space-size=8192 via env+argv double-lock, fully serial, CI no-PWA)...');
+log('  (v0816-18: 17轮证明 Mark-Compact 只释放 5MB → 3.8GB 全是 live 数据。GitHub Runner 16GB RAM，8192 有 4.2GB 空间做 GC)');
 const buildEnv = {
   ...process.env,
-  // ★ v0816-16: old-space=4096
-  //   15轮 GC trace 完整公式：OOM 在 used ≈ old-space - 270 处
-  //   v10(3000) used=2805 差195 OOM
-  //   v11(3300) used=3058 差242 OOM
-  //   v12(3600) used=3337 差263 OOM
-  //   v15(3600) used=3331 差269 OOM
-  //   → 应用真实峰值 = 3331MB（删菜篮子后）
-  //   → 需要 old-space ≥ 3331 + 270 = 3601MB
-  //   → old-space=4096 有 765MB 安全边际 ✅
-  //   v9 时 old-space=4096 但 used=3828（菜篮子还在）所以 OOM；现在删了菜篮子 used=3331
-  NODE_OPTIONS: '--max-old-space-size=4096 --max-semi-space-size=4 --expose-gc',
+  // ★ v0816-18: old-space=8192（8GB）
+  //   17 轮 GC trace 证明：Mark-Compact 只释放 5MB（3820→3815），3.8GB 几乎全是 live 数据
+  //   → 应用真实内存需求 = ~3.8GB（不是垃圾，是 Vite/Rollup transform 的 AST）
+  //   → old-space=4096 时 used=3820 ≈ old-space，差只有 276MB → V8 GC 不够空间 → OOM
+  //   → old-space=8192：应用 3.8GB + V8 GC 预留 4.2GB = 8GB < 16GB runner RAM ✅
+  //   → RSS ≈ 8.5GB < 16GB 物理内存，不会 cgroup SIGKILL
+  NODE_OPTIONS: '--max-old-space-size=8192 --max-semi-space-size=8 --expose-gc',
   NUXT_TELEMETRY_DISABLED: '1',
   DISABLE_OPENCOLLECTIVE: '1',
   NEXT_TELEMETRY_DISABLED: '1',
@@ -83,8 +79,8 @@ log(`  using npx at: ${npxPath}`);
 log(`  buildEnv.NODE_OPTIONS = ${buildEnv.NODE_OPTIONS}`);
 // ★ 全部 V8 flag 都在 argv 直传（外层保险）+ env 传了 NODE_OPTIONS（内层保险）：
 const nodeArgs = [
-  '--max-old-space-size=4096',
-  '--max-semi-space-size=4',
+  '--max-old-space-size=8192',
+  '--max-semi-space-size=8',
   '--expose-gc',
   '--gc-global',
   '--no-concurrent-recompilation',
