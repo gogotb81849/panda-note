@@ -712,7 +712,32 @@ function copyFullArticle() {
   ElMessage.success(`📋 已复制全文（${text.length} 字）到剪贴板`);
 }
 function saveToRevision(showTip: boolean) {
-  // Sprint 2 调用后端 /revision-record/save
+  // 真实调用后端 /api/ai-manuscript/revision-record/save，失败时降级为仅 toast 保证 UI 不崩
+  const body = {
+    generationId: generationId.value,
+    manuscriptCategory: form.categoryId,
+    beforeText: originalArticleSnapshot.value,
+    afterText: mockResultArticle.value,
+    wordCountBefore: originalArticleSnapshot.value.length,
+    wordCountAfter: mockResultArticle.value.length,
+    frontendValidEditCount: validEditCount.value,
+    diffSnippets: rowDiffs.value.slice(0, 15).map((d, idx) => ({
+      id: idx, type: d.type, before: d.before ?? '', after: d.after ?? '',
+      startIdx: 0, endIdx: 0, editCategory: 'WORD_REPLACE_VIVID',
+    })),
+    totalEditChars: validEdits.value.chars,
+  };
+  (async () => {
+    try {
+      await $fetch('/api/ai-manuscript/revision-record/save', {
+        method: 'POST',
+        body,
+      });
+    } catch (e) {
+      // Sprint 1 允许接口鉴权/未就绪时静默失败（不打断用户写作流程），日志留痕
+      console.warn('[政工笔] saveToRevision 调用失败（Sprint 1 允许）:', e);
+    }
+  })();
   if (showTip) ElMessage.success(`💾 已保存修改记录（${validEditCount.value} 处有效修改）。累计 ${Math.max(0, validEditCount.value)} 处，${personalBonus.value.unlockText}`);
 }
 function quickFix(what: string) {

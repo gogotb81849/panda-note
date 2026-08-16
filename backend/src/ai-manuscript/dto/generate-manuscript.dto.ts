@@ -47,16 +47,21 @@ export class PreferenceDto {
   @IsInt() @Min(0) @Max(100) deaiStrength = 80;
 }
 
+export class BasicInfoDto {
+  // Step 2: 三要素（时间 / 地点 / 人物）—— 和前端 form.basic 结构完全对齐
+  @IsString() happenDate!: string;
+  @IsString() location!: string;
+  @ValidateNested({ each: true }) @Type(() => PersonItemDto) personList!: PersonItemDto[];
+}
+
 export class GenerateManuscriptDto {
   // -------- Step 1 --------
   @IsEnum(['advanced_deed','political_briefing','ship_news','meeting_minutes','work_summary'])
   categoryId!: ManuscriptCategoryId;
   @IsDefined() writerStyleId!: WriterStyleId;
 
-  // -------- Step 2 --------
-  @IsString() happenDate!: string;
-  @IsString() location!: string;
-  @ValidateNested({ each: true }) @Type(() => PersonItemDto) personList!: PersonItemDto[];
+  // -------- Step 2（前后端字段对齐：前端 form.basic，后端 dto.basic，完全一致）--------
+  @ValidateNested() @Type(() => BasicInfoDto) basic!: BasicInfoDto;
 
   // -------- Step 3 --------
   @IsString() eventProcess!: string;

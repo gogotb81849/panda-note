@@ -66,8 +66,8 @@ export class QualityScoringEngine {
     // ====== 维度 1：内容质量 60 ======
     // 1-a 事实要素完整度（10 分，按 Step2-4 字段齐全度扣）
     let integrity = 10;
-    if (!dto.happenDate) integrity -= 2;
-    if (!dto.location?.trim()) integrity -= 2;
+    if (!dto.basic?.happenDate) integrity -= 2;
+    if (!dto.basic?.location?.trim()) integrity -= 2;
     if (!dto.basic?.personList?.some(p => p.name || p.duty)) integrity -= 3;
     if (!dto.eventProcess || dto.eventProcess.length < 100) integrity -= 2;
     if (!dto.themeIdea || dto.themeIdea.length < 50) integrity -= 1;

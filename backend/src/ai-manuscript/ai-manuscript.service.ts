@@ -138,8 +138,8 @@ ${dto.freeSpecialInstructions?.trim() ? dto.freeSpecialInstructions : '（用户
     // 结构化事实 & 细节卡列表
     parts.push(`================================================================
 【🎯 用户结构化事实（Step 1-4）】
-• 日期：${dto.happenDate}
-• 地点：${dto.location || '（未填写！用（此处细节略）占位）'}
+• 日期：${dto.basic.happenDate}
+• 地点：${dto.basic.location || '（未填写！用（此处细节略）占位）'}
 • 涉及人物：
 ${dto.basic.personList.map((p,i) => `  ${i+1}. ${p.name || '（未填姓名）'} ${p.duty ? `（${p.duty}）` : ''} ${p.shipName ? ` - ${p.shipName}`: ''} ${p.dept ? ` / ${p.dept}` : ''}`).join('\n')}
 • 事件过程：${dto.eventProcess || '（未填写 ❌）'}
@@ -229,7 +229,7 @@ ${this.forbiddenAndTermListPrompt()}
 
   private suggestMissing(dto: GenerateManuscriptDto, score: number): string[] {
     const tips: string[] = [];
-    if (!dto.location) tips.push('地点（哪个船/哪个舱/哪个航段）未填写，请补充');
+    if (!dto.basic.location) tips.push('地点（哪个船/哪个舱/哪个航段）未填写，请补充');
     if (dto.basic.personList.every(p => !(p.name||p.duty))) tips.push('核心人物姓名+职务至少填一个');
     if (score < 60) {
       tips.push('建议再加 2 条【动作细节】（谁+身体部位+具体动词）');
@@ -264,8 +264,8 @@ ${FORBIDDEN_WORDS_LIST.map(f => `  · ${f.word}（${f.category==='slogan'?'口�
     const name = firstPerson?.name || '王建国';
     const duty = firstPerson?.duty || '老轨（轮机长）';
     const shipName = firstPerson?.shipName || '中远海运上海号';
-    const loc = dto.location || `${shipName} · 印度洋航段 · 机舱底层`;
-    const date = dto.happenDate || '2026 年 8 月 15 日';
+    const loc = dto.basic.location || `${shipName} · 印度洋航段 · 机舱底层`;
+    const date = dto.basic.happenDate || '2026 年 8 月 15 日';
     const cards = dto.detailCards.filter(c => c.text);
 
     const extractCard = (type: string, fallback: string) => {
