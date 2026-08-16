@@ -119,7 +119,7 @@ export class SyncService {
     }
 
     if (requestedStores.includes('staffHistory')) {
-      fetchPromises.push(this.prisma.staffHistory.findMany({ where: { teamCode: teamCodeEnum, updatedAt: { gt: lastSyncDate } } }));
+      fetchPromises.push(this.prisma.staffHistory.findMany({ where: { teamCode: teamCodeEnum, updatedAt: { gt: lastSyncDate } } as any }));
     } else {
       fetchPromises.push(Promise.resolve(null));
     }
@@ -131,13 +131,13 @@ export class SyncService {
     }
 
     if (requestedStores.includes('publicCase')) {
-      fetchPromises.push(this.prisma.publicCase.findMany({ where: { updatedAt: { gt: lastSyncDate } } }));
+      fetchPromises.push(this.prisma.publicCase.findMany({ where: { updatedAt: { gt: lastSyncDate } } as any }));
     } else {
       fetchPromises.push(Promise.resolve(null));
     }
 
     if (requestedStores.includes('dict')) {
-      fetchPromises.push(this.prisma.dictCategory.findMany({ where: { teamCode: teamCodeEnum, updatedAt: { gt: lastSyncDate } } }));
+      fetchPromises.push(this.prisma.dictCategory.findMany({ where: { teamCode: teamCodeEnum, updatedAt: { gt: lastSyncDate } } as any }));
     } else {
       fetchPromises.push(Promise.resolve(null));
     }
@@ -740,16 +740,16 @@ export class SyncService {
         where: { teamCode, updatedAt: { gt: lastSyncDate } },
       }),
       tx.staffHistory.findMany({
-        where: { teamCode, updatedAt: { gt: lastSyncDate } },
+        where: { teamCode, updatedAt: { gt: lastSyncDate } } as any,
       }),
       tx.sopFlow.findMany({
         where: { updatedAt: { gt: lastSyncDate } },
       }),
       tx.publicCase.findMany({
-        where: { updatedAt: { gt: lastSyncDate } },
+        where: { updatedAt: { gt: lastSyncDate } } as any,
       }),
       tx.dictCategory.findMany({
-        where: { teamCode, updatedAt: { gt: lastSyncDate } },
+        where: { teamCode, updatedAt: { gt: lastSyncDate } } as any,
       }),
       tx.diary.findMany({
         where: { teamCode, updatedAt: { gt: lastSyncDate } },

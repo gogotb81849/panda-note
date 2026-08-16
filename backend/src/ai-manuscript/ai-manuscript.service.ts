@@ -491,7 +491,7 @@ ${extraCards.map((c,i) => `${i+1}. [${c.type}] ${c.text}`).join('\n')}
       favoriteWordBucket: profile.favoriteWordBucket,
       profileUnlockLevel: profile.profileUnlockLevel as any,
       profileUnlockLabel: unlock.label,
-      nextLevelNeed,
+      nextLevelNeed: nextNeed,
       lastRevisedAt: profile.lastRevisedAt ? profile.lastRevisedAt.toISOString() : null,
       recommendations,
     };
