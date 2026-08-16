@@ -6,14 +6,13 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 const pkg = JSON.parse(readFileSync(join(__dirname, 'package.json'), 'utf-8'))
 
-// ★ CI 内存自救：如果 NODE_OPTIONS 里带了 --expose-gc（见 ci-build-frontend.mjs），则每 2s 主动 global.gc() 一次
-//   （v0816-3: 2 秒更积极 GC 峰值，避免 Mark-Compact 吃满 3800MB+ allocation failure；
-//     额外 --gc-global 强制 full GC 而不是 incremental young GC）
+// ★ CI 内存自救：如果 NODE_OPTIONS 里带了 --expose-gc（见 ci-build-frontend.mjs），则每 1s 主动 global.gc() 一次
+//   （v0816-6: 1s 更密集同步 major GC，Mark-Compact 峰值 3800+ 压回 3GB 内）
 try {
   const shouldGc = (!!(process as any).env.CI || !!(process as any).env.GITHUB_ACTIONS) && typeof (globalThis as any).gc === 'function';
   if (shouldGc) {
-    (setInterval as any)(() => { try { (globalThis as any).gc({ type: 'major', execution: 'sync' } as any); } catch (_) {} }, 2000);
-    (console as any).log('[nuxt.config.ts][ci-mem-saver] global.gc interval armed (2s, major+synchronous GC)');
+    (setInterval as any)(() => { try { (globalThis as any).gc({ type: 'major', execution: 'sync', flavor: 'last-resort' } as any); } catch (_) {} }, 1000);
+    (console as any).log('[nuxt.config.ts][ci-mem-saver] global.gc interval armed (1s, major+synchronous+lastResort GC)');
   }
 } catch (_) {}
 
@@ -56,15 +55,20 @@ export default defineNuxtConfig({
       rollupOptions: {
         maxParallelFileOps: 1,          // ★ 完全串行（并发=1）
         cache: false,
+        treeshake: isCI ? { correctVarValueBeforeDeclaration: true, annotations: true, moduleSideEffects: 'no-external', preset: 'smallest' } as any : { correctVarValueBeforeDeclaration: true, annotations: true, moduleSideEffects: 'no-external' } as any,
+        makeAbsoluteExternalsRelative: true,
         onwarn(warning, warn) {
           if (warning && warning.code && warning.code === 'CIRCULAR_DEPENDENCY') return;
           warn(warning);
         },
       },
-      // ★ Vite 7.x 内存优化：减少中间产物
-      watch: { skipWrite: true },       // build 时不需要写 watch 文件
-      modulePreload: false,             // 禁用 build 阶段 module preload 计算
+      // ★ CI 额外省内存：Vite 7.x sourcemap 禁止 + terser 禁止多线程 + rollup treeshake smallest
+      sourcemap: !isCI,
+      reportCompressedSize: false,      // 永远不要预计算压缩大小
     },
+    // ★ Vite 7.x 内存优化：减少中间产物
+    watch: { skipWrite: true },       // build 时不需要写 watch 文件
+    modulePreload: false,             // 禁用 build 阶段 module preload 计算
     worker: isCI ? { format: 'es' as any } : { format: 'es' as any },
     optimizeDeps: {
       force: false,

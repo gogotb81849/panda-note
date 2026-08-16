@@ -46,16 +46,15 @@ for (const d of cacheDirs) {
 }
 
 // ---------- Step 1: spawn nuxt build ----------
-// ★ v0816-4: 重要！ --gc-global / --no-concurrent-recompilation 不能写在 NODE_OPTIONS（受 Node 20 NODE_OPTIONS 白名单限制，启动直接 exit 9）
-//   所以这些参数要直接通过 spawn 的 argv[1..] 传给 node 子进程，而不是走 env。
-//   实测 runner 总内存 6.7-7GB，OS + 其他进程占用 ~3GB，实际给 node 进程的 Rss 极限在 3.5-3.8GB；
-//   old-space 3584 + nursery + code-space ≈ 3.8GB，控制在极限范围内。
-log('Step 1/3: Run nuxt build (max-old-space-size=3584, fully serial, CI no-PWA)...');
-log('  (v0816-4: NODE_OPTIONS 白名单只允许 old-space/semi-space/expose-gc，其他 V8 flag 走 spawn argv 直传)');
+// ★ v0816-6: runner 7GB 实测极限：OS + runner + 进程 ≈ 3GB → node 进程最多 ~3.2GB RSS（不是 V8 old-space）
+//   V8 committed = old-space + code-space + nursery + malloc = 3GB old-space → ~3.3GB RSS
+//   → 所以 old-space=3072（3GB）才能真正压在 cgroup kill 阈值下。
+log('Step 1/3: Run nuxt build (max-old-space-size=3072, fully serial, CI no-PWA)...');
+log('  (v0816-6: V8 committed ~3.2GB → RSS ~3.4GB，留 3.6GB 给 runner OS；不能加 --jitless 因为 Vite/Rollup 需要 WASM)');
 log('  (add node flags: --gc-global --no-concurrent-recompilation --no-turbo-inlining --lazy --max-stack-trace-source-length=100)');
 const buildEnv = {
   ...process.env,
-  NODE_OPTIONS: '--max-old-space-size=3584 --max-semi-space-size=8 --expose-gc',
+  NODE_OPTIONS: '--max-old-space-size=3072 --max-semi-space-size=4 --expose-gc',
   NUXT_TELEMETRY_DISABLED: '1',
   DISABLE_OPENCOLLECTIVE: '1',
   NEXT_TELEMETRY_DISABLED: '1',
@@ -72,6 +71,8 @@ const nodeArgs = [
   '--no-turbo-inlining',
   '--lazy',
   '--max-stack-trace-source-length=100',
+  // ★ v0816-6 不能加 --jitless：Vite 的 Rollup/terser 等依赖 WebAssembly
+  //    jitless 运行时会禁用 WASM → 直接 Exit prior to config file resolving
   npxPath,
   'nuxt',
   'build',
