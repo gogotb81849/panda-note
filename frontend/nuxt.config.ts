@@ -185,7 +185,7 @@ export default defineNuxtConfig({
       clientsClaim: true,
       cleanupOutdatedCaches: true,
       navigateFallback: '/',
-      navigateFallbackDenylist: [/^\/api\//, /^\/__fix_pm2_20260806/],
+      navigateFallbackDenylist: [/^\/api\//, /^\/__fix_pm2_20260806/, /^\/__fix_backend_20260816/],
       globPatterns: [
         '**/*.{js,css,html}',
       ],
