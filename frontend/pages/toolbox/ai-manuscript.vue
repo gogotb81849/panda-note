@@ -579,7 +579,7 @@ const form = reactive({
   categoryId: 'advanced_deed' as ManuscriptCategoryId,
   writerStyleId: 'none' as WriterStyleId,
   basic: {
-    happenDate: new Date().toISOString().slice(0, 10),
+    happenDate: '',  // ★ 在 onMounted 中初始化，避免 SSR/客户端 new Date() 不一致导致 hydration mismatch
     location: '',
     personList: [{ name: '', duty: '', shipName: '', dept: '' } as PersonItem]
   },
@@ -612,7 +612,7 @@ const mockResultArticle = ref<string>('');
 // 🧩 自我优化闭环：成品稿修改追踪（diff + 有效修改次数）
 // ============================================================
 const originalArticleSnapshot = ref<string>(''); // 生成时刻的快照（每次"重新生成"都重置）
-const generationId = ref<string>(`gen_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`); // 本次生成唯一号
+const generationId = ref<string>(''); // ★ 在 onMounted 中初始化，避免 SSR/客户端 Date.now()/Math.random() 不一致导致 hydration mismatch
 const showDownloadGuide = ref(false); // 柔性引导弹窗开关
 
 // 简易行级 diff（O(n²)，对 2000 字以下稿件完全够用；重型 diff 放后端做精细化 8 类分类）
@@ -1102,6 +1102,10 @@ const finalTextLength = computed(() => mockResultArticle.value?.length || 0);
 
 // ========= 生命周期：预置 6 张示例卡片，让新用户一进来就知道怎么玩 =========
 onMounted(() => {
+  // ★ 客户端才初始化日期和随机ID，避免 SSR hydration mismatch
+  form.basic.happenDate = new Date().toISOString().slice(0, 10);
+  generationId.value = `gen_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
   const exampleCards: DetailCard[] = [
     { id: 'demo1', type: 'action',  text: '老轨王建国左手扶缸头罩，右手袖口蹭额头汗，左手背上一道2cm新疤还没结痂。' },
     { id: 'demo2', type: 'dialog',  text: '王师傅对徒弟小李说："你先去吃，我再顶一个班，缸头差1度都不行。"' },
