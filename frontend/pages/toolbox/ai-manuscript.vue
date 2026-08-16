@@ -48,7 +48,7 @@
               </p>
             </el-form-item>
 
-            <el-form-item label="🍶 文学风格调味（可选 · 让文章更有"味道"）">
+            <el-form-item label="🍶 文学风格调味（可选 · 让文章更有「味道」）">
               <el-select v-model="form.writerStyleId" placeholder="不调味（标准政工风格）" style="width: 100%; max-width: 520px">
                 <el-option
                   v-for="w in WRITER_STYLES" :key="w.id" :value="w.id"
