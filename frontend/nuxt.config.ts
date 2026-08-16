@@ -27,6 +27,13 @@ export default defineNuxtConfig({
   compatibilityDate: '2024-04-03',
   devtools: { enabled: false },
   sourcemap: { server: false, client: false },
+  // ★★★ v0816-15 终极真因修复（终于知道为什么 15 轮都 OOM 了！）
+  //   Nuxt 3 默认 client build + server build **并行**跑 = 2 个 Vite/Rollup 实例同时在内存！
+  //   单个实例 transforming 峰值 ~1.6GB，两个并行就是 ~3.2GB + V8 开销 = 正好 3.3GB（每轮 v10→v14 的 GC trace 全都是 used=3300 左右！）
+  //   下面两个配置强制串行构建 client → server，峰值内存直接砍半到 ~1.7GB：
+  experimental: {
+    parallelBuilds: false,   // CI 下 client/server 串行构建（不再并行吃双份内存！）
+  },
   // 【CI 内存终极优化 v0816】单一 nitro 定义 + 更激进省内存
   nitro: {
     preset: 'node-server',

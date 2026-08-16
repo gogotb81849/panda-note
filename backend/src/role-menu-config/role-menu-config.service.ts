@@ -288,7 +288,7 @@ export class RoleMenuConfigService {
   /**
    * 初始化所有角色的默认菜单配置到数据库
    * ★ 2026-08-16 陈先生兜底：所有角色的 '/toolbox' 一律强制 enabled=true，
-   *   即使默认白名单里漏掉了也给打开（工具箱是政工笔/菜篮子等工具的总入口，不能被关掉）
+   *   即使默认白名单里漏掉了也给打开（工具箱是政工笔等集成工具的总入口，不能被关掉）
    */
   async seedDefaultMenus(teamCode: TeamCode) {
     const roles = Object.values(UserRole);
