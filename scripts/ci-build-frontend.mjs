@@ -65,7 +65,7 @@ const buildEnv = {
   //   完全清零重写，确保我们设置的 --max-old-space-size=3000 会被 npx/npm 的内部 fork
   //   全部继承到（因为 NODE_OPTIONS 是 env 变量，spawn 的所有子进程/孙进程都能拿到；
   //   而 argv flag 只传给最外层进程，下一层 fork 就丢了）。
-  NODE_OPTIONS: '--max-old-space-size=3000 --max-semi-space-size=4 --expose-gc',
+  NODE_OPTIONS: '--max-old-space-size=3300 --max-semi-space-size=4 --expose-gc',
   NUXT_TELEMETRY_DISABLED: '1',
   DISABLE_OPENCOLLECTIVE: '1',
   NEXT_TELEMETRY_DISABLED: '1',
@@ -77,7 +77,7 @@ log(`  using npx at: ${npxPath}`);
 log(`  buildEnv.NODE_OPTIONS = ${buildEnv.NODE_OPTIONS}`);
 // ★ 全部 V8 flag 都在 argv 直传（外层保险）+ env 传了 NODE_OPTIONS（内层保险）：
 const nodeArgs = [
-  '--max-old-space-size=3000',
+  '--max-old-space-size=3300',
   '--max-semi-space-size=4',
   '--expose-gc',
   '--gc-global',
