@@ -74,8 +74,8 @@ describe('BlockClassifierService', () => {
   describe('detectShip', () => {
     it('内容中包含船名时应返回匹配的船舶', async () => {
       mockPrismaService.ship.findMany.mockResolvedValue([
-        { id: 1, name: '远洋一号', shortName: '远洋', shipCode: 'YY01' },
-        { id: 2, name: '长江二号', shortName: '长江', shipCode: 'CJ02' },
+        { id: 1, cnShipName: '远洋一号', enShipName: 'Yuanyang No.1' },
+        { id: 2, cnShipName: '长江二号', enShipName: 'Changjiang No.2' },
       ]);
 
       const result = await service.detectShip('今天远洋一号靠泊离港', TeamCode.team2);
@@ -83,13 +83,13 @@ describe('BlockClassifierService', () => {
       expect(result).toEqual({ id: 1, name: '远洋一号' });
       expect(mockPrismaService.ship.findMany).toHaveBeenCalledWith({
         where: { teamCode: TeamCode.team2 },
-        select: { id: true, name: true, shortName: true, shipCode: true },
+        select: { id: true, cnShipName: true, enShipName: true },
       });
     });
 
     it('内容中不包含任何船名时应返回 null', async () => {
       mockPrismaService.ship.findMany.mockResolvedValue([
-        { id: 1, name: '远洋一号', shortName: '远洋', shipCode: 'YY01' },
+        { id: 1, cnShipName: '远洋一号', enShipName: 'Yuanyang No.1' },
       ]);
 
       const result = await service.detectShip('今天天气不错', TeamCode.team2);
@@ -105,12 +105,12 @@ describe('BlockClassifierService', () => {
 
     it('应返回得分最高的船舶匹配', async () => {
       mockPrismaService.ship.findMany.mockResolvedValue([
-        { id: 1, name: '远洋一号', shortName: '远洋', shipCode: 'YY01' },
-        { id: 2, name: '长江', shortName: '长', shipCode: 'CJ02' },
+        { id: 1, cnShipName: '远洋一号', enShipName: 'Yuanyang No.1' },
+        { id: 2, cnShipName: '长江', enShipName: 'Changjiang' },
       ]);
 
-      // 远洋一号：name 命中(+10) + shortName 命中(+8) = 18
-      // 长江：name 命中(+10) = 10
+      // 远洋一号：cnShipName 命中(+10) = 10
+      // 长江：cnShipName 命中(+10) = 10（但 id 更大，所以远洋一号先匹配保持）
       const result = await service.detectShip('远洋一号和长江今天靠泊', TeamCode.team2);
 
       expect(result).toEqual({ id: 1, name: '远洋一号' });
