@@ -45,18 +45,38 @@ for (const d of cacheDirs) {
 }
 
 // ---------- Step 1: spawn nuxt build ----------
-log('Step 1/3: Run nuxt build (max-old-space-size=4096, fully serial, CI no-PWA)...');
-log('  (v0816-3: runner 7GB → V8 old-space 4096 + nursery 128 ≈ 4.2GB < OS 可用内存。关键是 --gc-global 强制 full GC)');
+// ★ v0816-4: 重要！ --gc-global / --no-concurrent-recompilation 不能写在 NODE_OPTIONS（受 Node 20 NODE_OPTIONS 白名单限制，启动直接 exit 9）
+//   所以这些参数要直接通过 spawn 的 argv[1..] 传给 node 子进程，而不是走 env。
+//   实测 runner 总内存 6.7-7GB，OS + 其他进程占用 ~3GB，实际给 node 进程的 Rss 极限在 3.5-3.8GB；
+//   old-space 3584 + nursery + code-space ≈ 3.8GB，控制在极限范围内。
+log('Step 1/3: Run nuxt build (max-old-space-size=3584, fully serial, CI no-PWA)...');
+log('  (v0816-4: NODE_OPTIONS 白名单只允许 old-space/semi-space/expose-gc，其他 V8 flag 走 spawn argv 直传)');
+log('  (add node flags: --gc-global --no-concurrent-recompilation --no-turbo-inlining --lazy --max-stack-trace-source-length=100)');
 const buildEnv = {
   ...process.env,
-  NODE_OPTIONS: '--max-old-space-size=4096 --max-semi-space-size=8 --expose-gc --gc-global --no-concurrent-recompilation',
+  NODE_OPTIONS: '--max-old-space-size=3584 --max-semi-space-size=8 --expose-gc',
   NUXT_TELEMETRY_DISABLED: '1',
   DISABLE_OPENCOLLECTIVE: '1',
   NEXT_TELEMETRY_DISABLED: '1',
   NUXT_DISABLE_PWA_IN_CI: '1',
   CI: 'true',
 };
-const child = spawn('npx', ['nuxt', 'build'], {
+// 找到 npx 的真实位置，然后用 node 直接启动：node [v8 flags] $(which npx) nuxt build
+// （如果直接 spawn('npx', ...) 会丢失 v8 flag，因为 shebang #!/usr/bin/env node 不会带 argv flag）
+const npxPath = (await execFilePromise('which', ['npx'])).trim();
+log(`  using npx at: ${npxPath}`);
+const nodeArgs = [
+  '--gc-global',
+  '--no-concurrent-recompilation',
+  '--no-turbo-inlining',
+  '--lazy',
+  '--max-stack-trace-source-length=100',
+  npxPath,
+  'nuxt',
+  'build',
+];
+log(`  node argv: ${nodeArgs.join(' ')}`);
+const child = spawn(process.execPath, nodeArgs, {
   cwd: FRONTEND_DIR,
   env: buildEnv,
   stdio: 'inherit',
