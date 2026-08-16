@@ -561,14 +561,16 @@ import {
   type ManuscriptCategoryId, type WriterStyleId, type DetailsRadarScore, type DetailCardTypeId, type JournalWordCountRef
 } from '~/constants/ai-manuscript';
 
-// ============================================================
-// ★ 政工笔调试：路由声明 + 启动日志
-// ============================================================
-// 与项目其他页面保持一致（ships.vue, files.vue, experiences.vue 都显式声明）
-definePageMeta({ middleware: ['auth'] });
-
 const AI_TAG = '[政工笔-调试]';
 const bootT0 = process.client ? Date.now() : 0;
+
+// ⚠️ 关于 definePageMeta({ middleware: ['auth'] })：
+// 上一版加上了这一行，后证实与 auth.global.ts 形成"双重守卫竞态"——
+// 全局中间件先 await checkAuth（可能触发 401 清 token），接着命名中间件 auth.ts
+// 不 await 同步判定 isAuthenticated=false → return navigateTo('/login')，Vue Router 把
+// 这个"redirect"当成 NavigationFailure.REDIRECTED 返回，但 Promise 是 resolve 状态，
+// 所以 toolbox.vue 之前会"弹成功提示但页面没动"。
+// auth.global.ts 已经给所有路由统一做了认证，因此这里不再重复声明页面级 auth 中间件。
 
 if (process.client) {
   try {

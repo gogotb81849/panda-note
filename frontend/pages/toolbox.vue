@@ -98,12 +98,39 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, isNavigationFailure, NavigationFailureType } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
 const DEBUG_TAG = '[政工笔-调试]'
+const FAILURE_TYPE_LABEL: Record<number, string> = {
+  1: 'NAVIGATION_ABORTED   (某个守卫return false/abortNavigation，导航被主动取消)',
+  2: 'NAVIGATION_CANCELLED (新的导航又触发了，当前这次被覆盖掉)',
+  3: 'NAVIGATION_DUPLICATED(目标就是当前路由，什么都没做就"完成"了)',
+  4: 'NAVIGATION_REDIRECTED (守卫return navigateTo/throw redirect，被重定向到别的路由了)',
+}
 const authStore = useAuthStore()
 const router = useRouter()
+
+/**
+ * 检查 router.push() 返回值是否为 NavigationFailure。
+ * Vue Router 4 大坑："导航被取消/重定向/重复"不会 reject promise，
+ * 而是 resolve 成一个 failure 对象，不判断就会把失败当成功弹 toast。
+ */
+function inspectNavResult(res: any, target: string): { ok: boolean; detail: string } {
+  if (res == null || typeof res !== 'object') {
+    return { ok: true, detail: 'result=null/undefined（Vue Router < 4.x 风格，视为成功）' }
+  }
+  if (!isNavigationFailure(res)) {
+    return { ok: true, detail: `非 NavigationFailure，res.normalizedPath=${(res as any)?.normalizedPath ?? 'N/A'}（成功到达目标）` }
+  }
+  // 是 NavigationFailure
+  const typeNum: number = (res.type ?? 0) as number
+  const label = FAILURE_TYPE_LABEL[typeNum] || `UNKNOWN_FAILURE(type=${typeNum})`
+  const toStr: string = (() => { try { return JSON.stringify(res.to, (k, v) => k === 'matched' ? `[${(v as any[])?.length ?? 0}条]` : v) } catch { return String(res.to) } })()
+  const fromStr: string = (() => { try { return JSON.stringify(res.from, (k, v) => k === 'matched' ? `[${(v as any[])?.length ?? 0}条]` : v) } catch { return String(res.from) } })()
+  const detail = `${label}\n  to=${toStr}\n  from=${fromStr}\n  target=${target}`
+  return { ok: false, detail }
+}
 
 // ====== 进入工具箱页时打印基础状态（帮助定位：是未登录/无token导致的无反应吗？）======
 onMounted(() => {
@@ -182,7 +209,7 @@ const openAiManuscript = async () => {
     console.error(`${DEBUG_TAG} 异常：事前校验阶段抛错 → `, ePre?.message || ePre, ePre)
   }
 
-  // 2) 核心跳转：await router.push()，捕获 Nuxt 中间件/导航失败
+  // 2) 核心跳转：await router.push()，捕获 Nuxt 中间件/导航失败 + 识别 NavigationFailure
   try {
     const target = '/toolbox/ai-manuscript'
     console.log(`${DEBUG_TAG} ③ 调用 router.push('${target}')，开始等待 Nuxt 路由完成...`)
@@ -190,11 +217,37 @@ const openAiManuscript = async () => {
     const res = await router.push(target)
     const afterUrl = window.location.href
     const dt = Date.now() - t0
-    console.log(`${DEBUG_TAG} ④ router.push 返回成功！耗时 ${dt}ms,  before=${beforeUrl},  after=${afterUrl},  returned=`, res)
-    ElMessage.success(`已进入政工笔（耗时${dt}ms）`)
+
+    // ★★★ 陈先生之前看到的"弹出成功但页面没动"的精确根因就在这里：★★★
+    // Vue Router 4 的 router.push resolve≠成功！需要 isNavigationFailure 判断。
+    const nav = inspectNavResult(res, target)
+
+    console.group(`${DEBUG_TAG} ④ router.push 返回（耗时 ${dt}ms）`)
+    console.log('  before URL =', beforeUrl)
+    console.log('  after  URL =', afterUrl)
+    console.log('  检查结果ok =', nav.ok)
+    console.log('  详细       =', nav.detail)
+    console.log('  returned对象=', res)
+    console.groupEnd()
+
+    if (nav.ok) {
+      // 即使 inspectNavResult 说成功，也二次确认 afterUrl 确实包含 target 路径（保险）
+      const reallyArrived = afterUrl.includes(target)
+      if (reallyArrived) {
+        console.log(`${DEBUG_TAG} ④-1 ✅ 真实到达目标页！URL=${afterUrl}`)
+        ElMessage.success(`已进入政工笔（耗时${dt}ms）`)
+      } else {
+        console.warn(`${DEBUG_TAG} ④-2 ⚠️ inspectNavResult=true 但 URL 没到目标页！before=${beforeUrl} after=${afterUrl}`)
+        ElMessage.warning(`导航返回成功但 URL 未变（${afterUrl}），请查看 F12 控制台【${DEBUG_TAG}】`, { duration: 10000 })
+      }
+    } else {
+      // 这就是之前"弹成功但页面没动"的场景：把 NavigationFailure 当成了成功
+      console.warn(`${DEBUG_TAG} ④-3 ❌ NavigationFailure 检测到！（这才是"页面没反应"的直接原因）` + '\n' + nav.detail)
+      ElMessage.error(`政工笔进入失败：${nav.detail.split('\n')[0]}\n详情见 F12 控制台【${DEBUG_TAG}】`, { duration: 15000 })
+    }
   } catch (err: any) {
     const dt = Date.now() - t0
-    console.group(`${DEBUG_TAG} ❌ 政工笔跳转失败！（耗时 ${dt}ms）`)
+    console.group(`${DEBUG_TAG} ❌ 政工笔跳转异常（Promise reject，耗时 ${dt}ms）`)
     console.error('  err =', err)
     console.error('  err.name =', err?.name)
     console.error('  err.message =', err?.message)
