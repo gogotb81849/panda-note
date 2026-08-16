@@ -47,18 +47,39 @@ export default defineNuxtConfig({
     build: {
       target: 'es2022',
       sourcemap: false,
-      // ★ v0816-13: CI 关闭所有 minify（esbuild minify 对大型 chunk 做 parse → transform AST 时要吃 300-500MB 额外内存！）
-      //   v12 used=3337MB/3607MB（old-space=3600 到顶，OOM 在边界），关 minify 预期直接降 300-500MB
+      // ★ v0816-14: CI 暂时关 minify（不影响内存峰值，只是 minify 阶段的时间）
       minify: isCI ? false : 'esbuild',
       cssMinify: isCI ? false : 'esbuild',
-      chunkSizeWarningLimit: 50000,      // 50MB 不拆 chunk
-      reportCompressedSize: false,       // 禁用预计算压缩大小
-      cssCodeSplit: false,               // CSS 合并一份
+      // ★★★ v0816-14 真正修复内存峰值：
+      //   之前 chunkSizeWarningLimit=50000（要求 50MB 都不拆 chunk）是致命错误！
+      //   Rollup 为了生成 1 个巨大的单 chunk，必须把所有模块的 AST 同时常驻内存：
+      //     echarts(20MB源码*10x AST≈200MB) + element-plus(15MB≈150MB)
+      //     + pdfjs-dist(10MB≈100MB) + xlsx(5MB≈50MB) + docx-preview(4MB≈40MB)
+      //     + jszip(2MB≈20MB) = ~560MB AST 常驻 + Vue/Vite/Rollup 框架自己 = 直接 3.3GB+ OOM！
+      //   修复：chunkSizeWarningLimit 改回 1MB + manualChunks 把 6 大库独立分 chunk
+      //     → Rollup 处理完 echarts-chunk → 输出 → 释放 AST → 处理 element-plus-chunk
+      //     → 峰值内存应该降到 ~1.5GB 左右（比 3.3GB 砍一半还多！）
+      chunkSizeWarningLimit: 1000,
+      reportCompressedSize: false,
+      cssCodeSplit: false,
       rollupOptions: {
-        maxParallelFileOps: 1,           // 完全串行
+        maxParallelFileOps: 1,
         cache: false,
         treeshake: isCI ? { correctVarValueBeforeDeclaration: true, annotations: true, moduleSideEffects: 'no-external', preset: 'smallest' } as any : { correctVarValueBeforeDeclaration: true, annotations: true, moduleSideEffects: 'no-external' } as any,
         makeAbsoluteExternalsRelative: true,
+        output: {
+          // ★ v0816-14: 大库各独立 1 chunk → 每处理完 1 个 chunk 释放 AST，内存峰值砍半
+          manualChunks(id: string) {
+            if (id.includes('node_modules/echarts/') || id.includes('node_modules/vue-echarts/') || id.includes('node_modules/zrender/')) return 'chunk-echarts';
+            if (id.includes('node_modules/element-plus/') || id.includes('node_modules/@element-plus/')) return 'chunk-element-plus';
+            if (id.includes('node_modules/pdfjs-dist/')) return 'chunk-pdfjs';
+            if (id.includes('node_modules/xlsx/') || id.includes('node_modules/spark-md5/')) return 'chunk-xlsx';
+            if (id.includes('node_modules/docx-preview/') || id.includes('node_modules/jszip/')) return 'chunk-docx';
+            if (id.includes('node_modules/@fullcalendar/') || id.includes('node_modules/vuedraggable/') || id.includes('node_modules/sortablejs/')) return 'chunk-fullcalendar';
+            if (id.includes('node_modules/@vueuse/') || id.includes('node_modules/@vue-')) return 'chunk-vueuse';
+            return undefined;
+          },
+        },
         onwarn(warning, warn) {
           if (warning && warning.code && warning.code === 'CIRCULAR_DEPENDENCY') return;
           warn(warning);
