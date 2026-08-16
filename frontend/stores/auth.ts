@@ -73,6 +73,8 @@ export const useAuthStore = defineStore('auth', {
         const response = await $fetch<LoginResponse>(url, {
           method: 'POST',
           body: credentials,
+          timeout: 10000,
+          retry: 0,
         });
 
         this.token = response.access_token;

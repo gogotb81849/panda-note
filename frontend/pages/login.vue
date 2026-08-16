@@ -375,27 +375,39 @@ const handleChangePassword = async () => {
 };
 
 const handleLogin = async () => {
+  console.log('[登录调试] ① handleLogin 被触发', { username: form.username, hasPwd: !!form.password });
+
   if (!formRef.value) {
+    console.error('[登录调试] ② formRef 为 null，表单未初始化');
     ElMessage.error('表单未初始化，请刷新页面重试');
     return;
   }
 
   try {
     await formRef.value.validate();
+    console.log('[登录调试] ③ 表单验证通过');
   } catch {
+    console.warn('[登录调试] ③ 表单验证失败');
     ElMessage.warning('请填写用户名和密码');
     return;
   }
 
   loading.value = true;
+  console.log('[登录调试] ④ loading=true，开始调用 authStore.login()，时间：', new Date().toISOString());
+
   try {
     const result = await authStore.login(form);
+    console.log('[登录调试] ⑤ authStore.login() 返回：', result);
+
     if (result && result.success) {
+      console.log('[登录调试] ⑥ 登录成功，跳转 /');
       saveAccount(form.username);
       window.location.href = '/';
     } else {
       const status = result?.status;
       const message = result?.message || '登录失败';
+      console.error('[登录调试] ⑥ 登录失败：', { status, message });
+
       if (status === 401 || message.includes('用户名或密码错误')) {
         ElMessage.error('用户名或密码错误');
       } else if (status === 429) {
@@ -409,10 +421,12 @@ const handleLogin = async () => {
       }
     }
   } catch (error: any) {
+    console.error('[登录调试] ⑤ authStore.login() 抛出异常：', error);
     const message = error?.data?.message || error?.response?._data?.message || error?.message || '登录失败，请检查网络后重试';
     ElMessage.error(message);
   } finally {
     loading.value = false;
+    console.log('[登录调试] ⑦ loading=false，handleLogin 结束');
   }
 };
 </script>
