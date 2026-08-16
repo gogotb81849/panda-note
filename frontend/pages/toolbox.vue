@@ -66,16 +66,6 @@
         </div>
       </el-card>
 
-      <!-- 海上菜篮子（内嵌版，和熊猫笔记本就是一体！） -->
-      <el-card class="tool-card tool-card-highlight cursor-pointer hover:shadow-lg transition-shadow" @click="openShipPlant">
-        <div class="tool-content">
-          <div class="tool-icon">🌱</div>
-          <h3>海上菜篮子</h3>
-          <p>密闭舱室蔬菜智能规划：3D货架、轮作、知识库、大屏</p>
-          <el-button type="success" class="tool-btn">进入菜篮子</el-button>
-        </div>
-      </el-card>
-
       <!-- 政工笔 · AI 智能写作（船舶政工写作专家系统） -->
       <el-card class="tool-card tool-card-highlight cursor-pointer hover:shadow-lg transition-shadow" @click="openAiManuscript">
         <div class="tool-content">
@@ -145,12 +135,6 @@ const openMagazine = () => {
 
 const openShipQuiz = () => {
   router.push('/training/ship-quiz')
-}
-
-const openShipPlant = () => {
-  // 完全内嵌版本（和熊猫笔记就是一体！不走 iframe、不用额外部署）
-  // 架构说明见 003 文档第十章『嵌入一体化 + 一键剥离导出』路线
-  router.push('/toolbox/ship-plant')
 }
 
 const openAiManuscript = () => {
