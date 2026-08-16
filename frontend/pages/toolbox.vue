@@ -97,10 +97,33 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 
+const DEBUG_TAG = '[政工笔-调试]'
+const authStore = useAuthStore()
 const router = useRouter()
+
+// ====== 进入工具箱页时打印基础状态（帮助定位：是未登录/无token导致的无反应吗？）======
+onMounted(() => {
+  const s = {
+    path: window.location.pathname,
+    href: window.location.href,
+    isAuthenticated: authStore.isAuthenticated,
+    tokenLen: authStore.token?.length ?? 0,
+    userRole: authStore.user?.role ?? null,
+    user: authStore.user ? { id: authStore.user.id, username: authStore.user.username, role: authStore.user.role } : null,
+    localStorageHasToken: false,
+    localStorageHasUser: false,
+    ua: navigator.userAgent,
+  }
+  try {
+    s.localStorageHasToken = !!localStorage.getItem('auth_token')
+    s.localStorageHasUser = !!localStorage.getItem('auth_user')
+  } catch { /* ignore */ }
+  console.log(`${DEBUG_TAG} 工具箱页已挂载，基础状态：`, s)
+})
 
 const showPdfCompressor = ref(false)
 const showImageCompressor = ref(false)
@@ -137,9 +160,54 @@ const openShipQuiz = () => {
   router.push('/training/ship-quiz')
 }
 
-const openAiManuscript = () => {
-  // 政工笔：船舶政工 AI 写作专家系统（10 步结构化填表 + 去 AI 化 + 100 分评分）
-  router.push('/toolbox/ai-manuscript')
+const openAiManuscript = async () => {
+  const t0 = Date.now()
+  console.log(`${DEBUG_TAG} ① 点击政工笔卡片，准备跳转 /toolbox/ai-manuscript，ts=${t0}`)
+
+  // 1) 事前校验：登录状态 + token 长度
+  try {
+    console.log(`${DEBUG_TAG} ② 事前检查 → isAuthenticated=${authStore.isAuthenticated},  userRole=${authStore.user?.role ?? 'null'},  tokenLength=${authStore.token?.length ?? 0}`)
+    if (!authStore.isAuthenticated) {
+      console.warn(`${DEBUG_TAG} ②-1 未登录，按中间件规则应跳 /login，但这里先发预警。尝试直接跳登录页。`)
+      ElMessage.warning('当前未登录，正在跳转到登录页...（如果没有跳转请手动点登录）')
+      try {
+        await router.push('/login')
+      } catch (e2: any) {
+        console.error(`${DEBUG_TAG} ②-2 跳登录页也失败了：`, e2?.message || e2, e2)
+        ElMessage.error(`跳登录页失败：${e2?.message || String(e2)}`)
+      }
+      return
+    }
+  } catch (ePre: any) {
+    console.error(`${DEBUG_TAG} 异常：事前校验阶段抛错 → `, ePre?.message || ePre, ePre)
+  }
+
+  // 2) 核心跳转：await router.push()，捕获 Nuxt 中间件/导航失败
+  try {
+    const target = '/toolbox/ai-manuscript'
+    console.log(`${DEBUG_TAG} ③ 调用 router.push('${target}')，开始等待 Nuxt 路由完成...`)
+    const beforeUrl = window.location.href
+    const res = await router.push(target)
+    const afterUrl = window.location.href
+    const dt = Date.now() - t0
+    console.log(`${DEBUG_TAG} ④ router.push 返回成功！耗时 ${dt}ms,  before=${beforeUrl},  after=${afterUrl},  returned=`, res)
+    ElMessage.success(`已进入政工笔（耗时${dt}ms）`)
+  } catch (err: any) {
+    const dt = Date.now() - t0
+    console.group(`${DEBUG_TAG} ❌ 政工笔跳转失败！（耗时 ${dt}ms）`)
+    console.error('  err =', err)
+    console.error('  err.name =', err?.name)
+    console.error('  err.message =', err?.message)
+    console.error('  err.statusCode =', err?.statusCode)
+    console.error('  err.statusMessage =', err?.statusMessage)
+    console.error('  JSON(err) =', (() => { try { return JSON.stringify(err, null, 2) } catch { return '[不可序列化]' } })())
+    console.error('  当前URL =', window.location.href)
+    console.error('  isAuthenticated =', authStore.isAuthenticated)
+    console.groupEnd()
+
+    const shortMsg = err?.message || err?.statusMessage || String(err) || '未知导航错误'
+    ElMessage.error(`政工笔进入失败：${shortMsg}  （F12 控制台筛选“${DEBUG_TAG}”查看详细日志）`, { duration: 8000 })
+  }
 }
 </script>
 

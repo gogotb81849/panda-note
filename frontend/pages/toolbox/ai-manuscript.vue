@@ -551,7 +551,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted } from 'vue';
+import { ref, reactive, computed, watch, onMounted, nextTick } from 'vue';
 import { Loading } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import {
@@ -560,6 +560,39 @@ import {
   DOWNLOAD_GUIDE_ZERO_EDIT, countValidEdits, getPersonalBonus,
   type ManuscriptCategoryId, type WriterStyleId, type DetailsRadarScore, type DetailCardTypeId, type JournalWordCountRef
 } from '~/constants/ai-manuscript';
+
+// ============================================================
+// ★ 政工笔调试：路由声明 + 启动日志
+// ============================================================
+// 与项目其他页面保持一致（ships.vue, files.vue, experiences.vue 都显式声明）
+definePageMeta({ middleware: ['auth'] });
+
+const AI_TAG = '[政工笔-调试]';
+const bootT0 = process.client ? Date.now() : 0;
+
+if (process.client) {
+  try {
+    const _s: any = {
+      path: location.pathname,
+      href: location.href,
+      uaLen: navigator.userAgent.length,
+      screen: `${screen.width}x${screen.height}`,
+      dpr: window.devicePixelRatio,
+    }
+    try {
+      const auth = useAuthStore();
+      _s.isAuthenticated = auth.isAuthenticated;
+      _s.userRole = auth.user?.role ?? null;
+      _s.tokenLen = auth.token?.length ?? 0;
+    } catch { /* ignore */ }
+    console.log(`${AI_TAG} ⭐ script setup 进入 (页面 ${location.pathname} 开始加载)  bootT0=${bootT0}`, _s);
+  } catch (eBoot: any) {
+    console.error(`${AI_TAG} 进入 script setup 就报错了：`, eBoot?.message || eBoot);
+  }
+} else {
+  // SSR 端也简单打个日志（在 Nuxt 服务器进程的 stdout 可见）
+  (console as any).log(`${AI_TAG} SSR 渲染开始`);
+}
 
 // ========= 常量 =========
 const STEPS_LABEL = ['选文种', '基本要素', '事件过程', '主题思想', '细节卡📌', '写作偏好', '对标范本', '预览Prompt', '生成', '编辑评分'];
@@ -1101,20 +1134,43 @@ async function handleSendToMagazine() {
 const finalTextLength = computed(() => mockResultArticle.value?.length || 0);
 
 // ========= 生命周期：预置 6 张示例卡片，让新用户一进来就知道怎么玩 =========
-onMounted(() => {
-  // ★ 客户端才初始化日期和随机ID，避免 SSR hydration mismatch
-  form.basic.happenDate = new Date().toISOString().slice(0, 10);
-  generationId.value = `gen_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+onMounted(async () => {
+  const t1 = Date.now();
+  console.log(`${AI_TAG} ⑥ onMounted 开始  ⏱距script setup进入=${t1 - bootT0}ms   detailCards现有=${form.detailCards.length}`);
 
-  const exampleCards: DetailCard[] = [
-    { id: 'demo1', type: 'action',  text: '老轨王建国左手扶缸头罩，右手袖口蹭额头汗，左手背上一道2cm新疤还没结痂。' },
-    { id: 'demo2', type: 'dialog',  text: '王师傅对徒弟小李说："你先去吃，我再顶一个班，缸头差1度都不行。"' },
-    { id: 'demo3', type: 'env',     text: '正午12:35，机舱底层48.5℃，缸头热浪扑面，柴油味混着海风，风扇嗡嗡响得像蜂群。' },
-    { id: 'demo4', type: 'number',  text: '本航次连续值乘42天 / 主机吊缸1次 / 节油12.3% / 零故障零迟滞。' },
-    { id: 'demo5', type: 'dialog',  text: '政委拎冰镇西瓜下机舱，机工小济公咬一口竖大拇指："政委你这西瓜真到位！再热再累也值了！"' },
-    { id: 'demo6', type: 'emotion', text: '徒弟递完扳手看师傅袖口油迹都结成硬壳了，鼻子一酸，低头没说话，悄悄把自己那杯凉白开挪到了师傅脚边的阴影里。' },
-  ];
-  if (form.detailCards.length === 0) form.detailCards.push(...exampleCards);
+  try {
+    // ★ 客户端才初始化日期和随机ID，避免 SSR hydration mismatch
+    form.basic.happenDate = new Date().toISOString().slice(0, 10);
+    generationId.value = `gen_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    console.log(`${AI_TAG} ⑥-1 happenDate=${form.basic.happenDate}, generationId=${generationId.value}`);
+
+    const exampleCards: DetailCard[] = [
+      { id: 'demo1', type: 'action',  text: '老轨王建国左手扶缸头罩，右手袖口蹭额头汗，左手背上一道2cm新疤还没结痂。' },
+      { id: 'demo2', type: 'dialog',  text: '王师傅对徒弟小李说："你先去吃，我再顶一个班，缸头差1度都不行。"' },
+      { id: 'demo3', type: 'env',     text: '正午12:35，机舱底层48.5℃，缸头热浪扑面，柴油味混着海风，风扇嗡嗡响得像蜂群。' },
+      { id: 'demo4', type: 'number',  text: '本航次连续值乘42天 / 主机吊缸1次 / 节油12.3% / 零故障零迟滞。' },
+      { id: 'demo5', type: 'dialog',  text: '政委拎冰镇西瓜下机舱，机工小济公咬一口竖大拇指："政委你这西瓜真到位！再热再累也值了！"' },
+      { id: 'demo6', type: 'emotion', text: '徒弟递完扳手看师傅袖口油迹都结成硬壳了，鼻子一酸，低头没说话，悄悄把自己那杯凉白开挪到了师傅脚边的阴影里。' },
+    ];
+    if (form.detailCards.length === 0) {
+      form.detailCards.push(...exampleCards);
+      console.log(`${AI_TAG} ⑥-2 示例细节卡片 6 张已预置，现总数=${form.detailCards.length}`);
+    } else {
+      console.log(`${AI_TAG} ⑥-2 detailCards 已有数据，跳过示例预置（当前 ${form.detailCards.length} 张）`);
+    }
+
+    await nextTick();
+    const tAfter = Date.now();
+    console.log(`${AI_TAG} ⑦ ✅ onMounted 全部完成（nextTick后）  总耗时=${tAfter - t1}ms  从页面进入=${tAfter - bootT0}ms   活跃步骤=${activeStep.value}  主分类=${form.categoryId}`);
+  } catch (e: any) {
+    console.group(`${AI_TAG} ❌ onMounted 抛出异常！`);
+    console.error('  err.message =', e?.message);
+    console.error('  err.name =', e?.name);
+    console.error('  err.stack =', e?.stack);
+    console.error('  JSON(err) =', (() => { try { return JSON.stringify(e, null, 2) } catch { return '[不可序列化]' } })());
+    console.groupEnd();
+    ElMessage.error(`政工笔页面初始化失败：${e?.message || String(e)}  （F12 控制台筛选“${AI_TAG}”查看详情）`, { duration: 10000 });
+  }
 });
 </script>
 
