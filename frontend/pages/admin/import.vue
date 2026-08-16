@@ -214,7 +214,9 @@
 import { ref, computed } from 'vue'
 import { ArrowLeft, Document, UploadFilled, Close, SuccessFilled, CircleCloseFilled } from '@element-plus/icons-vue'
 import type { UploadFile, UploadInstance } from 'element-plus'
-import * as XLSX from 'xlsx'
+
+// ★ v0816-17: xlsx(5MB源码) 改成 dynamic import → Rollup transform 阶段不加载其 AST，省 ~100MB 内存
+const ensureXLSX = async () => import('xlsx')
 
 definePageMeta({
   middleware: ['auth', 'role'],
@@ -293,6 +295,7 @@ const removeFile = () => {
 const parseExcelFile = async (file: File) => {
   try {
     const data = await file.arrayBuffer()
+    const XLSX = await ensureXLSX()
     const workbook = XLSX.read(data)
     const firstSheet = workbook.Sheets[workbook.SheetNames[0]]
     const jsonData = XLSX.utils.sheet_to_json(firstSheet)

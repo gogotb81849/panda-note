@@ -46,8 +46,14 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue';
 import { Loading, WarningFilled, ZoomOut, ZoomIn } from '@element-plus/icons-vue';
-import * as XLSX from 'xlsx';
 import { useAuthStore } from '~/stores/auth';
+
+// ★ v0816-17: xlsx(5MB源码) 改成 dynamic import → Rollup transform 阶段不加载其 AST，省 ~100MB 内存
+let XLSXLib: any = null;
+const ensureXLSX = async () => {
+  if (!XLSXLib) XLSXLib = await import('xlsx');
+  return XLSXLib;
+};
 
 const props = defineProps<{
   url: string;
@@ -79,6 +85,7 @@ const loadExcel = async () => {
     }
 
     const arrayBuffer = await response.arrayBuffer();
+    const XLSX = await ensureXLSX();
     workbook.value = XLSX.read(arrayBuffer, { type: 'array' });
     sheetNames.value = workbook.value.SheetNames;
     
@@ -94,13 +101,14 @@ const loadExcel = async () => {
   }
 };
 
-const renderSheet = (sheetName: string) => {
+const renderSheet = async (sheetName: string) => {
   if (!workbook.value) return;
   
   const worksheet = workbook.value.Sheets[sheetName];
   if (!worksheet) return;
 
   // 将 sheet 转换为 HTML 表格
+  const XLSX = await ensureXLSX();
   tableHtml.value = XLSX.utils.sheet_to_html(worksheet, {
     editable: false,
     header: '',

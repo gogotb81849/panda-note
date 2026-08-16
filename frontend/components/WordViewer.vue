@@ -30,8 +30,17 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue';
 import { Loading, WarningFilled, ZoomOut, ZoomIn } from '@element-plus/icons-vue';
-import { renderAsync } from 'docx-preview';
 import { useAuthStore } from '~/stores/auth';
+
+// ★ v0816-17: docx-preview(4MB源码) 改成 dynamic import → Rollup transform 阶段不加载其 AST，省 ~60MB 内存
+let renderAsyncFn: any = null;
+const ensureDocxPreview = async () => {
+  if (!renderAsyncFn) {
+    const mod = await import('docx-preview');
+    renderAsyncFn = mod.renderAsync;
+  }
+  return renderAsyncFn;
+};
 
 const props = defineProps<{
   url: string;
@@ -63,6 +72,7 @@ const loadWord = async () => {
 
     if (wordContainerRef.value) {
       wordContainerRef.value.innerHTML = '';
+      const renderAsync = await ensureDocxPreview();
       await renderAsync(arrayBuffer, wordContainerRef.value, undefined, {
         baseUrl: '',
         className: 'docx-preview-content',

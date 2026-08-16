@@ -54,11 +54,17 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted, computed } from 'vue';
 import { Loading, WarningFilled, ArrowLeft, ArrowRight, ZoomOut, ZoomIn } from '@element-plus/icons-vue';
-import * as pdfjsLib from 'pdfjs-dist';
 import { useAuthStore } from '~/stores/auth';
 
-// 设置worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+// ★ v0816-17: pdfjs-dist(10MB源码) 改成 dynamic import → Rollup transform 阶段不加载其 AST，省 ~200MB 内存
+let pdfjsLib: any = null;
+const ensurePdfjs = async () => {
+  if (!pdfjsLib) {
+    pdfjsLib = await import('pdfjs-dist');
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+  }
+  return pdfjsLib;
+};
 
 const props = defineProps<{
   url: string;
@@ -109,7 +115,8 @@ const loadPdf = async () => {
     }
 
     const arrayBuffer = await response.arrayBuffer();
-    pdfDoc.value = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const lib = await ensurePdfjs();
+    pdfDoc.value = await lib.getDocument({ data: arrayBuffer }).promise;
     totalPages.value = pdfDoc.value.numPages;
 
     await renderPage(currentPage.value);

@@ -52,29 +52,22 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import VChart from 'vue-echarts'
-import { use } from 'echarts/core'
-import { CanvasRenderer } from 'echarts/renderers'
-import { PieChart, LineChart, BarChart, GaugeChart } from 'echarts/charts'
-import {
-  TitleComponent,
-  TooltipComponent,
-  LegendComponent,
-  GridComponent,
-} from 'echarts/components'
+import { ref, computed, defineAsyncComponent, onMounted } from 'vue'
 
-use([
-  CanvasRenderer,
-  PieChart,
-  LineChart,
-  BarChart,
-  GaugeChart,
-  TitleComponent,
-  TooltipComponent,
-  LegendComponent,
-  GridComponent,
-])
+// ★ v0816-17: echarts/vue-echarts(7.6MB源码) 改成 dynamic import → Rollup transform 阶段不加载其 AST，省 ~76MB 内存
+const VChart = defineAsyncComponent(() => import('vue-echarts'))
+
+let echartsReady = ref(false)
+onMounted(async () => {
+  const { use } = await import('echarts/core')
+  const [{ CanvasRenderer }, { PieChart, LineChart, BarChart, GaugeChart }, { TitleComponent, TooltipComponent, LegendComponent, GridComponent }] = await Promise.all([
+    import('echarts/renderers'),
+    import('echarts/charts'),
+    import('echarts/components'),
+  ])
+  use([CanvasRenderer, PieChart, LineChart, BarChart, GaugeChart, TitleComponent, TooltipComponent, LegendComponent, GridComponent])
+  echartsReady.value = true
+})
 
 const props = defineProps<{
   taskStats?: any

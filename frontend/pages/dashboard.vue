@@ -219,19 +219,25 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, onUnmounted } from 'vue'
+import { ref, computed, onMounted, watch, onUnmounted, defineAsyncComponent } from 'vue'
 import { useAuthStore } from '~/stores/auth'
 import { ElMessage } from 'element-plus'
-import VChart from 'vue-echarts'
-import { use } from 'echarts/core'
-import { CanvasRenderer } from 'echarts/renderers'
-import { PieChart, LineChart, BarChart, GaugeChart, RadarChart, ScatterChart, FunnelChart, HeatmapChart } from 'echarts/charts'
-import { TooltipComponent, LegendComponent, GridComponent, RadarComponent, VisualMapComponent, CalendarComponent, TitleComponent } from 'echarts/components'
 
-use([
-  CanvasRenderer, PieChart, LineChart, BarChart, GaugeChart, RadarChart, ScatterChart, FunnelChart, HeatmapChart,
-  TooltipComponent, LegendComponent, GridComponent, RadarComponent, VisualMapComponent, CalendarComponent, TitleComponent,
-])
+// ★ v0816-17: echarts/vue-echarts 改成 dynamic import → Rollup transform 阶段不加载其 AST，省内存
+const VChart = defineAsyncComponent(() => import('vue-echarts'))
+
+onMounted(async () => {
+  const { use } = await import('echarts/core')
+  const [{ CanvasRenderer }, { PieChart, LineChart, BarChart, GaugeChart, RadarChart, ScatterChart, FunnelChart, HeatmapChart }, { TooltipComponent, LegendComponent, GridComponent, RadarComponent, VisualMapComponent, CalendarComponent, TitleComponent }] = await Promise.all([
+    import('echarts/renderers'),
+    import('echarts/charts'),
+    import('echarts/components'),
+  ])
+  use([
+    CanvasRenderer, PieChart, LineChart, BarChart, GaugeChart, RadarChart, ScatterChart, FunnelChart, HeatmapChart,
+    TooltipComponent, LegendComponent, GridComponent, RadarComponent, VisualMapComponent, CalendarComponent, TitleComponent,
+  ])
+})
 
 definePageMeta({ middleware: ['auth'] })
 
