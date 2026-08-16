@@ -5,6 +5,7 @@
 import { Injectable, Logger, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import { TeamCode } from '@prisma/client';
 import {
   GenerateManuscriptDto, ScoreOnlyDto, DetailCardDto,
   SaveRevisionRecordDto, SaveRevisionResultDto, GetUserProfileResultDto,
@@ -89,7 +90,7 @@ export class AiManuscriptService {
    *  5. 跑 QualityScoringEngine 100 分评分
    *  6. 返回：最终稿 + 评分卡 + AI 检测率
    */
-  async generate(dto: GenerateManuscriptDto, user: UserPayload, teamCode: string) {
+  async generate(dto: GenerateManuscriptDto, user: UserPayload, teamCode: TeamCode) {
     // Step A: 计算 Step 5 细节雷达总分（用前端同规则）→ 给防杜撰引擎做参数
     const userDetailsScore = this.computeUserDetailsScore(dto.detailCards);
     const missingHints = this.suggestMissing(dto, userDetailsScore);
@@ -104,7 +105,7 @@ export class AiManuscriptService {
       rawArticle = await this.callAI(fullPrompt);
       sourceLabel = '政工笔 · 熊猫笔记大盘子豆包 API 直出（强度规则已应用）';
     } catch (err) {
-      this.logger.warn(`[generate][user=${user.userId}] 豆包调用失败，降级使用本地结构稿：${(err as Error).message}`);
+      this.logger.warn(`[generate][user=${user.id}] 豆包调用失败，降级使用本地结构稿：${(err as Error).message}`);
       rawArticle = this.buildMockArticle(dto);
       sourceLabel = '政工笔 · 豆包不可用时的本地结构兜底稿（请检查网络）';
     }
@@ -120,7 +121,7 @@ export class AiManuscriptService {
     // Step F: 返回
     return {
       requestId: `zgb_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-      userId: user.userId,
+      userId: user.id,
       teamCode,
       promptTextSnippet: fullPrompt.slice(0, 500) + '…',
       finalArticle: deaiOutput.outputText,
@@ -219,7 +220,7 @@ ${this.forbiddenAndTermListPrompt()}
   // ============================================================
   // 范文库 CRUD（Sprint 1：最小实现，Sprint 2 补 tsvector 检索 + 权限校验）
   // ============================================================
-  async listTemplates(teamCode: string, userId: number, scope: 'all' | 'global' | 'personal', category?: string, topic?: string) {
+  async listTemplates(teamCode: TeamCode, userId: number, scope: 'all' | 'global' | 'personal', category?: string, topic?: string) {
     const where: any = { teamCode };
     if (scope === 'global') where.ownerUserId = null;
     else if (scope === 'personal') where.ownerUserId = userId;
@@ -233,7 +234,7 @@ ${this.forbiddenAndTermListPrompt()}
     });
   }
 
-  async getTemplate(id: number, teamCode: string, userId: number) {
+  async getTemplate(id: number, teamCode: TeamCode, userId: number) {
     const t = await this.prisma.manuscriptTemplate.findUnique({
       where: { id }, include: { tags: true }
     });
@@ -243,7 +244,7 @@ ${this.forbiddenAndTermListPrompt()}
     return t;
   }
 
-  async patchTemplateTags(id: number, tags: Array<{tagName: string; tagCategory: string}>, teamCode: string, userId: number, roles: string[]) {
+  async patchTemplateTags(id: number, tags: Array<{tagName: string; tagCategory: string}>, teamCode: TeamCode, userId: number, roles: string[]) {
     const t = await this.getTemplate(id, teamCode, userId);
     const isAdmin = roles?.includes('admin') || roles?.includes('system-admin');
     if (t.ownerUserId == null && !isAdmin) throw new ForbiddenException('仅管理员可编辑全局标签');
@@ -257,7 +258,7 @@ ${this.forbiddenAndTermListPrompt()}
     return { ok: true, updated: id, tags };
   }
 
-  async deleteTemplate(id: number, teamCode: string, userId: number, roles: string[]) {
+  async deleteTemplate(id: number, teamCode: TeamCode, userId: number, roles: string[]) {
     const t = await this.getTemplate(id, teamCode, userId);
     const isAdmin = roles?.includes('admin') || roles?.includes('system-admin');
     if (t.ownerUserId == null && !isAdmin) throw new ForbiddenException('仅管理员可删除全局范文');
@@ -385,7 +386,7 @@ ${extraCards.map((c,i) => `${i+1}. [${c.type}] ${c.text}`).join('\n')}
   // 🧩 自我优化闭环 ①：保存修改记录 + 复核 + 自动归类 + 画像聚合
   // ============================================================
   async saveRevisionRecord(
-    dto: SaveRevisionRecordDto, user: UserPayload, teamCode: string
+    dto: SaveRevisionRecordDto, user: UserPayload, teamCode: TeamCode
   ): Promise<SaveRevisionResultDto> {
     // ---- A. 行级 diff（后端再算一次，避免前端被篡改）----
     const rowDiffs = this.simpleDiffRows(dto.beforeText, dto.afterText);
@@ -416,8 +417,8 @@ ${extraCards.map((c,i) => `${i+1}. [${c.type}] ${c.text}`).join('\n')}
     // ---- F. 写 ManuscriptRevisionRecord ----
     const saved = await this.prisma.manuscriptRevisionRecord.create({
       data: {
-        userId: user.userId,
-        teamCode: teamCode as any,
+        userId: user.id,
+        teamCode,
         generationId: dto.generationId,
         manuscriptCategory: dto.manuscriptCategory,
         wordCountBefore: dto.wordCountBefore,
@@ -432,7 +433,7 @@ ${extraCards.map((c,i) => `${i+1}. [${c.type}] ${c.text}`).join('\n')}
 
     // ---- G. 增量聚合 → ManuscriptUserProfile（upsert）----
     const unlockLevel = await this.aggregateUserProfile(
-      user.userId, teamCode, validCount, breakdown, dto.wordCountAfter
+      user.id, teamCode, validCount, breakdown, dto.wordCountAfter
     );
     const unlockText = this.unlockLevelText(unlockLevel);
 
@@ -452,14 +453,14 @@ ${extraCards.map((c,i) => `${i+1}. [${c.type}] ${c.text}`).join('\n')}
   // ============================================================
   // 🧩 自我优化闭环 ②：查询个人写作画像看板
   // ============================================================
-  async getUserProfile(userId: number, teamCode: string): Promise<GetUserProfileResultDto> {
+  async getUserProfile(userId: number, teamCode: TeamCode): Promise<GetUserProfileResultDto> {
     let profile = await this.prisma.manuscriptUserProfile.findUnique({
       where: { userId },
     });
     // 没数据时返回默认画像（UI 上可以显示"快去改稿解锁画像"）
     if (!profile) {
       profile = await this.prisma.manuscriptUserProfile.create({
-        data: { userId, teamCode: teamCode as any },
+        data: { userId, teamCode },
       });
     }
 
@@ -665,7 +666,7 @@ ${extraCards.map((c,i) => `${i+1}. [${c.type}] ${c.text}`).join('\n')}
    * @returns 新的 unlockLevel
    */
   private async aggregateUserProfile(
-    userId: number, teamCode: string,
+    userId: number, teamCode: TeamCode,
     validEditCount: number,
     breakdown: Record<EditCategoryKey, number>,
     currentWordCount: number,
@@ -674,7 +675,7 @@ ${extraCards.map((c,i) => `${i+1}. [${c.type}] ${c.text}`).join('\n')}
     const existing = await this.prisma.manuscriptUserProfile.findUnique({ where: { userId } });
     if (!existing) {
       await this.prisma.manuscriptUserProfile.create({
-        data: { userId, teamCode: teamCode as any, totalValidEdits: validEditCount, totalRevisionSessions: 1, totalManuscriptsGenerated: 1 },
+        data: { userId, teamCode, totalValidEdits: validEditCount, totalRevisionSessions: 1, totalManuscriptsGenerated: 1 },
       });
     } else {
       // ---- 增量合并 Top5 类别 ----
@@ -712,7 +713,7 @@ ${extraCards.map((c,i) => `${i+1}. [${c.type}] ${c.text}`).join('\n')}
       await this.prisma.manuscriptUserProfile.update({
         where: { userId },
         data: {
-          teamCode: teamCode as any,
+          teamCode,
           totalRevisionSessions: newSessions,
           totalValidEdits: newTotalEdits,
           avgValidEditsPerManuscript: Math.round(newAvg * 100) / 100,

@@ -5,6 +5,7 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards, UsePipes, ValidationPipe, Delete, UseInterceptors, UploadedFile, BadRequestException } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { User, UserPayload } from '../auth/user.decorator';
+import { TeamCode } from '@prisma/client';
 import { AiManuscriptService } from './ai-manuscript.service';
 import { GenerateManuscriptDto, ScoreOnlyDto, DeaiOnlyDto, SaveRevisionRecordDto } from './dto/generate-manuscript.dto';
 import { Logger } from '@nestjs/common';
@@ -28,8 +29,8 @@ export class AiManuscriptController {
     @Body() dto: GenerateManuscriptDto,
     @Req() req: any,
   ) {
-    this.logger.log(`[user=${user.userId}] 开始生成政工笔稿件 category=${dto.categoryId} wordCount=${dto.preference.wordCount}`);
-    return this.service.generate(dto, user, req.teamCode);
+    this.logger.log(`[user=${user.id}] 开始生成政工笔稿件 category=${dto.categoryId} wordCount=${dto.preference.wordCount}`);
+    return this.service.generate(dto, user, req.teamCode as TeamCode);
   }
 
   // ============================================================
@@ -37,7 +38,7 @@ export class AiManuscriptController {
   // ============================================================
   @Post('deai')
   async deaiOnly(@User() user: UserPayload, @Body() dto: DeaiOnlyDto) {
-    this.logger.debug(`[user=${user.userId}] 单独去 AI 化 strength=${dto.deaiStrength} textLen=${dto.articleText.length}`);
+    this.logger.debug(`[user=${user.id}] 单独去 AI 化 strength=${dto.deaiStrength} textLen=${dto.articleText.length}`);
     return this.service.runDeAiEngine(dto.articleText, dto.deaiStrength);
   }
 
@@ -46,7 +47,7 @@ export class AiManuscriptController {
   // ============================================================
   @Post('score')
   async scoreOnly(@User() user: UserPayload, @Body() dto: ScoreOnlyDto) {
-    this.logger.debug(`[user=${user.userId}] 单独评分 textLen=${dto.articleText.length}`);
+    this.logger.debug(`[user=${user.id}] 单独评分 textLen=${dto.articleText.length}`);
     return this.service.runQualityScoring(dto.articleText, dto.deaiStrength);
   }
 
@@ -61,12 +62,12 @@ export class AiManuscriptController {
     @Query('topic') topic?: string,
     @Query('scope') scope: 'all' | 'global' | 'personal' = 'all',
   ) {
-    return this.service.listTemplates(req.teamCode, user.userId, scope, category, topic);
+    return this.service.listTemplates(req.teamCode as TeamCode, user.id, scope, category, topic);
   }
 
   @Get('templates/:id')
   async getTemplate(@Param('id') id: string, @User() user: UserPayload, @Req() req: any) {
-    return this.service.getTemplate(parseInt(id), req.teamCode, user.userId);
+    return this.service.getTemplate(parseInt(id), req.teamCode as TeamCode, user.id);
   }
 
   @Patch('templates/:id/tags')
@@ -75,12 +76,12 @@ export class AiManuscriptController {
     @Body('tags') tags: Array<{ tagName: string; tagCategory: string }>,
     @User() user: UserPayload, @Req() req: any,
   ) {
-    return this.service.patchTemplateTags(parseInt(id), tags, req.teamCode, user.userId, req.user?.roles);
+    return this.service.patchTemplateTags(parseInt(id), tags, req.teamCode as TeamCode, user.id, req.user?.roles);
   }
 
   @Delete('templates/:id')
   async deleteTemplate(@Param('id') id: string, @User() user: UserPayload, @Req() req: any) {
-    return this.service.deleteTemplate(parseInt(id), req.teamCode, user.userId, req.user?.roles);
+    return this.service.deleteTemplate(parseInt(id), req.teamCode as TeamCode, user.id, req.user?.roles);
   }
 
   // ============================================================
@@ -98,8 +99,8 @@ export class AiManuscriptController {
     return {
       jobId: `mock-analyze-${Date.now()}`,
       message: 'Sprint 2 实现：mammoth/pdfjs 抽取 → AI 自动打 6 类标签 + 200 字摘要 + 集团匹配度评分 → tsvector 入库',
-      user: user.userId,
-      teamCode: req.teamCode,
+      user: user.id,
+      teamCode: req.teamCode as TeamCode,
     };
   }
 
@@ -128,8 +129,8 @@ export class AiManuscriptController {
     @Body() dto: SaveRevisionRecordDto,
     @Req() req: any,
   ) {
-    this.logger.log(`[user=${user.userId}] 保存修改记录 category=${dto.manuscriptCategory} frontValidEdits=${dto.frontendValidEditCount}`);
-    return this.service.saveRevisionRecord(dto, user, req.teamCode);
+    this.logger.log(`[user=${user.id}] 保存修改记录 category=${dto.manuscriptCategory} frontValidEdits=${dto.frontendValidEditCount}`);
+    return this.service.saveRevisionRecord(dto, user, req.teamCode as TeamCode);
   }
 
   // ============================================================
@@ -138,7 +139,7 @@ export class AiManuscriptController {
   @SkipThrottle()
   @Get('user-profile')
   async getUserProfile(@User() user: UserPayload, @Req() req: any) {
-    this.logger.debug(`[user=${user.userId}] 查询个人写作画像`);
-    return this.service.getUserProfile(user.userId, req.teamCode);
+    this.logger.debug(`[user=${user.id}] 查询个人写作画像`);
+    return this.service.getUserProfile(user.id, req.teamCode as TeamCode);
   }
 }

@@ -1,15 +1,6 @@
 {
-  "version": "1.1.0.0814c",
-  "previous_version": "1.1.0.0814b",
-  "buildTime": "2026-08-14T16:30:00.000Z",
-  "environment": "production",
+  "buildTime": "2026-08-16T02:27:43.003Z",
+  "environment": "development",
   "nodeVersion": "auto",
-  "changes": [
-    "【根因解决】陈先生反馈：工具箱里看不到海上菜篮子卡片 —— 追踪发现服务器前端 latest.json timestamp=2026-08-12T02:49:42Z，连续 3 次 Run (#146-#148) 的前端构建都 OOM 了但 GitHub Actions 没捕获到失败。原因 & 修复：",
-    "  ① 根因：.npmrc max-old-space-size=5120 (5.1G)，7GB runner cgroup 上限约 6.8G，V8 老年代堆积触发 Mark-Compact 后 RSS≈6.8G → cgroup OOM killer SIGKILL 进程。SIGKILL 场景下 npm/node exit code 偶发不被 step 捕获，导致"假绿勾"，deploy 上传的是旧 .output。",
-    "  ② 加固一（降内存上限）：.npmrc 降 max-old-space-size 到 4096 (4GB)，nuxt.config.ts 把 rollupOptions.maxParallelFileOps 从 2 降到 1（完全串行），预期总 RSS ≈ 4.5G 绝对安全；同时修复之前 nuxt.config.ts 中 nitro key 被重复定义覆盖的遗留 bug。",
-    "  ③ 加固二（包装脚本）：新增 scripts/ci-build-frontend.mjs 三重保险（构建前 rm -rf .nuxt/.output/.cache → 显式 spawn nuxi build 捕获 exit/signal → 构建后验证 6 个关键路径必须存在），任何一步失败 exit 1，让 GitHub Actions 真正红。",
-    "  ④ 前端 package.json build 从直接 nuxi build 改为调用 ci-build-frontend.mjs；.npmrc 还加了 fetch-timeout=10min、NUXT_TELEMETRY_DISABLED=1。",
-    "  ⑤ 本次推送后 Run #149 重新构建 —— 如果前端构建真的成功，陈先生刷新工具箱就能看到🌱海上菜篮子绿色卡片了。"
-  ]
+  "version": "1.1.0.0866"
 }

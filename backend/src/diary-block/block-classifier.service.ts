@@ -142,16 +142,16 @@ export class BlockClassifierService {
       if (!content || !content.trim()) return null;
       const ships = await this.prisma.ship.findMany({
         where: { teamCode },
-        select: { id: true, name: true, shortName: true, shipCode: true },
+        select: { id: true, cnShipName: true, enShipName: true },
       });
       let bestMatch: { id: number; name: string; score: number } | null = null;
       for (const s of ships) {
         let score = 0;
-        if (s.name && content.includes(s.name)) score += 10;
-        if (s.shortName && content.includes(s.shortName)) score += 8;
-        if (s.shipCode && content.includes(s.shipCode)) score += 5;
+        if (s.cnShipName && content.includes(s.cnShipName)) score += 10;
+        if (s.enShipName && content.includes(s.enShipName)) score += 8;
+        if (String(s.id) && content.includes(String(s.id))) score += 5;
         if (score > 0 && (!bestMatch || score > bestMatch.score)) {
-          bestMatch = { id: s.id, name: s.name, score };
+          bestMatch = { id: s.id, name: s.cnShipName, score };
         }
       }
       return bestMatch ? { id: bestMatch.id, name: bestMatch.name } : null;
