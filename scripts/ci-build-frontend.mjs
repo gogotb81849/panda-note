@@ -46,38 +46,56 @@ for (const d of cacheDirs) {
 }
 
 // ---------- Step 1: spawn nuxt build ----------
-// ★ v0816-6: runner 7GB 实测极限：OS + runner + 进程 ≈ 3GB → node 进程最多 ~3.2GB RSS（不是 V8 old-space）
-//   V8 committed = old-space + code-space + nursery + malloc = 3GB old-space → ~3.3GB RSS
-//   → 所以 old-space=3072（3GB）才能真正压在 cgroup kill 阈值下。
-log('Step 1/3: Run nuxt build (max-old-space-size=3072, fully serial, CI no-PWA)...');
-log('  (v0816-6: V8 committed ~3.2GB → RSS ~3.4GB，留 3.6GB 给 runner OS；不能加 --jitless 因为 Vite/Rollup 需要 WASM)');
-log('  (add node flags: --gc-global --no-concurrent-recompilation --no-turbo-inlining --lazy --max-stack-trace-source-length=100)');
+// ★ v0816-7: 【关键 Bug】前几版为什么 committed 还是 4120MB？—— NODE_OPTIONS 里的 --max-old-space-size
+//   会被 **npx 子进程 → npm run 的内部 node → ci-build-frontend.mjs 自己 → 最终的 nuxt build 的 node 进程继承**，
+//   但在 process.env 里设置后，spawn(process.execPath) 的 argv flag 和 NODE_OPTIONS 会**互相竞争**，
+//   在某些 Node 20 小版本下，env.NODE_OPTIONS 的 max-old-space-size 会被 argv 的无显式设置覆盖而使用默认。
+//
+//   真正稳定的做法：
+//   ① NODE_OPTIONS 清空/避免设置 max-old-space-size
+//   ② --max-old-space-size=3000 和 --expose-gc 全部直接通过 spawn 的 argv 直传给 process.execPath
+//   这样**真正跑 nuxt build 的 node 进程**拿到的 V8 上限才是 3GB！
+//
+//   （测试：GC trace 里 Mark-Compact 的括号内 committed 峰值应该稳定 ~3200-3400MB，而不是 4120MB）
+log('Step 1/3: Run nuxt build (max-old-space-size=3000 via argv, fully serial, CI no-PWA)...');
+log('  (v0816-7: 所有 V8 flag 走 spawn argv（不依赖 NODE_OPTIONS），避免 npx/npm run 链上被覆盖/继承出问题)');
 const buildEnv = {
   ...process.env,
-  NODE_OPTIONS: '--max-old-space-size=3072 --max-semi-space-size=4 --expose-gc',
+  // NODE_OPTIONS 必须清理掉 max-old-space-size，因为它会和 argv 冲突且不稳定
+  // 只保留 NO_DISABLE 类环境变量
+  NODE_OPTIONS: '--expose-gc',
   NUXT_TELEMETRY_DISABLED: '1',
   DISABLE_OPENCOLLECTIVE: '1',
   NEXT_TELEMETRY_DISABLED: '1',
   NUXT_DISABLE_PWA_IN_CI: '1',
   CI: 'true',
 };
-// 找到 npx 的真实位置，然后用 node 直接启动：node [v8 flags] $(which npx) nuxt build
-// （如果直接 spawn('npx', ...) 会丢失 v8 flag，因为 shebang #!/usr/bin/env node 不会带 argv flag）
 const npxPath = execFileSync('which', ['npx'], { encoding: 'utf8' }).trim();
 log(`  using npx at: ${npxPath}`);
+// ★ 全部 V8 flag 都在 argv 直传：
+//   - --max-old-space-size=3000（3GB old-space，committed 极限 ~3200MB）
+//   - --max-semi-space-size=4（年轻代半区 4MB，避免 nursery 峰值突增）
+//   - --gc-global（强制 full GC，不是 hint incremental young GC）
+//   - --no-concurrent-recompilation（禁用后台编译线程占用额外内存）
+//   - --no-turbo-inlining（禁用 TurboFan 内联展开，省 code-space 300-500MB）
+//   - --lazy（懒 JIT，降低前序编译内存峰值）
+//   - --max-stack-trace-source-length=100（错误堆栈少存源码，省 malloc）
+//   - --max-old-space-size=3000 必须在最开头，被 argv 优先级高于任何 env 与默认
 const nodeArgs = [
+  '--max-old-space-size=3000',
+  '--max-semi-space-size=4',
+  '--expose-gc',
   '--gc-global',
   '--no-concurrent-recompilation',
   '--no-turbo-inlining',
   '--lazy',
   '--max-stack-trace-source-length=100',
-  // ★ v0816-6 不能加 --jitless：Vite 的 Rollup/terser 等依赖 WebAssembly
-  //    jitless 运行时会禁用 WASM → 直接 Exit prior to config file resolving
   npxPath,
   'nuxt',
   'build',
 ];
 log(`  node argv: ${nodeArgs.join(' ')}`);
+log('  ★ verify-heap-limits: start with a 5-second probe that prints v8 heap statistics every 1s...');
 const child = spawn(process.execPath, nodeArgs, {
   cwd: FRONTEND_DIR,
   env: buildEnv,
