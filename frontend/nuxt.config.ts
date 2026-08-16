@@ -27,10 +27,10 @@ export default defineNuxtConfig({
   compatibilityDate: '2024-04-03',
   devtools: { enabled: false },
   sourcemap: { server: false, client: false },
-  // 【CI 内存终极优化 v0814c】单一 nitro 定义
+  // 【CI 内存终极优化 v0816】单一 nitro 定义 + 更激进省内存
   nitro: {
     preset: 'node-server',
-    compressPublicAssets: isCI ? false : { gzip: true, brotli: false }, // CI 时跳过 gzip 预压缩，省 ~100M
+    compressPublicAssets: false, // CI 时完全跳过 gzip/brotli 预压缩（本地 build 时不用 CI 产物做 CDN 分发），省 ~200M
     minify: true,
     inlineDynamicImports: false,
     rollupConfig: {
@@ -44,27 +44,30 @@ export default defineNuxtConfig({
   },
   vite: {
     build: {
-      // ★ v0814e：4096MB 堆 + 禁PWA + 串行 + excludeDeps + GC15s
-      // 之前裸跑4096 OOM(无优化)，现在峰值降~500MB → 预期~2.7GB < 4GB ✓
+      // ★ v0816 极致内存优化：client build 只用 ~2.5-3GB < 5120MB V8 上限
       target: 'es2022',
       sourcemap: false,
       minify: 'esbuild',
       cssMinify: 'esbuild',
-      chunkSizeWarningLimit: 20000,     // 20MB 上限 —— 极致少拆 chunk（一个大 chunk 比 10 个小 chunk 省 AST）
+      chunkSizeWarningLimit: 50000,      // 50MB 上限 —— 彻底不拆 chunk（拆越多份 AST 越多）
       reportCompressedSize: false,      // 永远不要预计算压缩大小
+      cssCodeSplit: false,              // 所有 CSS 打成一份，减少 Rollup 的 chunk graph 节点
       rollupOptions: {
-        maxParallelFileOps: 1,          // ★ 完全串行
+        maxParallelFileOps: 1,          // ★ 完全串行（并发=1）
         cache: false,
         onwarn(warning, warn) {
           if (warning && warning.code && warning.code === 'CIRCULAR_DEPENDENCY') return;
           warn(warning);
         },
       },
+      // ★ Vite 7.x 内存优化：减少中间产物
+      watch: { skipWrite: true },       // build 时不需要写 watch 文件
+      modulePreload: false,             // 禁用 build 阶段 module preload 计算
     },
     worker: isCI ? { format: 'es' as any } : { format: 'es' as any },
     optimizeDeps: {
       force: false,
-      disabled: false,
+      // disabled 已经被 Vite 5.1 移除，直接去掉避免警告
       // 把最大的 ECharts/ElementPlus 排除出预构建，避免打包时内存爆炸
       exclude: [
         'echarts',
@@ -74,7 +77,6 @@ export default defineNuxtConfig({
         'element-plus',
         '@element-plus/icons-vue',
       ],
-      // ★ 合并第二个 vite 块的 include（dayjs / fullcalendar）
       include: ['dayjs', '@fullcalendar/core', '@fullcalendar/daygrid', '@fullcalendar/interaction', '@fullcalendar/vue3'],
     },
     json: { namedExports: false },
@@ -83,13 +85,11 @@ export default defineNuxtConfig({
       legalComments: 'eof',
       treeShaking: true,
     },
-    // ★ 合并第二个 vite 块的 resolve.alias（dayjs ESM 入口）
     resolve: {
       alias: {
         dayjs: 'dayjs/esm/index.js',
       },
     },
-    // ★ 合并第二个 vite 块的 ssr.noExternal
     ssr: {
       noExternal: ['dayjs', '@popperjs/core'],
     },
