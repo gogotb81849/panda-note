@@ -57,17 +57,21 @@ for (const d of cacheDirs) {
 //   这样**真正跑 nuxt build 的 node 进程**拿到的 V8 上限才是 3GB！
 //
 //   （测试：GC trace 里 Mark-Compact 的括号内 committed 峰值应该稳定 ~3200-3400MB，而不是 4120MB）
-log('Step 1/3: Run nuxt build (max-old-space-size=3600 via env+argv double-lock, fully serial, CI no-PWA)...');
-log('  (v0816-12: frontend/.npmrc=3600 + env NODE_OPTIONS + argv 三重锁；committed 峰值 ~3610MB < 3800 cgroup)');
+log('Step 1/3: Run nuxt build (max-old-space-size=4096 via env+argv double-lock, fully serial, CI no-PWA)...');
+log('  (v0816-16: 15轮数据公式 used≈old-space-270，应用峰值3331，4096有765MB安全边际)');
 const buildEnv = {
   ...process.env,
-  // ★ v0816-12: old-space=3600（GC trace v11: Mark-Compact 3058/3307.7 OOM 在边界）
-  //   三重锁（优先级从高到低）：
-  //   1) frontend/.npmrc node-options=3600   ← npm run-script 真正被注入的值（最高优先级）
-  //   2) env NODE_OPTIONS=3600              ← spawn 的所有 fork 继承
-  //   3) argv --max-old-space-size=3600     ← 外层 node 进程直传
-  //   预期 committed 峰值 ~3610 MB < runner cgroup 3800 MB（留 200MB 安全边际）
-  NODE_OPTIONS: '--max-old-space-size=3600 --max-semi-space-size=4 --expose-gc',
+  // ★ v0816-16: old-space=4096
+  //   15轮 GC trace 完整公式：OOM 在 used ≈ old-space - 270 处
+  //   v10(3000) used=2805 差195 OOM
+  //   v11(3300) used=3058 差242 OOM
+  //   v12(3600) used=3337 差263 OOM
+  //   v15(3600) used=3331 差269 OOM
+  //   → 应用真实峰值 = 3331MB（删菜篮子后）
+  //   → 需要 old-space ≥ 3331 + 270 = 3601MB
+  //   → old-space=4096 有 765MB 安全边际 ✅
+  //   v9 时 old-space=4096 但 used=3828（菜篮子还在）所以 OOM；现在删了菜篮子 used=3331
+  NODE_OPTIONS: '--max-old-space-size=4096 --max-semi-space-size=4 --expose-gc',
   NUXT_TELEMETRY_DISABLED: '1',
   DISABLE_OPENCOLLECTIVE: '1',
   NEXT_TELEMETRY_DISABLED: '1',
@@ -79,7 +83,7 @@ log(`  using npx at: ${npxPath}`);
 log(`  buildEnv.NODE_OPTIONS = ${buildEnv.NODE_OPTIONS}`);
 // ★ 全部 V8 flag 都在 argv 直传（外层保险）+ env 传了 NODE_OPTIONS（内层保险）：
 const nodeArgs = [
-  '--max-old-space-size=3600',
+  '--max-old-space-size=4096',
   '--max-semi-space-size=4',
   '--expose-gc',
   '--gc-global',
