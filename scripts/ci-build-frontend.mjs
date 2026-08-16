@@ -17,6 +17,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, statSync, readdirSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 const FRONTEND_DIR = resolve(import.meta.dirname, '..', 'frontend');
 const OUTPUT_DIR = join(FRONTEND_DIR, '.output');
@@ -63,7 +64,7 @@ const buildEnv = {
 };
 // 找到 npx 的真实位置，然后用 node 直接启动：node [v8 flags] $(which npx) nuxt build
 // （如果直接 spawn('npx', ...) 会丢失 v8 flag，因为 shebang #!/usr/bin/env node 不会带 argv flag）
-const npxPath = (await execFilePromise('which', ['npx'])).trim();
+const npxPath = execFileSync('which', ['npx'], { encoding: 'utf8' }).trim();
 log(`  using npx at: ${npxPath}`);
 const nodeArgs = [
   '--gc-global',
