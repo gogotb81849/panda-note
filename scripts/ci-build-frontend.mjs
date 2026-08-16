@@ -45,11 +45,11 @@ for (const d of cacheDirs) {
 }
 
 // ---------- Step 1: spawn nuxt build ----------
-log('Step 1/3: Run nuxt build (max-old-space-size=3500, fully serial, CI no-PWA)...');
-log('  (v0814g: 3500 甜点 > 3GB需求, < 5GB available, GC 10s)');
+log('Step 1/3: Run nuxt build (max-old-space-size=6144, fully serial, CI no-PWA)...');
+log('  (v0816: 6144 > 3500(旧) → 项目增大后 3500 OOM, 提到 6GB < 7GB runner 上限)');
 const buildEnv = {
   ...process.env,
-  NODE_OPTIONS: '--max-old-space-size=3500 --max-semi-space-size=16 --expose-gc',
+  NODE_OPTIONS: '--max-old-space-size=6144 --max-semi-space-size=64 --expose-gc',
   NUXT_TELEMETRY_DISABLED: '1',
   DISABLE_OPENCOLLECTIVE: '1',
   NEXT_TELEMETRY_DISABLED: '1',
