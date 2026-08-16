@@ -1,18 +1,11 @@
 #!/usr/bin/env node
 /**
- * 熊猫笔记 · 前端 CI 构建加固包装器（v0814b）
- *
- * 背景：
- *   Run #146-148 的 GitHub Actions 前端构建全部在 7GB runner 上 OOM（cgroup SIGKILL），
- *   但因为 npm/node 子进程退出码在 SIGKILL 场景下偶尔不被捕获，导致 build step 显示"通过"，
- *   实际 .output 是旧产物，deploy 上去服务器前端永远停在 8月12日。
+ * 熊猫笔记 · 前端 CI 构建加固包装器
  *
  * 本脚本三重保险：
  *   ① 构建前清理 nuxt/vite/node_modules/.cache 避免脏缓存吃内存
  *   ② 构建中用 child_process 显式 spawn nuxt build，捕获所有非 0 exit + signal 立即 exit 1
  *   ③ 构建后验证 .output 关键目录/文件必须存在，否则直接 exit 1
- *
- * 说明：本脚本只改项目代码，不碰 .github/workflows/，PAT 只需 repo scope 即可 push。
  */
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, statSync, readdirSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -30,6 +23,12 @@ function log(msg) {
   console.log(`[ci-build-frontend ${ts}] ${msg}`);
 }
 
+// // ====== v10-v20 旧版配置（已全部注释掉，运行成功后删除）====================================
+// // ---------- Step 0: 清理缓存 ----------
+// log('Step 0/3: Clean build caches...');
+// // （原 Step 0 清理缓存：保留，但用 v21 重写版）
+// // ====== 以上全部注释掉 ========================================================================
+
 // ---------- Step 0: 清理缓存 ----------
 log('Step 0/3: Clean build caches...');
 const cacheDirs = [
@@ -46,26 +45,40 @@ for (const d of cacheDirs) {
 }
 
 // ---------- Step 1: spawn nuxt build ----------
-// ★ v0816-7: 【关键 Bug】前几版为什么 committed 还是 4120MB？—— NODE_OPTIONS 里的 --max-old-space-size
-//   会被 **npx 子进程 → npm run 的内部 node → ci-build-frontend.mjs 自己 → 最终的 nuxt build 的 node 进程继承**，
-//   但在 process.env 里设置后，spawn(process.execPath) 的 argv flag 和 NODE_OPTIONS 会**互相竞争**，
-//   在某些 Node 20 小版本下，env.NODE_OPTIONS 的 max-old-space-size 会被 argv 的无显式设置覆盖而使用默认。
-//
-//   真正稳定的做法：
-//   ① NODE_OPTIONS 清空/避免设置 max-old-space-size
-//   ② --max-old-space-size=3000 和 --expose-gc 全部直接通过 spawn 的 argv 直传给 process.execPath
-//   这样**真正跑 nuxt build 的 node 进程**拿到的 V8 上限才是 3GB！
-//
-//   （测试：GC trace 里 Mark-Compact 的括号内 committed 峰值应该稳定 ~3200-3400MB，而不是 4120MB）
-log('Step 1/3: Run nuxt build (max-old-space-size=8192 + gc-interval=100, CI no-PWA)...');
-log('  (v0816-19: 18轮证明 used 紧跟 old-space！V8 GC 太懒→垃圾堆积。gc-interval=100 强制每 50MB GC 一次)');
+// // ====== v10-v20 旧版配置（已全部注释掉，运行成功后删除）====================================
+// log('Step 1/3: Run nuxt build (max-old-space-size=8192 + gc-interval=100, CI no-PWA)...');
+// log('  (v0816-19: 18轮证明 used 紧跟 old-space！V8 GC 太懒→垃圾堆积。gc-interval=100 强制每 50MB GC 一次)');
+// const buildEnv = {
+//   ...process.env,
+//   NODE_OPTIONS: '--max-old-space-size=8192 --max-semi-space-size=8 --expose-gc --gc-interval=100 --gc-global',
+//   NUXT_TELEMETRY_DISABLED: '1',
+//   DISABLE_OPENCOLLECTIVE: '1',
+//   NEXT_TELEMETRY_DISABLED: '1',
+//   NUXT_DISABLE_PWA_IN_CI: '1',
+//   CI: 'true',
+// };
+// const nodeArgs = [
+//   '--max-old-space-size=8192',
+//   '--max-semi-space-size=8',
+//   '--expose-gc',
+//   '--gc-global',
+//   '--gc-interval=100',
+//   '--no-concurrent-recompilation',
+//   '--no-turbo-inlining',
+//   '--lazy',
+//   '--max-stack-trace-source-length=100',
+//   npxPath,
+//   'nuxt',
+//   'build',
+// ];
+// // ====== 以上全部注释掉 ========================================================================
+
+// ★ v21 干净版：只给 --max-old-space-size=6144（配合 .npmrc），其他 V8 flag 全不用，让 V8 用默认策略
+log('Step 1/3: Run nuxt build (v21 干净版 → NODE_OPTIONS=--max-old-space-size=6144)...');
+log('  (old-space 选 6144 = 6GB：v16(4096) V8 FATAL used=3820 / v18(8192) SIGKILL → 6GB 在中间)');
 const buildEnv = {
   ...process.env,
-  // ★ v0816-19: old-space=8192 + gc-interval=100（强制频繁 GC）
-  //   v18 证明：old-space=8192 → used=7662（翻倍！不是应用需要这么多，是 V8 推迟 GC 导致垃圾堆积）
-  //   gc-interval=100：每分配 100 个 old-space 页面（~50MB）强制 GC 一次
-  //   → 预期 used 从 7662 降到 ~4000（垃圾来不及堆积）
-  NODE_OPTIONS: '--max-old-space-size=8192 --max-semi-space-size=8 --expose-gc --gc-interval=100 --gc-global',
+  NODE_OPTIONS: '--max-old-space-size=6144',
   NUXT_TELEMETRY_DISABLED: '1',
   DISABLE_OPENCOLLECTIVE: '1',
   NEXT_TELEMETRY_DISABLED: '1',
@@ -75,17 +88,8 @@ const buildEnv = {
 const npxPath = execFileSync('which', ['npx'], { encoding: 'utf8' }).trim();
 log(`  using npx at: ${npxPath}`);
 log(`  buildEnv.NODE_OPTIONS = ${buildEnv.NODE_OPTIONS}`);
-// ★ 全部 V8 flag 都在 argv 直传（外层保险）+ env 传了 NODE_OPTIONS（内层保险）：
 const nodeArgs = [
-  '--max-old-space-size=8192',
-  '--max-semi-space-size=8',
-  '--expose-gc',
-  '--gc-global',
-  '--gc-interval=100',
-  '--no-concurrent-recompilation',
-  '--no-turbo-inlining',
-  '--lazy',
-  '--max-stack-trace-source-length=100',
+  '--max-old-space-size=6144',
   npxPath,
   'nuxt',
   'build',
@@ -133,7 +137,7 @@ if (passed < checks.length) {
   process.exit(1);
 }
 
-// ---------- Step 3: 写成功标记（Package artifacts / Deploy step 可以用） ----------
+// ---------- Step 3: 写成功标记 ----------
 const markerPath = join(OUTPUT_DIR, '.BUILD_OK');
 const markerContent = JSON.stringify({
   builtAt: new Date().toISOString(),
