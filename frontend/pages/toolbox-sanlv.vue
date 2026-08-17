@@ -51,8 +51,14 @@
             </el-row>
           </el-form>
 
-          <!-- 导入区（内联模板，确保按钮一定能渲染） -->
-          <div class="import-uploader">
+          <!-- 导入区（v-loading 整区遮罩，用户一眼能看到正在解析） -->
+          <div
+            class="import-uploader"
+            v-loading="rulePreviewLoading || ruleSaving"
+            :element-loading-text="ruleStageMsg"
+            element-loading-spinner="el-icon-loading"
+            element-loading-background="rgba(255, 255, 255, 0.82)"
+          >
             <div class="uploader-title">📥 上传评分规则 Excel/CSV</div>
 
             <el-radio-group v-model="ruleImportMode" size="default" style="margin-bottom: 12px;">
@@ -130,7 +136,7 @@
             </el-tag>
             <el-tag type="danger" v-else>❌ 解析失败：{{ rulePreview.error || '未知错误' }}</el-tag>
             <el-space style="margin-left: auto;">
-              <el-button type="primary" :disabled="!!rulePreview.error || rulePreview.totalRows <= 0" @click="doRuleSave">
+              <el-button type="primary" :disabled="!!rulePreview.error || rulePreview.totalRows <= 0 || ruleSaving" :loading="ruleSaving" @click="doRuleSave">
                 💾 保存为新规则版本
               </el-button>
             </el-space>
@@ -270,8 +276,14 @@
             </el-row>
           </el-form>
 
-          <!-- 导入区（内联模板） -->
-          <div class="import-uploader">
+          <!-- 导入区（v-loading 整区遮罩，用户一眼能看到正在解析） -->
+          <div
+            class="import-uploader"
+            v-loading="reportPreviewLoading || reportSaving"
+            :element-loading-text="reportStageMsg"
+            element-loading-spinner="el-icon-loading"
+            element-loading-background="rgba(255, 255, 255, 0.82)"
+          >
             <div class="uploader-title">📥 上传船舶三率月报 Excel/CSV</div>
 
             <el-radio-group v-model="reportImportMode" size="default" style="margin-bottom: 12px;">
@@ -349,7 +361,7 @@
             </el-tag>
             <el-tag type="danger" v-else>❌ 解析失败：{{ reportPreview.error || '未知错误' }}</el-tag>
             <el-space style="margin-left: auto;">
-              <el-button type="primary" :disabled="!!reportPreview.error || !canSaveReport" @click="doReportSave">
+              <el-button type="primary" :disabled="!!reportPreview.error || !canSaveReport || reportSaving" :loading="reportSaving" @click="doReportSave">
                 💾 保存本月月报
               </el-button>
             </el-space>
@@ -429,7 +441,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { UploadFilled } from '@element-plus/icons-vue';
 
@@ -439,12 +451,29 @@ let ElMessage: any = (window as any).ElMessage || { success: console.log, error:
 
 const activeTab = ref<'rule' | 'report'>('rule');
 
+// 任意 Promise 加看门狗：超时 ms 后 reject；null=已 resolve
+function watchdogWrap<T>(p: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`⏱ ${label} 超时（${Math.round(timeoutMs/1000)}秒）：网络可能较慢或文件过大，请重试或缩小数据量`)), timeoutMs);
+    p.then(v => { clearTimeout(t); resolve(v); })
+     .catch(e => { clearTimeout(t); reject(e); });
+  });
+}
+
+// 让出至少 N 毫秒 + nextTick，确保 browser 把 loading 遮罩这一帧渲染出来（否则主线程直接被 FileReader/base64 占满像没反应）
+async function renderLoadingFirst(extraDelayMs = 60) {
+  await nextTick();
+  await new Promise<void>(r => setTimeout(r, extraDelayMs));
+}
+
 // ============ 评分规则 ============
 const ruleImportMode = ref<'file' | 'paste'>('file');
 const ruleSelectedFile = ref<File | null>(null);
 const ruleFileInfo = ref('');
 const rulePasteText = ref('');
 const rulePreviewLoading = ref(false);
+const ruleSaving = ref(false);
+const ruleStageMsg = ref(''); // 动态文案传给 v-loading-text
 const ruleUploadRef = ref<any>(null);
 
 const ruleForm = reactive({
@@ -483,6 +512,8 @@ const reportSelectedFile = ref<File | null>(null);
 const reportFileInfo = ref('');
 const reportPasteText = ref('');
 const reportPreviewLoading = ref(false);
+const reportSaving = ref(false);
+const reportStageMsg = ref('');
 const reportUploadRef = ref<any>(null);
 
 const reportForm = reactive({
@@ -543,10 +574,31 @@ function rowToObj(headers: string[], row: any[]) {
   return obj;
 }
 
-function readFileAsBase64(file: File): Promise<string> {
+function readFileAsBase64(file: File, onProgress?: (pct: number, msg: string) => void): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = e => resolve(((e.target?.result as string) || '').split(',')[1] || '');
+    // 粗略进度：onloadstart(0) → progress 触发多次（非必需）→ onload
+    const startAt = Date.now();
+    reader.onloadstart = () => {
+      onProgress?.(5, '正在读取文件到浏览器内存…');
+    };
+    reader.onprogress = (ev: any) => {
+      if (ev && ev.total) {
+        const pct = Math.max(5, Math.min(40, Math.round((ev.loaded / ev.total) * 35) + 5));
+        const kb = Math.round(ev.loaded / 1024);
+        onProgress?.(pct, `正在读取文件到浏览器内存…${kb}KB`);
+      }
+    };
+    reader.onload = e => {
+      onProgress?.(45, '文件读取完成，正在编码传输…');
+      const cost = Date.now() - startAt;
+      // 大文件 base64 阶段给用户明确期望
+      const costMsg = cost > 1500 ? `（读取耗时 ${(cost/1000).toFixed(1)}s）` : '';
+      onProgress?.(50, '文件编码完成，正在上传到服务器'+costMsg);
+      const result = ((e.target?.result as string) || '').split(',')[1] || '';
+      // 让出一帧，确保 progress 文案先被渲染
+      setTimeout(() => resolve(result), 40);
+    };
     reader.onerror = () => reject(new Error('文件读取失败'));
     reader.readAsDataURL(file);
   });
@@ -586,18 +638,33 @@ function onRuleFileChange(file: any) {
 
 async function doRuleFilePreview() {
   if (!ruleSelectedFile.value) return ElMessage.warning('请先选择文件');
+  // 1. 先把 loading + 文案画出来，至少给一帧
   rulePreviewLoading.value = true;
+  ruleStageMsg.value = `① 准备读取文件：${ruleSelectedFile.value.name}…`;
+  await renderLoadingFirst(80);
+
   try {
-    const base64 = await readFileAsBase64(ruleSelectedFile.value);
-    await onRulePreviewRequest({
-      fileContent: base64,
-      fileName: ruleSelectedFile.value.name,
-      text: '',
-    });
+    const base64 = await watchdogWrap(
+      readFileAsBase64(ruleSelectedFile.value, (_p, msg) => { ruleStageMsg.value = '① ' + msg; }),
+      60_000,
+      `读取文件「${ruleSelectedFile.value.name}」`,
+    );
+
+    ruleStageMsg.value = '② 正在上传到服务器并解析，请稍候…';
+    await watchdogWrap(
+      onRulePreviewRequest({
+        fileContent: base64,
+        fileName: ruleSelectedFile.value.name,
+        text: '',
+      }),
+      120_000,
+      `后端解析评分规则「${ruleSelectedFile.value.name}」`,
+    );
   } catch (e: any) {
-    ElMessage.error('文件读取失败：' + (e?.message || String(e)));
+    ElMessage.error('预览失败：' + (e?.message || String(e)));
   } finally {
     rulePreviewLoading.value = false;
+    ruleStageMsg.value = '';
   }
 }
 
@@ -605,14 +672,23 @@ async function doRulePastePreview() {
   const t = rulePasteText.value.trim();
   if (!t) return ElMessage.warning('请先粘贴表格内容');
   rulePreviewLoading.value = true;
+  ruleStageMsg.value = '② 正在上传粘贴内容并解析，请稍候…';
+  await renderLoadingFirst(50);
   try {
-    await onRulePreviewRequest({
-      fileContent: '',
-      fileName: '',
-      text: t,
-    });
+    await watchdogWrap(
+      onRulePreviewRequest({
+        fileContent: '',
+        fileName: '',
+        text: t,
+      }),
+      60_000,
+      `后端解析粘贴的评分规则内容`,
+    );
+  } catch (e: any) {
+    ElMessage.error('预览失败：' + (e?.message || String(e)));
   } finally {
     rulePreviewLoading.value = false;
+    ruleStageMsg.value = '';
   }
 }
 
@@ -633,28 +709,38 @@ async function onRulePreviewRequest(req: any) {
   rulePreview.sourceName = (res as any).sourceName;
   rulePreview.error = (res as any).error;
   if ((res as any).error) ElMessage.error('预览解析失败：' + (res as any).error);
-  else ElMessage.success(`解析成功，共 ${rulePreview.totalRows} 行数据（仅预览前 20 行）`);
+  else ElMessage.success(`✅ 解析成功，共 ${rulePreview.totalRows} 行数据（仅预览前 20 行）`);
 }
 
 async function doRuleSave() {
+  if (ruleSaving.value) return;
+  ruleSaving.value = true;
+  ruleStageMsg.value = '💾 正在保存为新规则版本…';
   try {
-    const res: any = await api.sanlvRules.import({
-      fileContent: ruleForm.fileContent,
-      fileName: ruleForm.fileName,
-      text: ruleForm.text,
-      sourceType: ruleForm.sourceType,
-      sourceName: ruleForm.fileName,
-      ruleName: ruleForm.ruleName,
-      ruleVersion: ruleForm.ruleVersion,
-      ruleYear: ruleForm.ruleYear,
-      ruleRemark: ruleForm.ruleRemark,
-      isCurrent: ruleForm.isCurrent,
-    });
+    const res: any = await watchdogWrap(
+      api.sanlvRules.import({
+        fileContent: ruleForm.fileContent,
+        fileName: ruleForm.fileName,
+        text: ruleForm.text,
+        sourceType: ruleForm.sourceType,
+        sourceName: ruleForm.fileName,
+        ruleName: ruleForm.ruleName,
+        ruleVersion: ruleForm.ruleVersion,
+        ruleYear: ruleForm.ruleYear,
+        ruleRemark: ruleForm.ruleRemark,
+        isCurrent: ruleForm.isCurrent,
+      }),
+      120_000,
+      `保存评分规则版本`,
+    );
     ElMessage.success(`✅ 评分规则导入成功！版本ID=${res.ruleId}，共写入 ${res.importSummary?.totalRows ?? 0} 条评分项目`);
     resetRuleForm();
     await loadRuleList();
   } catch (e: any) {
     ElMessage.error('保存失败：' + (e?.message || String(e)));
+  } finally {
+    ruleSaving.value = false;
+    ruleStageMsg.value = '';
   }
 }
 
@@ -678,7 +764,7 @@ function resetRuleForm() {
 async function loadRuleList() {
   ruleList.loading = true;
   try {
-    const res: any = await api.sanlvRules.list();
+    const res: any = await watchdogWrap(api.sanlvRules.list(), 30_000, '加载评分规则列表');
     ruleList.items = res.items || [];
     ruleList.total = res.total || 0;
   } finally {
@@ -723,17 +809,31 @@ function onReportFileChange(file: any) {
 async function doReportFilePreview() {
   if (!reportSelectedFile.value) return ElMessage.warning('请先选择文件');
   reportPreviewLoading.value = true;
+  reportStageMsg.value = `① 准备读取文件：${reportSelectedFile.value.name}…`;
+  await renderLoadingFirst(80);
+
   try {
-    const base64 = await readFileAsBase64(reportSelectedFile.value);
-    await onReportPreviewRequest({
-      fileContent: base64,
-      fileName: reportSelectedFile.value.name,
-      text: '',
-    });
+    const base64 = await watchdogWrap(
+      readFileAsBase64(reportSelectedFile.value, (_p, msg) => { reportStageMsg.value = '① ' + msg; }),
+      60_000,
+      `读取文件「${reportSelectedFile.value.name}」`,
+    );
+
+    reportStageMsg.value = '② 正在上传并解析月报，请稍候…';
+    await watchdogWrap(
+      onReportPreviewRequest({
+        fileContent: base64,
+        fileName: reportSelectedFile.value.name,
+        text: '',
+      }),
+      120_000,
+      `后端解析三率月报「${reportSelectedFile.value.name}」`,
+    );
   } catch (e: any) {
-    ElMessage.error('文件读取失败：' + (e?.message || String(e)));
+    ElMessage.error('预览失败：' + (e?.message || String(e)));
   } finally {
     reportPreviewLoading.value = false;
+    reportStageMsg.value = '';
   }
 }
 
@@ -741,14 +841,23 @@ async function doReportPastePreview() {
   const t = reportPasteText.value.trim();
   if (!t) return ElMessage.warning('请先粘贴表格内容');
   reportPreviewLoading.value = true;
+  reportStageMsg.value = '② 正在上传粘贴内容并解析月报，请稍候…';
+  await renderLoadingFirst(50);
   try {
-    await onReportPreviewRequest({
-      fileContent: '',
-      fileName: '',
-      text: t,
-    });
+    await watchdogWrap(
+      onReportPreviewRequest({
+        fileContent: '',
+        fileName: '',
+        text: t,
+      }),
+      60_000,
+      `后端解析粘贴的月报内容`,
+    );
+  } catch (e: any) {
+    ElMessage.error('预览失败：' + (e?.message || String(e)));
   } finally {
     reportPreviewLoading.value = false;
+    reportStageMsg.value = '';
   }
 }
 
@@ -796,33 +905,43 @@ async function onReportPreviewRequest(req: any) {
 async function doReportSave() {
   if (!reportForm.shipName.trim()) return ElMessage.warning('请先填写船舶名称');
   if (!/^\d{4}-\d{2}$/.test(reportForm.reportMonth)) return ElMessage.warning('请选择正确的统计月份（YYYY-MM）');
+  if (reportSaving.value) return;
+  reportSaving.value = true;
+  reportStageMsg.value = '💾 正在保存本月月报…';
   try {
     const year = parseInt(reportForm.reportMonth.slice(0, 4), 10);
-    const res: any = await api.sanlvReports.import({
-      fileContent: reportForm.fileContent,
-      fileName: reportForm.fileName,
-      text: reportForm.text,
-      sourceType: reportForm.sourceType,
-      sourceName: reportForm.fileName,
+    const res: any = await watchdogWrap(
+      api.sanlvReports.import({
+        fileContent: reportForm.fileContent,
+        fileName: reportForm.fileName,
+        text: reportForm.text,
+        sourceType: reportForm.sourceType,
+        sourceName: reportForm.fileName,
 
-      shipName: reportForm.shipName.trim(),
-      reportMonth: reportForm.reportMonth,
-      reportYear: reportForm.reportYear ?? year,
-      ruleId: reportForm.ruleId,
-      totalScore: reportForm.totalScore,
-      passScore: reportForm.passScore,
-      labelRate1: reportForm.labelRate1,
-      threeRate1: reportForm.threeRate1,
-      labelRate2: reportForm.labelRate2,
-      threeRate2: reportForm.threeRate2,
-      labelRate3: reportForm.labelRate3,
-      threeRate3: reportForm.threeRate3,
-    });
+        shipName: reportForm.shipName.trim(),
+        reportMonth: reportForm.reportMonth,
+        reportYear: reportForm.reportYear ?? year,
+        ruleId: reportForm.ruleId,
+        totalScore: reportForm.totalScore,
+        passScore: reportForm.passScore,
+        labelRate1: reportForm.labelRate1,
+        threeRate1: reportForm.threeRate1,
+        labelRate2: reportForm.labelRate2,
+        threeRate2: reportForm.threeRate2,
+        labelRate3: reportForm.labelRate3,
+        threeRate3: reportForm.threeRate3,
+      }),
+      120_000,
+      `保存三率月报 ${reportForm.shipName || ''} ${reportForm.reportMonth || ''}`,
+    );
     ElMessage.success(`✅ 月报导入成功！月报ID=${res.reportId}，共 ${res.importSummary?.totalRows ?? 0} 条评分明细`);
     resetReportForm();
     await loadReportList();
   } catch (e: any) {
     ElMessage.error('保存失败：' + (e?.message || String(e)));
+  } finally {
+    reportSaving.value = false;
+    reportStageMsg.value = '';
   }
 }
 
@@ -848,7 +967,7 @@ function resetReportForm() {
 async function loadReportList() {
   reportList.loading = true;
   try {
-    const res: any = await api.sanlvReports.list();
+    const res: any = await watchdogWrap(api.sanlvReports.list(), 30_000, '加载月报列表');
     reportList.items = res.items || [];
     reportList.total = res.total || 0;
   } finally {
@@ -922,15 +1041,34 @@ onMounted(async () => {
 
 .bad-score { color: #dc2626; font-weight: 600; }
 
-/* --- 导入上传器 --- */
+/* --- 导入上传器（给 v-loading 子组件相对定位） --- */
 .import-uploader {
+  position: relative;
   background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 14px 18px;
+  /* 额外加粗 loading 文案，让 spinner + 文字更醒目 */
+  --el-loading-text-font-size: 14px;
+  --el-loading-spinner-size: 42px;
+}
+:deep(.el-loading-mask) {
+  border-radius: 12px;
+}
+:deep(.el-loading-text) {
+  margin-top: 10px !important;
+  font-weight: 600 !important;
+  color: #1d4ed8 !important;
+  font-size: 14px !important;
+  max-width: 90%;
+  line-height: 1.6;
+  white-space: pre-wrap;
 }
 .uploader-title { font-weight: 600; font-size: 15px; margin-bottom: 10px; color: #111827; }
 
 .preview-btn {
   margin-top: 12px;
   width: 100%;
+  min-height: 48px;
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .dz-file { color: #16a34a; margin-top: 8px; font-weight: 500; }
