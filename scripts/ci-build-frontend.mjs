@@ -74,11 +74,13 @@ for (const d of cacheDirs) {
 // // ====== 以上全部注释掉 ========================================================================
 
 // ★ v21 干净版：只给 --max-old-space-size=6144（配合 .npmrc），其他 V8 flag 全不用，让 V8 用默认策略
-log('Step 1/3: Run nuxt build (v21 干净版 → NODE_OPTIONS=--max-old-space-size=6144)...');
+// v22 调整：追加 --max-semi-space-size=4，让 V8 更频繁 GC，缓解 4GB cgroup OOM（2026-08-17 修三率导入按钮时遇到的坑）
+log('Step 1/3: Run nuxt build (v22 → NODE_OPTIONS=--max-old-space-size=6144 --max-semi-space-size=4)...');
 log('  (old-space 选 6144 = 6GB：v16(4096) V8 FATAL used=3820 / v18(8192) SIGKILL → 6GB 在中间)');
+log('  (max-semi-space-size=4：缩小 V8 新生代 semi-space，强制更频繁 minor GC，降低 cgroup OOM 概率)');
 const buildEnv = {
   ...process.env,
-  NODE_OPTIONS: '--max-old-space-size=6144',
+  NODE_OPTIONS: '--max-old-space-size=6144 --max-semi-space-size=4',
   NUXT_TELEMETRY_DISABLED: '1',
   DISABLE_OPENCOLLECTIVE: '1',
   NEXT_TELEMETRY_DISABLED: '1',
@@ -90,6 +92,7 @@ log(`  using npx at: ${npxPath}`);
 log(`  buildEnv.NODE_OPTIONS = ${buildEnv.NODE_OPTIONS}`);
 const nodeArgs = [
   '--max-old-space-size=6144',
+  '--max-semi-space-size=4',
   npxPath,
   'nuxt',
   'build',

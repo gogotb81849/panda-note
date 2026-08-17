@@ -52,6 +52,9 @@ export default defineNuxtConfig({
   // ★ v21 干净版 nitro：只用默认值
   nitro: {
     preset: 'node-server',
+    // 临时省内存：关闭 nitro 阶段 minify 与 sourceMap，缓解 4GB cgroup OOM
+    minify: false,
+    sourceMap: false,
   },
 
   // // ====== v10-v20 旧版配置（已全部注释掉，运行成功后删除）======================================
@@ -198,7 +201,7 @@ export default defineNuxtConfig({
           urlPattern: /\/_nuxt\/.*\.(js|css)$/i,
           handler: 'NetworkFirst',
           options: {
-            cacheName: 'app-cache-v14',
+            cacheName: 'app-cache-v15',
             expiration: {
               maxEntries: 200,
               maxAgeSeconds: 60 * 60 * 24 * 30,
@@ -209,7 +212,7 @@ export default defineNuxtConfig({
           urlPattern: /^https:\/\/.*\/api\//i,
           handler: 'NetworkFirst',
           options: {
-            cacheName: 'api-cache-v14',
+            cacheName: 'api-cache-v15',
             expiration: {
               maxEntries: 200,
               maxAgeSeconds: 60 * 60 * 24,
@@ -223,7 +226,7 @@ export default defineNuxtConfig({
           urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp|woff2?)$/,
           handler: 'CacheFirst',
           options: {
-            cacheName: 'static-cache-v14',
+            cacheName: 'static-cache-v15',
             expiration: {
               maxEntries: 100,
               maxAgeSeconds: 60 * 60 * 24 * 30,
@@ -234,7 +237,7 @@ export default defineNuxtConfig({
           urlPattern: ({ request }) => request.mode === 'navigate',
           handler: 'NetworkFirst',
           options: {
-            cacheName: 'pages-cache-v14',
+            cacheName: 'pages-cache-v15',
             networkTimeoutSeconds: 10,
             expiration: {
               maxEntries: 50,

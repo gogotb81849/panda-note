@@ -51,12 +51,77 @@
             </el-row>
           </el-form>
 
-          <ImportUploader
-            title="上传评分规则 Excel/CSV"
-            paste-tip="粘贴评分规则表格（Tab分隔，可从 Excel/WPS 整表复制）"
-            @preview-request="onRulePreviewRequest"
-            @file-change="ruleForm.fileName = $event?.name || ''"
-          />
+          <!-- 导入区（内联模板，确保按钮一定能渲染） -->
+          <div class="import-uploader">
+            <div class="uploader-title">📥 上传评分规则 Excel/CSV</div>
+
+            <el-radio-group v-model="ruleImportMode" size="default" style="margin-bottom: 12px;">
+              <el-radio-button label="file">📎 上传文件 / 拖拽到窗口</el-radio-button>
+              <el-radio-button label="paste">📋 粘贴文本（TSV / CSV）</el-radio-button>
+            </el-radio-group>
+
+            <!-- 文件上传 -->
+            <div v-if="ruleImportMode === 'file'">
+              <el-upload
+                ref="ruleUploadRef"
+                :auto-upload="false"
+                :limit="1"
+                :on-change="onRuleFileChange"
+                :on-exceed="() => ElMessage.warning('一次只能上传一个文件，请先移除已有文件')"
+                accept=".xlsx,.xls,.csv"
+                drag
+                style="width: 100%;"
+              >
+                <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
+                <div class="el-upload__text">
+                  <em>点击选择文件</em> 或拖拽文件到此区域上传
+                </div>
+                <template #tip>
+                  <div class="el-upload__tip">
+                    支持 .xlsx / .xls / .csv 格式，文件大小建议 ≤ 10MB
+                  </div>
+                </template>
+              </el-upload>
+
+              <div v-if="ruleFileInfo" class="dz-file">✅ 已选文件：{{ ruleFileInfo }}</div>
+
+              <el-button
+                type="primary"
+                size="large"
+                class="preview-btn"
+                :disabled="!ruleSelectedFile"
+                :loading="rulePreviewLoading"
+                @click="doRuleFilePreview"
+              >
+                🔍 预览解析结果
+              </el-button>
+            </div>
+
+            <!-- 粘贴文本 -->
+            <div v-else class="paste-zone">
+              <div style="margin-bottom: 8px; font-weight: 600;">
+                粘贴评分规则表格（Tab 分隔，可从 Excel/WPS 整表复制）
+              </div>
+              <el-input
+                v-model="rulePasteText"
+                type="textarea"
+                :rows="8"
+                placeholder="从 Excel/WPS/飞书表格/Google Sheet 选中区域 → Ctrl+C → 回到这里 Ctrl+V 直接粘贴&#10;支持 Tab 分隔 (TSV) / 逗号分隔 (CSV)"
+              />
+              <el-button
+                type="primary"
+                plain
+                size="large"
+                class="preview-btn"
+                style="margin-top: 10px;"
+                :disabled="!rulePasteText.trim()"
+                :loading="rulePreviewLoading"
+                @click="doRulePastePreview"
+              >
+                🔍 预览解析结果
+              </el-button>
+            </div>
+          </div>
 
           <div class="actions-bar" v-if="rulePreview.matrix.length">
             <el-tag type="success" v-if="!rulePreview.error">
@@ -71,12 +136,29 @@
             </el-space>
           </div>
 
-          <DataPreview
-            v-if="rulePreview.matrix.length"
-            :headers="rulePreview.headers"
-            :rows="rulePreview.matrix.slice(0, 20)"
-            :total-rows="rulePreview.matrix.length"
-          />
+          <!-- 预览表格（内联） -->
+          <div class="data-preview" v-if="rulePreview.matrix.length">
+            <div class="pv-head">
+              🔍 预览：<b>前 {{ Math.min(rulePreview.matrix.length, 20) }} 行</b>
+              <span v-if="rulePreview.totalRows > 20"> · （原表共 {{ rulePreview.totalRows + 1 }} 行，完整数据已保存到后端）</span>
+            </div>
+            <div class="pv-wrap">
+              <el-table
+                :data="rulePreview.matrix.slice(0, 20).map((r, idx) => ({ __idx: idx + 1, ...rowToObj(rulePreview.headers, r) }))"
+                border stripe size="small" max-height="360" style="width: 100%"
+              >
+                <el-table-column label="#" prop="__idx" width="50" fixed />
+                <el-table-column
+                  v-for="(h, i) in (rulePreview.headers.length ? rulePreview.headers : (rulePreview.matrix[0] || []).map((_, i) => `第${i+1}列`))"
+                  :key="i"
+                  :prop="h || `col_${i}`"
+                  :label="h || `第${i+1}列`"
+                  min-width="120"
+                  show-overflow-tooltip
+                />
+              </el-table>
+            </div>
+          </div>
 
           <div class="history-section">
             <h3>📚 已保存的规则版本</h3>
@@ -188,12 +270,77 @@
             </el-row>
           </el-form>
 
-          <ImportUploader
-            title="上传船舶三率月报 Excel/CSV"
-            paste-tip="粘贴月报表格（从 Excel/WPS 整表复制后直接粘贴到下方文本框）"
-            @preview-request="onReportPreviewRequest"
-            @file-change="reportForm.fileName = $event?.name || ''"
-          />
+          <!-- 导入区（内联模板） -->
+          <div class="import-uploader">
+            <div class="uploader-title">📥 上传船舶三率月报 Excel/CSV</div>
+
+            <el-radio-group v-model="reportImportMode" size="default" style="margin-bottom: 12px;">
+              <el-radio-button label="file">📎 上传文件 / 拖拽到窗口</el-radio-button>
+              <el-radio-button label="paste">📋 粘贴文本（TSV / CSV）</el-radio-button>
+            </el-radio-group>
+
+            <!-- 文件上传 -->
+            <div v-if="reportImportMode === 'file'">
+              <el-upload
+                ref="reportUploadRef"
+                :auto-upload="false"
+                :limit="1"
+                :on-change="onReportFileChange"
+                :on-exceed="() => ElMessage.warning('一次只能上传一个文件，请先移除已有文件')"
+                accept=".xlsx,.xls,.csv"
+                drag
+                style="width: 100%;"
+              >
+                <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
+                <div class="el-upload__text">
+                  <em>点击选择文件</em> 或拖拽文件到此区域上传
+                </div>
+                <template #tip>
+                  <div class="el-upload__tip">
+                    支持 .xlsx / .xls / .csv 格式，文件大小建议 ≤ 10MB
+                  </div>
+                </template>
+              </el-upload>
+
+              <div v-if="reportFileInfo" class="dz-file">✅ 已选文件：{{ reportFileInfo }}</div>
+
+              <el-button
+                type="primary"
+                size="large"
+                class="preview-btn"
+                :disabled="!reportSelectedFile"
+                :loading="reportPreviewLoading"
+                @click="doReportFilePreview"
+              >
+                🔍 预览解析结果
+              </el-button>
+            </div>
+
+            <!-- 粘贴文本 -->
+            <div v-else class="paste-zone">
+              <div style="margin-bottom: 8px; font-weight: 600;">
+                粘贴月报表格（从 Excel/WPS 整表复制后直接粘贴到下方文本框）
+              </div>
+              <el-input
+                v-model="reportPasteText"
+                type="textarea"
+                :rows="8"
+                placeholder="从 Excel/WPS/飞书表格/Google Sheet 选中区域 → Ctrl+C → 回到这里 Ctrl+V 直接粘贴&#10;支持 Tab 分隔 (TSV) / 逗号分隔 (CSV)"
+              />
+              <el-button
+                type="primary"
+                plain
+                size="large"
+                class="preview-btn"
+                style="margin-top: 10px;"
+                :disabled="!reportPasteText.trim()"
+                :loading="reportPreviewLoading"
+                @click="doReportPastePreview"
+              >
+                🔍 预览解析结果
+              </el-button>
+            </div>
+          </div>
 
           <div class="actions-bar" v-if="reportPreview.matrix.length">
             <el-tag type="success" v-if="!reportPreview.error">
@@ -208,12 +355,29 @@
             </el-space>
           </div>
 
-          <DataPreview
-            v-if="reportPreview.matrix.length"
-            :headers="reportPreview.headers"
-            :rows="reportPreview.matrix.slice(0, 20)"
-            :total-rows="reportPreview.matrix.length"
-          />
+          <!-- 预览表格（内联） -->
+          <div class="data-preview" v-if="reportPreview.matrix.length">
+            <div class="pv-head">
+              🔍 预览：<b>前 {{ Math.min(reportPreview.matrix.length, 20) }} 行</b>
+              <span v-if="reportPreview.totalRows > 20"> · （原表共 {{ reportPreview.totalRows + 1 }} 行，完整数据已保存到后端）</span>
+            </div>
+            <div class="pv-wrap">
+              <el-table
+                :data="reportPreview.matrix.slice(0, 20).map((r, idx) => ({ __idx: idx + 1, ...rowToObj(reportPreview.headers, r) }))"
+                border stripe size="small" max-height="360" style="width: 100%"
+              >
+                <el-table-column label="#" prop="__idx" width="50" fixed />
+                <el-table-column
+                  v-for="(h, i) in (reportPreview.headers.length ? reportPreview.headers : (reportPreview.matrix[0] || []).map((_, i) => `第${i+1}列`))"
+                  :key="i"
+                  :prop="h || `col_${i}`"
+                  :label="h || `第${i+1}列`"
+                  min-width="120"
+                  show-overflow-tooltip
+                />
+              </el-table>
+            </div>
+          </div>
 
           <div class="history-section">
             <h3>📚 已保存的月报（最近 30 条）</h3>
@@ -267,18 +431,22 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { UploadFilled } from '@element-plus/icons-vue';
 
 const router = useRouter();
 const { api } = useApi();
-const ElMessage = (window as any).ElMessage || { success: console.log, error: console.error, warning: console.warn };
+let ElMessage: any = (window as any).ElMessage || { success: console.log, error: console.error, warning: console.warn };
 
 const activeTab = ref<'rule' | 'report'>('rule');
-const todayYM = computed(() => {
-  // 安全：客户端渲染后才计算；SSR 返回 null
-  return null as unknown as string;
-});
 
 // ============ 评分规则 ============
+const ruleImportMode = ref<'file' | 'paste'>('file');
+const ruleSelectedFile = ref<File | null>(null);
+const ruleFileInfo = ref('');
+const rulePasteText = ref('');
+const rulePreviewLoading = ref(false);
+const ruleUploadRef = ref<any>(null);
+
 const ruleForm = reactive({
   fileContent: '' as string,
   fileName: '' as string,
@@ -310,6 +478,13 @@ const ruleList = reactive<{
 }>({ loading: false, items: [], total: 0 });
 
 // ============ 月报 ============
+const reportImportMode = ref<'file' | 'paste'>('file');
+const reportSelectedFile = ref<File | null>(null);
+const reportFileInfo = ref('');
+const reportPasteText = ref('');
+const reportPreviewLoading = ref(false);
+const reportUploadRef = ref<any>(null);
+
 const reportForm = reactive({
   fileContent: '' as string,
   fileName: '' as string,
@@ -357,6 +532,26 @@ const canSaveReport = computed(
     /^\d{4}-\d{2}$/.test(reportForm.reportMonth),
 );
 
+// ============ 工具函数 ============
+function rowToObj(headers: string[], row: any[]) {
+  const obj: Record<string, any> = {};
+  const hs = headers.length ? headers : (row || []).map((_, i) => `第${i + 1}列`);
+  hs.forEach((h, i) => {
+    const key = h || `col_${i}`;
+    obj[key] = row[i];
+  });
+  return obj;
+}
+
+function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => resolve(((e.target?.result as string) || '').split(',')[1] || '');
+    reader.onerror = () => reject(new Error('文件读取失败'));
+    reader.readAsDataURL(file);
+  });
+}
+
 // ============ 事件 ============
 function goBackToolbox() {
   // 按三层兜底来
@@ -372,6 +567,52 @@ function goBackToolbox() {
       .catch(() => { if (!watchdogFired) { clearTimeout(watchdog); window.location.href = targetPath; } });
   } catch {
     if (!watchdogFired) { clearTimeout(watchdog); window.location.href = targetPath; }
+  }
+}
+
+// ===== 评分规则：文件选择 =====
+function onRuleFileChange(file: any) {
+  if (!file || !file.raw) return;
+  const f: File = file.raw;
+  const okExt = /\.(xlsx|xls|csv)$/i.test(f.name);
+  if (!okExt) {
+    ElMessage.warning('文件格式仅支持 .xlsx / .xls / .csv');
+    if (ruleUploadRef.value) ruleUploadRef.value.clearFiles();
+    return;
+  }
+  ruleSelectedFile.value = f;
+  ruleFileInfo.value = `${f.name} (${(f.size / 1024).toFixed(1)} KB)`;
+}
+
+async function doRuleFilePreview() {
+  if (!ruleSelectedFile.value) return ElMessage.warning('请先选择文件');
+  rulePreviewLoading.value = true;
+  try {
+    const base64 = await readFileAsBase64(ruleSelectedFile.value);
+    await onRulePreviewRequest({
+      fileContent: base64,
+      fileName: ruleSelectedFile.value.name,
+      text: '',
+    });
+  } catch (e: any) {
+    ElMessage.error('文件读取失败：' + (e?.message || String(e)));
+  } finally {
+    rulePreviewLoading.value = false;
+  }
+}
+
+async function doRulePastePreview() {
+  const t = rulePasteText.value.trim();
+  if (!t) return ElMessage.warning('请先粘贴表格内容');
+  rulePreviewLoading.value = true;
+  try {
+    await onRulePreviewRequest({
+      fileContent: '',
+      fileName: '',
+      text: t,
+    });
+  } finally {
+    rulePreviewLoading.value = false;
   }
 }
 
@@ -423,11 +664,15 @@ function resetRuleForm() {
   ruleForm.text = '';
   ruleForm.ruleName = '';
   ruleForm.ruleVersion = '';
+  ruleSelectedFile.value = null;
+  ruleFileInfo.value = '';
+  rulePasteText.value = '';
   rulePreview.headers = [];
   rulePreview.matrix = [];
   rulePreview.totalRows = 0;
   rulePreview.error = undefined;
   rulePreview.sourceName = undefined;
+  if (ruleUploadRef.value) ruleUploadRef.value.clearFiles();
 }
 
 async function loadRuleList() {
@@ -458,6 +703,52 @@ async function deleteRule(id: number) {
     await loadRuleList();
   } catch (e: any) {
     ElMessage.error('删除失败：' + (e?.message || String(e)));
+  }
+}
+
+// ===== 月报：文件选择 =====
+function onReportFileChange(file: any) {
+  if (!file || !file.raw) return;
+  const f: File = file.raw;
+  const okExt = /\.(xlsx|xls|csv)$/i.test(f.name);
+  if (!okExt) {
+    ElMessage.warning('文件格式仅支持 .xlsx / .xls / .csv');
+    if (reportUploadRef.value) reportUploadRef.value.clearFiles();
+    return;
+  }
+  reportSelectedFile.value = f;
+  reportFileInfo.value = `${f.name} (${(f.size / 1024).toFixed(1)} KB)`;
+}
+
+async function doReportFilePreview() {
+  if (!reportSelectedFile.value) return ElMessage.warning('请先选择文件');
+  reportPreviewLoading.value = true;
+  try {
+    const base64 = await readFileAsBase64(reportSelectedFile.value);
+    await onReportPreviewRequest({
+      fileContent: base64,
+      fileName: reportSelectedFile.value.name,
+      text: '',
+    });
+  } catch (e: any) {
+    ElMessage.error('文件读取失败：' + (e?.message || String(e)));
+  } finally {
+    reportPreviewLoading.value = false;
+  }
+}
+
+async function doReportPastePreview() {
+  const t = reportPasteText.value.trim();
+  if (!t) return ElMessage.warning('请先粘贴表格内容');
+  reportPreviewLoading.value = true;
+  try {
+    await onReportPreviewRequest({
+      fileContent: '',
+      fileName: '',
+      text: t,
+    });
+  } finally {
+    reportPreviewLoading.value = false;
   }
 }
 
@@ -539,6 +830,9 @@ function resetReportForm() {
   reportForm.fileContent = '';
   reportForm.fileName = '';
   reportForm.text = '';
+  reportSelectedFile.value = null;
+  reportFileInfo.value = '';
+  reportPasteText.value = '';
   reportPreview.headers = [];
   reportPreview.matrix = [];
   reportPreview.totalRows = 0;
@@ -548,6 +842,7 @@ function resetReportForm() {
   reportForm.passScore = null;
   reportForm.labelRate1 = reportForm.labelRate2 = reportForm.labelRate3 = '';
   reportForm.threeRate1 = reportForm.threeRate2 = reportForm.threeRate3 = null;
+  if (reportUploadRef.value) reportUploadRef.value.clearFiles();
 }
 
 async function loadReportList() {
@@ -586,139 +881,6 @@ function fmtDate(s: any) {
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0')
     + ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
 }
-
-// ============ 子组件 ============
-// --- 导入上传器（三合一：文件选择 + 拖拽 + 粘贴）---
-const ImportUploader = {
-  props: {
-    title: { type: String, required: true },
-    pasteTip: { type: String, default: '' },
-  },
-  emits: ['preview-request', 'file-change'],
-  setup(props, ctx) {
-    const inputEl = ref<HTMLInputElement | null>(null);
-    const pasteText = ref('');
-    const importMode = ref<'file' | 'paste'>('file');
-    const fileInfo = ref('');
-
-    async function readFileAsBase64(file: File): Promise<string> {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = e => resolve(((e.target?.result as string) || '').split(',')[1] || '');
-        reader.onerror = () => reject(new Error('文件读取失败'));
-        reader.readAsDataURL(file);
-      });
-    }
-
-    async function onFilesChosen(files: FileList | File[]) {
-      const file = Array.from(files)[0];
-      if (!file) return;
-      const okExt = /\.(xlsx|xls|csv)$/i.test(file.name);
-      if (!okExt) return ElMessage.warning('文件格式仅支持 .xlsx / .xls / .csv');
-      fileInfo.value = `${file.name} (${(file.size/1024).toFixed(1)} KB)`;
-      ctx.emit('file-change', file);
-      try {
-        const base64 = await readFileAsBase64(file);
-        ctx.emit('preview-request', {
-          fileContent: base64,
-          fileName: file.name,
-          text: '',
-        });
-      } catch (e: any) {
-        ElMessage.error('文件读取失败：' + (e?.message || String(e)));
-      }
-    }
-
-    function doPasteRequest() {
-      const t = pasteText.value.trim();
-      if (!t) return ElMessage.warning('请先粘贴表格内容');
-      ctx.emit('preview-request', {
-        fileContent: '',
-        fileName: '',
-        text: t,
-      });
-    }
-
-    // 全局拖拽支持
-    let dragCounter = 0;
-    function onWinDrag(e: DragEvent) { e.preventDefault(); }
-    function onWinDrop(e: DragEvent) {
-      e.preventDefault();
-      if (e.dataTransfer?.files?.length) onFilesChosen(e.dataTransfer.files);
-    }
-
-    onMounted(() => {
-      window.addEventListener('dragover', onWinDrag);
-      window.addEventListener('drop', onWinDrop);
-    });
-
-    return { inputEl, pasteText, importMode, fileInfo, onFilesChosen, doPasteRequest, onWinDrag, onWinDrop };
-  },
-  template: `
-    <div class="import-uploader">
-      <div class="uploader-title">📥 {{ title }}</div>
-
-      <el-radio-group v-model="importMode" size="default" style="margin-bottom:12px;">
-        <el-radio-button label="file">📎 上传文件 / 拖拽到窗口任意位置</el-radio-button>
-        <el-radio-button label="paste">📋 粘贴文本（TSV / CSV）</el-radio-button>
-      </el-radio-group>
-
-      <div v-if="importMode === 'file'" class="upload-dropzone"
-        @click="inputEl && inputEl.click()"
-        @dragover.prevent
-        @drop.prevent="onFilesChosen($event.dataTransfer?.files || [])">
-        <input ref="inputEl" type="file" accept=".xlsx,.xls,.csv" style="display:none"
-          @change="onFilesChosen($event.target.files || [])" />
-        <div class="dz-icon">☁️</div>
-        <div class="dz-main">点击选择 Excel / CSV 文件，或直接把文件拖拽到浏览器窗口内任意位置</div>
-        <div class="dz-sub">支持：.xlsx / .xls / .csv（文件大小建议 ≤ 10MB）</div>
-        <div class="dz-file" v-if="fileInfo">✅ 已选文件：{{ fileInfo }}</div>
-      </div>
-
-      <div v-else class="paste-zone">
-        <div style="margin-bottom:8px;font-weight:600;">{{ pasteTip || '直接粘贴表格内容：' }}</div>
-        <el-input
-          v-model="pasteText"
-          type="textarea"
-          :rows="8"
-          placeholder="从 Excel/WPS/飞书表格/Google Sheet 选中区域 → Ctrl+C → 回到这里 Ctrl+V 直接粘贴&#10;支持 Tab 分隔 (TSV) / 逗号分隔 (CSV)"
-        />
-        <el-button type="primary" plain style="margin-top:10px;" @click="doPasteRequest">🔍 预览解析结果</el-button>
-      </div>
-    </div>
-  `,
-};
-
-// --- 数据预览表格 ---
-const DataPreview = {
-  props: {
-    headers: { type: Array as () => string[], required: true },
-    rows: { type: Array as () => any[][], required: true },
-    totalRows: { type: Number, default: 0 },
-  },
-  setup(props) {
-    return {
-      displayHeaders: computed(() => (props.headers.length ? props.headers : (props.rows[0] || []).map((_, i) => `第${i+1}列`))),
-    };
-  },
-  template: `
-    <div class="data-preview">
-      <div class="pv-head">
-        🔍 预览：<b>前 {{ rows.length }} 行</b>
-        <span v-if="totalRows > rows.length"> · （原表共 {{ totalRows+1 }} 行，完整数据已保存到后端）</span>
-      </div>
-      <div class="pv-wrap">
-        <el-table :data="rows.map((r,idx) => Object.assign({ __idx: idx }, headers.reduce((o,h,i)=>(o[h||('col_'+i)] = r[i], o), {})))"
-          border stripe size="small" max-height="360" style="width:100%">
-          <el-table-column label="#" width="50" type="index" />
-          <el-table-column v-for="(h, i) in displayHeaders" :key="i"
-            :prop="h || ('col_'+i)" :label="h || ('第'+(i+1)+'列')"
-            min-width="120" show-overflow-tooltip />
-        </el-table>
-      </div>
-    </div>
-  `,
-};
 
 // ============ 初始化（严格铁律 N5：非确定性放 onMounted）============
 onMounted(async () => {
@@ -765,14 +927,12 @@ onMounted(async () => {
   background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 14px 18px;
 }
 .uploader-title { font-weight: 600; font-size: 15px; margin-bottom: 10px; color: #111827; }
-.upload-dropzone {
-  border: 2px dashed #93c5fd; border-radius: 12px; padding: 28px 20px;
-  text-align: center; background: #f8fafc; cursor: pointer; transition: .2s;
+
+.preview-btn {
+  margin-top: 12px;
+  width: 100%;
 }
-.upload-dropzone:hover { background: #eff6ff; border-color: #3b82f6; }
-.dz-icon { font-size: 40px; margin-bottom: 4px; }
-.dz-main { font-weight: 600; color: #1e3a8a; margin-bottom: 4px; }
-.dz-sub { color: #64748b; font-size: 12px; margin-bottom: 10px; }
+
 .dz-file { color: #16a34a; margin-top: 8px; font-weight: 500; }
 .paste-zone { }
 
