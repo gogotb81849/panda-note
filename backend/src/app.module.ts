@@ -57,6 +57,8 @@ import { ImportantDateModule } from './important-date/important-date.module';
 import { ScheduleReminderModule } from './schedule-reminder/schedule-reminder.module';
 import { ScheduleSettingsModule } from './schedule-settings/schedule-settings.module';
 import { AiManuscriptModule } from './ai-manuscript/ai-manuscript.module';
+import { SanlvRuleModule } from './sanlv-rule/sanlv-rule.module';
+import { SanlvReportModule } from './sanlv-report/sanlv-report.module';
 
 @Module({
   imports: [
@@ -117,6 +119,8 @@ import { AiManuscriptModule } from './ai-manuscript/ai-manuscript.module';
     ScheduleReminderModule,
     ScheduleSettingsModule,
     AiManuscriptModule,
+    SanlvRuleModule,
+    SanlvReportModule,
   ],
   controllers: [HealthController],
   providers: [],

@@ -111,6 +111,10 @@ model User {
   manuscriptRevisionRecords ManuscriptRevisionRecord[] @relation("RevisionOwner")
   // 政工笔：用户写作画像（聚合表，后续给个性化画像看板用）
   manuscriptUserProfile ManuscriptUserProfile?
+  // 三率指数：用户导入的评分规则（反向关联）
+  sanlvRules SanlvRule[]
+  // 三率指数：用户导入的月报（反向关联）
+  sanlvReports SanlvReport[]
 
   @@index([username])
 }
@@ -2500,4 +2504,103 @@ model ManuscriptUserProfile {
 
   user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@index([teamCode, profileUnlockLevel])
+}
+
+// ============================================
+// 三率指数 · 评分规则库（陈先生会导入"三率评分规则"表）
+// ============================================
+model SanlvRule {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  userId        Int       // 上传者（谁导入的）
+
+  // 规则元数据
+  ruleName      String    // 规则名称，例如"2026年版三率评分标准（试行）"
+  ruleVersion   String?   // 规则版本号，例如 v2026.08
+  ruleYear      Int?      // 适用年份，例如 2026
+  ruleRemark    String?   // 规则备注说明
+
+  // 规则明细（JSON 数组）：每个评分项目一条，字段由陈先生 Excel/CSV 决定，先全结构化记录
+  // 建议结构：
+  // [
+  //   { category: "船舶日常管理", subCategory: "三长管理", item: "月度例会",
+  //     fullMark: 5, passLine: 3, deductRule: "缺一次扣1分", weight: 1.0,
+  //     columns: {...保留原始Excel行所有字段} },
+  //   ...
+  // ]
+  items         Json      @default("[]")
+
+  // 原始导入信息
+  sourceType    String    @default("excel") // excel / csv / paste
+  sourceName    String?   // 上传时的文件名
+  rawPreview    Json      @default("[]")   // 原始导入前 20 行预览（二维数组）
+
+  // 是否当前生效（一个 teamCode 通常只有 1 条 isCurrent=true）
+  isCurrent     Boolean   @default(true)
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  user          User      @relation(fields: [userId], references: [id])
+  reports       SanlvReport[]  @relation("RuleReports")
+
+  @@index([teamCode, isCurrent])
+  @@index([teamCode, ruleYear])
+}
+
+// ============================================
+// 三率指数 · 单船月度三率月报（陈先生会导入某船某月的分数表）
+// ============================================
+model SanlvReport {
+  id            Int       @id @default(autoincrement())
+  teamCode      TeamCode
+  userId        Int       // 上传者
+
+  // 月报身份三要素
+  shipName      String    // 船舶名称（必填，比如"华川"）
+  reportMonth   String    // 月份，格式：YYYY-MM，例如"2026-07"
+  reportYear    Int       // 年度（冗余，便于查询）
+
+  // 关联的评分规则
+  ruleId        Int?      // 可关联已存在的评分规则（用户导入月报时可选择用哪套规则去分析）
+  rule          SanlvRule?  @relation("RuleReports", fields: [ruleId], references: [id], onDelete: SetNull)
+
+  // 三率总分/分项分（若 Excel 中能解析到）
+  totalScore    Float?    // 总分
+  passScore     Float?    // 合格线分
+  threeRate1    Float?    // 三率1（若解析到）
+  threeRate2    Float?    // 三率2（若解析到）
+  threeRate3    Float?    // 三率3（若解析到）
+  labelRate1    String?   // 三率1名称
+  labelRate2    String?   // 三率2名称
+  labelRate3    String?   // 三率3名称
+
+  // 月度明细（JSON 数组）：每行一个评分项得分
+  // 建议结构：
+  // [
+  //   { category: "船舶日常管理", subCategory: "三长管理", item: "月度例会",
+  //     score: 4, fullMark: 5, deductReason: "缺1次（7月第三周）",
+  //     columns: {...原始行} },
+  //   ...
+  // ]
+  details       Json      @default("[]")
+
+  // 改进分析（陈先生后续会让我们"根据月报查分数→分析哪些方面需要进行改正"）
+  // 本阶段先留空字段不做分析计算（等陈先生贴两份表的数据格式再填）
+  analysis      Json      @default("{}")
+  // analysis 将来建议格式：
+  // { generatedAt: "", summary: "...", weakItems: [{...}], suggestions: [{...}] }
+
+  // 原始导入信息
+  sourceType    String    @default("excel")
+  sourceName    String?   // 上传时的文件名
+  rawPreview    Json      @default("[]")   // 原始前 20 行预览（二维数组）
+  rawColumns    Json      @default("[]")   // 原始表头名（用于辅助分析）
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  user          User      @relation(fields: [userId], references: [id])
+
+  @@index([teamCode, shipName, reportMonth])
+  @@index([teamCode, reportYear])
+  @@index([teamCode, ruleId])
 }

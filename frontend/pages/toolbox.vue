@@ -75,6 +75,17 @@
           <el-button type="warning" class="tool-btn">进入政工笔</el-button>
         </div>
       </el-card>
+
+      <!-- 三率指数分析 · 评分规则导入 + 船舶月报导入 + 改进项分析 -->
+      <el-card class="tool-card tool-card-primary cursor-pointer hover:shadow-lg transition-shadow" @click="openSanlvAnalyzer">
+        <div class="tool-content">
+          <div class="tool-icon">📊</div>
+          <h3>三率指数分析</h3>
+          <p>导入「三率评分规则」+ 单船月度「三率月报」，自动分析薄弱项和改进建议</p>
+          <el-tag type="danger" effect="dark" size="small" round style="margin-bottom:8px;">NEW</el-tag>
+          <el-button type="primary" class="tool-btn">进入三率分析</el-button>
+        </div>
+      </el-card>
     </div>
     
     <!-- PDF压缩对话框 -->
@@ -191,6 +202,58 @@ const openAiManuscript = () => {
     setTimeout(() => { window.location.href = targetPath }, 100)
   }
 }
+
+// ========== 三率指数分析：严格套用 001文档16.5.3 三层兜底跳转模板 ==========
+const openSanlvAnalyzer = () => {
+  console.log('[三率指数分析调试] ① 点击卡片，准备跳转 /toolbox-sanlv')
+  const targetPath = '/toolbox-sanlv'
+
+  // [第2层兜底] 1.5秒看门狗：若 router.push 卡住（PWA旧缓存/路由表缺失），直接整页硬跳转
+  let watchdogFired = false
+  const watchdog = setTimeout(() => {
+    watchdogFired = true
+    console.warn('[三率指数分析调试] ②-1 router.push 1.5s内未完成，改用 window.location.href 硬跳转：', targetPath)
+    try {
+      const ElMessage = (window as any).ElMessage
+      if (ElMessage) ElMessage.warning('前端跳转无响应，正在切换模式进入三率指数分析...')
+    } catch { /* ignore */ }
+    window.location.href = targetPath
+  }, 1500)
+
+  try {
+    // [第1层] 正常 SPA 导航（体验最好）
+    router.push(targetPath)
+      .then(() => {
+        if (watchdogFired) {
+          console.warn('[三率指数分析调试] ②-2 router.push 成功但 watchdog 已硬跳，不重复操作')
+          return
+        }
+        clearTimeout(watchdog)
+        console.log('[三率指数分析调试] ② router.push Promise resolved (跳转完成，耗时<1.5s ✅)')
+      })
+      .catch((err: any) => {
+        if (watchdogFired) return
+        clearTimeout(watchdog)
+        console.error('[三率指数分析调试] ② router.push 报错，走硬跳转兜底：', err?.message || err, err)
+        // [第3层A] Promise reject 时硬跳
+        try {
+          const ElMessage = (window as any).ElMessage
+          if (ElMessage) ElMessage.warning('检测到前端缓存过旧，正在刷新进入三率指数分析...')
+        } catch { /* ignore */ }
+        setTimeout(() => { window.location.href = targetPath }, 150)
+      })
+  } catch (err: any) {
+    if (watchdogFired) return
+    clearTimeout(watchdog)
+    console.error('[三率指数分析调试] ① router.push 同步抛错，走硬跳转兜底：', err)
+    // [第3层B] 同步 throw 时硬跳
+    try {
+      const ElMessage = (window as any).ElMessage
+      if (ElMessage) ElMessage.warning('跳转异常，正在刷新进入三率指数分析...')
+    } catch { /* ignore */ }
+    setTimeout(() => { window.location.href = targetPath }, 100)
+  }
+}
 </script>
 
 <style scoped>
@@ -264,6 +327,17 @@ const openAiManuscript = () => {
 .tool-card-highlight:hover {
   transform: translateY(-3px);
   box-shadow: 0 18px 40px -16px rgba(22, 163, 74, 0.45) !important;
+}
+
+.tool-card-primary {
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 55%, #bfdbfe 100%);
+  border: 1px solid #93c5fd;
+  box-shadow: 0 8px 24px -12px rgba(59, 130, 246, 0.35);
+  transition: transform .2s ease, box-shadow .2s ease;
+}
+.tool-card-primary:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 18px 40px -16px rgba(37, 99, 235, 0.5) !important;
 }
 
 @media (max-width: 768px) {

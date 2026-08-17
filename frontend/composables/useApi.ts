@@ -1591,6 +1591,28 @@ export const useApi = () => {
       retrain: () => apiFetch('/diary-blocks/retrain', { method: 'POST' }),
     },
 
+    // ==================== 三率指数分析（工具箱子页 toolbox-sanlv.vue 用）====================
+    sanlvRules: {
+      list: (limit = 20) => apiFetch(`/sanlv-rules?limit=${limit}`),
+      get: (id: number) => apiFetch(`/sanlv-rules/${id}`),
+      preview: (body: { fileContent?: string; fileName?: string; text?: string }) =>
+        apiFetch('/sanlv-rules/preview', { method: 'POST', body }),
+      import: (body: Record<string, any>) =>
+        apiFetch('/sanlv-rules', { method: 'POST', body }),
+      setCurrent: (id: number) =>
+        apiFetch(`/sanlv-rules/set-current/${id}`, { method: 'POST' }),
+      remove: (id: number) => apiFetch(`/sanlv-rules/${id}`, { method: 'DELETE' }),
+    },
+    sanlvReports: {
+      list: (limit = 30) => apiFetch(`/sanlv-reports?limit=${limit}`),
+      get: (id: number) => apiFetch(`/sanlv-reports/${id}`),
+      preview: (body: { fileContent?: string; fileName?: string; text?: string }) =>
+        apiFetch('/sanlv-reports/preview', { method: 'POST', body }),
+      import: (body: Record<string, any>) =>
+        apiFetch('/sanlv-reports', { method: 'POST', body }),
+      remove: (id: number) => apiFetch(`/sanlv-reports/${id}`, { method: 'DELETE' }),
+    },
+
     // 工具箱
     toolbox: {
       /**

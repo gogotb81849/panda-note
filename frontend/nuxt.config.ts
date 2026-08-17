@@ -198,7 +198,7 @@ export default defineNuxtConfig({
           urlPattern: /\/_nuxt\/.*\.(js|css)$/i,
           handler: 'NetworkFirst',
           options: {
-            cacheName: 'app-cache-v13',
+            cacheName: 'app-cache-v14',
             expiration: {
               maxEntries: 200,
               maxAgeSeconds: 60 * 60 * 24 * 30,
@@ -209,7 +209,7 @@ export default defineNuxtConfig({
           urlPattern: /^https:\/\/.*\/api\//i,
           handler: 'NetworkFirst',
           options: {
-            cacheName: 'api-cache-v13',
+            cacheName: 'api-cache-v14',
             expiration: {
               maxEntries: 200,
               maxAgeSeconds: 60 * 60 * 24,
@@ -223,7 +223,7 @@ export default defineNuxtConfig({
           urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp|woff2?)$/,
           handler: 'CacheFirst',
           options: {
-            cacheName: 'static-cache-v13',
+            cacheName: 'static-cache-v14',
             expiration: {
               maxEntries: 100,
               maxAgeSeconds: 60 * 60 * 24 * 30,
@@ -234,7 +234,7 @@ export default defineNuxtConfig({
           urlPattern: ({ request }) => request.mode === 'navigate',
           handler: 'NetworkFirst',
           options: {
-            cacheName: 'pages-cache-v13',
+            cacheName: 'pages-cache-v14',
             networkTimeoutSeconds: 10,
             expiration: {
               maxEntries: 50,
