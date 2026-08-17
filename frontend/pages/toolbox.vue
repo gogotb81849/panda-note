@@ -139,27 +139,56 @@ const openShipQuiz = () => {
 }
 
 const openAiManuscript = () => {
-  console.log('[政工笔调试] ① 点击政工笔卡片，准备跳转 /toolbox/ai-manuscript')
+  console.log('[政工笔调试] ① 点击政工笔卡片，准备跳转 /toolbox-ai-manuscript')
+  const targetPath = '/toolbox-ai-manuscript'
+
+  // ========== 三层跳转兜底（工程化根治：任何一层失败都不会"没反应"） ==========
+  // 第1层：先用 Vue Router 正常 push（SPA 内跳转，体验最好）
+  // 第2层：若 1.5 秒内没跳转成功（旧缓存路由表不存在该路由 / 导航守卫卡住），
+  //        直接 window.location.href 硬跳转（走服务器/Nitro 返回真实页面，绕开所有缓存的旧 bundle 路由）
+  // 第3层：任何同步异常直接 alert
+
+  let watchdogFired = false
+  const watchdog = setTimeout(() => {
+    watchdogFired = true
+    console.warn('[政工笔调试] ②-1 router.push 1.5s 内未完成，改用 window.location.href 硬跳转：', targetPath)
+    try {
+      const ElMessage = (window as any).ElMessage
+      if (ElMessage) ElMessage.warning('前端跳转无响应，正在切换模式进入政工笔...')
+    } catch {}
+    window.location.href = targetPath
+  }, 1500)
+
   try {
-    router.push('/toolbox/ai-manuscript').then(() => {
-      console.log('[政工笔调试] ② router.push Promise resolved (跳转完成)')
-    }).catch((err: any) => {
-      console.error('[政工笔调试] ② router.push 报错：', err?.message || err, err)
-      const msg = err?.message || String(err || '导航失败')
-      try {
-        const ElMessage = (window as any).ElMessage || require?.('element-plus')?.ElMessage
-        if (ElMessage) {
-          ElMessage.error(`政工笔跳转失败：${msg}。请按 Ctrl+F5 强制刷新浏览器，或清除站点缓存后重试`)
-        } else {
-          alert(`政工笔跳转失败：${msg}\n\n解决方案：按 Ctrl+F5 强制刷新浏览器`)
+    router.push(targetPath)
+      .then(() => {
+        if (watchdogFired) {
+          console.warn('[政工笔调试] ②-2 router.push 虽成功但 watchdog 已触发硬跳，已硬跳转就不重复操作')
+          return
         }
-      } catch {
-        alert(`政工笔跳转失败：${msg}\n\n解决方案：按 Ctrl+F5 强制刷新浏览器`)
-      }
-    })
+        clearTimeout(watchdog)
+        console.log('[政工笔调试] ② router.push Promise resolved (跳转完成，耗时<1.5s ✅)')
+      })
+      .catch((err: any) => {
+        if (watchdogFired) return
+        clearTimeout(watchdog)
+        console.error('[政工笔调试] ② router.push 报错，立即走硬跳转兜底：', err?.message || err, err)
+        // 路由不匹配/导航取消 —— 直接硬跳（服务器端会返回真实页面）
+        try {
+          const ElMessage = (window as any).ElMessage
+          if (ElMessage) ElMessage.warning('检测到前端缓存过旧，正在刷新进入政工笔...')
+        } catch {}
+        setTimeout(() => { window.location.href = targetPath }, 150)
+      })
   } catch (err: any) {
-    console.error('[政工笔调试] ① router.push 同步抛错：', err)
-    alert(`政工笔跳转异常：${err?.message || err}\n\n请按 Ctrl+F5 强制刷新浏览器后重试`)
+    if (watchdogFired) return
+    clearTimeout(watchdog)
+    console.error('[政工笔调试] ① router.push 同步抛错，走硬跳转兜底：', err)
+    try {
+      const ElMessage = (window as any).ElMessage
+      if (ElMessage) ElMessage.warning('跳转异常，正在刷新进入政工笔...')
+    } catch {}
+    setTimeout(() => { window.location.href = targetPath }, 100)
   }
 }
 </script>
